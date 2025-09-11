@@ -1,40 +1,38 @@
-const fs = require("fs");
-const path = require("path");
-const scamFile = path.join(__dirname, "scammers.json");
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("scam.db");
 
-function loadScammers() {
-  if (!fs.existsSync(scamFile)) {
-    fs.writeFileSync(scamFile, JSON.stringify({ scammers: [] }, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(scamFile));
-}
-
-function saveScammers(data) {
-  fs.writeFileSync(scamFile, JSON.stringify(data, null, 2));
-}
+// Create table if not exists
+db.run("CREATE TABLE IF NOT EXISTS scammers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, fb TEXT)");
 
 module.exports.config = {
   name: "addscam",
-  version: "1.0.0",
-  hasPermssion: 2, // admin lang pwede
-  credits: "YourName",
-  description: "Add scammer to list",
+  version: "1.1.0",
+  hasPermission: 2, // bot admin only
+  credits: "ChatGPT",
+  description: "Add scammer to SQL database",
   commandCategory: "system",
-  usages: "/addscam <name> <link>",
+  usages: "/addscam <name> <fb_link>",
   cooldowns: 5
 };
 
 module.exports.run = async function({ api, event, args }) {
   if (args.length < 2) {
-    return api.sendMessage("❌ Usage: /addscam <name> <fb_link>", event.threadID, event.messageID);
+    return api.sendMessage(
+      "❌ Usage: /addscam <name> <fb_link>",
+      event.threadID,
+      event.messageID
+    );
   }
 
   const name = args[0];
   const fb = args[1];
 
-  const data = loadScammers();
-  data.scammers.push({ name, fb });
-  saveScammers(data);
-
-  api.sendMessage(`✅ Na-add si ${name} sa scammer list!`, event.threadID, event.messageID);
+  // Insert scammer into SQL
+  db.run("INSERT INTO scammers (name, fb) VALUES (?, ?)", [name, fb], function(err) {
+    if (err) {
+      console.error(err);
+      return api.sendMessage("⚠️ Error adding scammer.", event.threadID, event.messageID);
+    }
+    api.sendMessage(`✅ Na-add si ${name} sa scammer list!`, event.threadID, event.messageID);
+  });
 };
