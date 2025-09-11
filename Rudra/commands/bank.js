@@ -1,51 +1,57 @@
-const fs = require("fs");
-const path = require("path");
-const bankFile = path.join(__dirname, "bank.json");
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("bank.db");
 
-// Load balances
-function loadBank() {
-  if (!fs.existsSync(bankFile)) {
-    fs.writeFileSync(bankFile, JSON.stringify({}), "utf-8");
-  }
-  return JSON.parse(fs.readFileSync(bankFile, "utf-8"));
+// 🔹 Create table kung wala pa
+db.serialize(() => {
+  db.run("CREATE TABLE IF NOT EXISTS bank (userID TEXT PRIMARY KEY, balance INTEGER)");
+});
+
+function getBalance(userID, callback) {
+  db.get("SELECT balance FROM bank WHERE userID = ?", [userID], (err, row) => {
+    if (err) return callback(err);
+    callback(null, row ? row.balance : 0);
+  });
 }
 
-// Save balances
-function saveBank(data) {
-  fs.writeFileSync(bankFile, JSON.stringify(data, null, 2), "utf-8");
+function updateBalance(userID, amount, callback) {
+  getBalance(userID, (err, balance) => {
+    if (err) return callback(err);
+
+    const newBalance = balance + amount;
+    db.run("INSERT INTO bank (userID, balance) VALUES (?, ?) ON CONFLICT(userID) DO UPDATE SET balance = ?", 
+      [userID, newBalance, newBalance], callback);
+  });
 }
 
 module.exports.config = {
   name: "bank",
-  version: "1.0.0",
+  version: "2.0.0",
   hasPermssion: 0,
-  credits: "YourName",
-  description: "Bank system for game",
+  credits: "Jaz + ChatGPT",
+  description: "Bank system with SQLite",
   commandCategory: "game",
   usages: "/bank send @mention <amount>",
   cooldowns: 0
 };
 
-// 🔹 Auto earn coins kada message
+// 🔹 Every message = +5 coins
 module.exports.handleEvent = function({ event }) {
   const { senderID } = event;
   if (!senderID) return;
 
-  const bank = loadBank();
-  if (!bank[senderID]) bank[senderID] = 0;
-
-  bank[senderID] += 5; // 5 coins per message
-  saveBank(bank);
+  updateBalance(senderID, 5, () => {});
 };
 
-// 🔹 Bank command
+// 🔹 Bank commands
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID, mentions, senderID } = event;
-  const bank = loadBank();
 
   if (args.length === 0) {
-    const balance = bank[senderID] || 0;
-    return api.sendMessage(`💰 Your balance: ${balance} coins`, threadID, messageID);
+    getBalance(senderID, (err, balance) => {
+      if (err) return api.sendMessage("⚠️ DB error", threadID, messageID);
+      api.sendMessage(`💰 Your balance: ${balance} coins`, threadID, messageID);
+    });
+    return;
   }
 
   if (args[0].toLowerCase() === "send") {
@@ -60,20 +66,24 @@ module.exports.run = async function({ api, event, args }) {
       return api.sendMessage("❌ Invalid amount.", threadID, messageID);
     }
 
-    if ((bank[senderID] || 0) < amount) {
-      return api.sendMessage("❌ Not enough coins.", threadID, messageID);
-    }
+    getBalance(senderID, (err, balance) => {
+      if (err) return api.sendMessage("⚠️ DB error", threadID, messageID);
 
-    if (!bank[targetID]) bank[targetID] = 0;
+      if (balance < amount) {
+        return api.sendMessage("❌ Not enough coins.", threadID, messageID);
+      }
 
-    bank[senderID] -= amount;
-    bank[targetID] += amount;
-    saveBank(bank);
-
-    return api.sendMessage(
-      `✅ You sent ${amount} coins to ${mentions[targetID].replace(/@/g,"")}\n💰 Your balance: ${bank[senderID]} coins`,
-      threadID,
-      messageID
-    );
+      // Deduct from sender
+      updateBalance(senderID, -amount, () => {
+        // Add to receiver
+        updateBalance(targetID, amount, () => {
+          api.sendMessage(
+            `✅ You sent ${amount} coins to ${mentions[targetID].replace(/@/g,"")}\n💰 Your balance: ${balance - amount} coins`,
+            threadID,
+            messageID
+          );
+        });
+      });
+    });
   }
 };
