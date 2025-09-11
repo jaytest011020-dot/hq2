@@ -1,21 +1,26 @@
 const sqlite3 = require("sqlite3").verbose();
 const db = new sqlite3.Database("data.db");
 
-// Create table kung wala pa
-db.run(`CREATE TABLE IF NOT EXISTS checktt (
-  threadID TEXT,
-  userID TEXT,
-  count INTEGER,
-  PRIMARY KEY (threadID, userID)
-)`);
+// Create table if not exists
+db.run(`
+  CREATE TABLE IF NOT EXISTS checktt (
+    threadID TEXT,
+    userID TEXT,
+    count INTEGER,
+    PRIMARY KEY (threadID, userID)
+  )
+`);
 
+// Add message count
 function addMessage(threadID, userID) {
   db.run(
-    "INSERT INTO checktt (threadID, userID, count) VALUES (?, ?, 1) ON CONFLICT(threadID, userID) DO UPDATE SET count = count + 1",
+    `INSERT INTO checktt (threadID, userID, count) VALUES (?, ?, 1)
+     ON CONFLICT(threadID, userID) DO UPDATE SET count = count + 1`,
     [threadID, userID]
   );
 }
 
+// Get all message counts for a thread
 function getThreadData(threadID, callback) {
   db.all("SELECT * FROM checktt WHERE threadID = ?", [threadID], (err, rows) => {
     if (err) return callback([]);
@@ -25,10 +30,10 @@ function getThreadData(threadID, callback) {
 
 module.exports.config = {
   name: "checktt",
-  version: "2.0.0",
+  version: "2.0.1",
   hasPermssion: 0,
   credits: "ChatGPT + Priyansh Rajput",
-  description: "Interactive check (SQL version)",
+  description: "Interactive message check (SQL version)",
   commandCategory: "Utilities",
   usages: "checktt / checktt all / checktt rank",
   cooldowns: 5
@@ -63,13 +68,14 @@ const getRankName = (count) => {
     : "Copper I";
 };
 
-// 🔹 Every message add count
+// 🔹 Auto add message for each event
 module.exports.handleEvent = function ({ event }) {
   const { threadID, senderID } = event;
   if (!threadID || !senderID) return;
   addMessage(threadID, senderID);
 };
 
+// 🔹 Run checktt command
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID, mentions } = event;
   const query = args[0] ? args[0].toLowerCase() : "";
@@ -85,8 +91,8 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
     storage.sort((a, b) => {
       if (a.count > b.count) return -1;
-      else if (a.count < b.count) return 1;
-      else return a.name.localeCompare(b.name);
+      if (a.count < b.count) return 1;
+      return a.name.localeCompare(b.name);
     });
 
     if (query === "all") {
