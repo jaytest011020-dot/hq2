@@ -1,89 +1,80 @@
 const sqlite3 = require("sqlite3").verbose();
 const db = new sqlite3.Database("bank.db");
 
-// 🔹 Create table kung wala pa
-db.serialize(() => {
-  db.run("CREATE TABLE IF NOT EXISTS bank (userID TEXT PRIMARY KEY, balance INTEGER)");
-});
+// Ensure table exists
+db.run("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, coins INTEGER)");
 
-function getBalance(userID, callback) {
-  db.get("SELECT balance FROM bank WHERE userID = ?", [userID], (err, row) => {
-    if (err) return callback(err);
-    callback(null, row ? row.balance : 0);
+function getCoins(userID, callback) {
+  db.get("SELECT coins FROM users WHERE id = ?", [userID], (err, row) => {
+    if (err) return callback(0);
+    if (!row) {
+      db.run("INSERT INTO users (id, coins) VALUES (?, ?)", [userID, 0]);
+      return callback(0);
+    }
+    callback(row.coins);
   });
 }
 
-function updateBalance(userID, amount, callback) {
-  getBalance(userID, (err, balance) => {
-    if (err) return callback(err);
+function setCoins(userID, amount, callback) {
+  db.run(
+    "INSERT INTO users (id, coins) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET coins = ?",
+    [userID, amount, amount],
+    () => {
+      if (callback) callback();
+    }
+  );
+}
 
-    const newBalance = balance + amount;
-    db.run("INSERT INTO bank (userID, balance) VALUES (?, ?) ON CONFLICT(userID) DO UPDATE SET balance = ?", 
-      [userID, newBalance, newBalance], callback);
+function addCoins(userID, amount, callback) {
+  getCoins(userID, (coins) => {
+    setCoins(userID, coins + amount, callback);
   });
 }
 
 module.exports.config = {
   name: "bank",
-  version: "2.0.0",
-  hasPermssion: 0,
-  credits: "Jaz + ChatGPT",
-  description: "Bank system with SQLite",
-  commandCategory: "game",
-  usages: "/bank send @mention <amount>",
-  cooldowns: 0
+  version: "1.0.0",
+  hasPermission: 0,
+  credits: "ChatGPT",
+  description: "Bank system",
+  usePrefix: true,
+  commandCategory: "economy",
+  usages: "/bank, /bank send @id <amount>",
+  cooldowns: 3
 };
 
-// 🔹 Every message = +5 coins
-module.exports.handleEvent = function({ event }) {
-  const { senderID } = event;
-  if (!senderID) return;
+module.exports.run = async function ({ api, event, args }) {
+  const { threadID, messageID, senderID } = event;
 
-  updateBalance(senderID, 5, () => {});
-};
+  // Every message gives +5 coins
+  addCoins(senderID, 5);
 
-// 🔹 Bank commands
-module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID, mentions, senderID } = event;
-
-  if (args.length === 0) {
-    getBalance(senderID, (err, balance) => {
-      if (err) return api.sendMessage("⚠️ DB error", threadID, messageID);
-      api.sendMessage(`💰 Your balance: ${balance} coins`, threadID, messageID);
+  if (!args[0]) {
+    getCoins(senderID, (coins) => {
+      api.sendMessage(`💰 You have ${coins} coins.`, threadID, messageID);
     });
-    return;
   }
 
-  if (args[0].toLowerCase() === "send") {
-    if (!mentions || Object.keys(mentions).length === 0) {
-      return api.sendMessage("❌ You must mention a user to send coins.", threadID, messageID);
-    }
-
-    const targetID = Object.keys(mentions)[0];
-    const amount = parseInt(args[1]);
+  // Send coins
+  if (args[0] === "send" && args[1] && args[2]) {
+    const mentionID = args[1].replace("@", "");
+    const amount = parseInt(args[2]);
 
     if (isNaN(amount) || amount <= 0) {
       return api.sendMessage("❌ Invalid amount.", threadID, messageID);
     }
 
-    getBalance(senderID, (err, balance) => {
-      if (err) return api.sendMessage("⚠️ DB error", threadID, messageID);
-
-      if (balance < amount) {
-        return api.sendMessage("❌ Not enough coins.", threadID, messageID);
+    getCoins(senderID, (coins) => {
+      if (coins < amount) {
+        return api.sendMessage("⚠️ Not enough coins.", threadID, messageID);
       }
-
-      // Deduct from sender
-      updateBalance(senderID, -amount, () => {
-        // Add to receiver
-        updateBalance(targetID, amount, () => {
-          api.sendMessage(
-            `✅ You sent ${amount} coins to ${mentions[targetID].replace(/@/g,"")}\n💰 Your balance: ${balance - amount} coins`,
-            threadID,
-            messageID
-          );
-        });
-      });
+      setCoins(senderID, coins - amount);
+      addCoins(mentionID, amount);
+      api.sendMessage(
+        `✅ Sent ${amount} coins to ${mentionID}`,
+        threadID,
+        messageID
+      );
     });
   }
 };
