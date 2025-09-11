@@ -29,13 +29,13 @@ function getThreadData(threadID, callback) {
 }
 
 module.exports.config = {
-  name: "checktt",
+  name: "check",
   version: "2.0.1",
   hasPermssion: 0,
   credits: "ChatGPT + Priyansh Rajput",
   description: "Interactive message check (SQL version)",
   commandCategory: "Utilities",
-  usages: "checktt / checktt all / checktt rank",
+  usages: "check / check all / check rank",
   cooldowns: 5
 };
 
