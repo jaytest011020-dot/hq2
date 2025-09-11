@@ -13,8 +13,16 @@ module.exports.config = {
 // --- DATA LIST NG SCAMMERS ---
 const scammerList = [
   {
-    name: "Christian Exhibi",
+    name: "Christian Exhibit",
     fb: "https://www.facebook.com/share/179vDnMfmH/"
+  },
+  {
+    name: "Clent John Tulalian",
+    fb: "https://www.facebook.com/share/1E3znHcf8d/"
+  },
+  {
+    name: "Mitsu Gt",
+    fb: "https://www.facebook.com/share/19syFSNmqU/"
   },
   {
     name: "Yukie Lopez",
