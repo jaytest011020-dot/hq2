@@ -1,13 +1,9 @@
-const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("scam.db");
-
-// Create table if not exists
-db.run("CREATE TABLE IF NOT EXISTS scammers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, fb TEXT)");
+const { db } = require("./db");
 
 module.exports.config = {
   name: "addscam",
-  version: "1.1.0",
-  hasPermission: 2, // bot admin only
+  version: "1.2.0",
+  hasPermssion: 2, // bot admin only
   credits: "ChatGPT",
   description: "Add scammer to SQL database",
   commandCategory: "system",
@@ -16,23 +12,37 @@ module.exports.config = {
 };
 
 module.exports.run = async function({ api, event, args }) {
+  const { threadID, messageID } = event;
+
   if (args.length < 2) {
     return api.sendMessage(
       "❌ Usage: /addscam <name> <fb_link>",
-      event.threadID,
-      event.messageID
+      threadID,
+      messageID
     );
   }
 
   const name = args[0];
-  const fb = args[1];
+  const fb_link = args[1];
 
-  // Insert scammer into SQL
-  db.run("INSERT INTO scammers (name, fb) VALUES (?, ?)", [name, fb], function(err) {
-    if (err) {
-      console.error(err);
-      return api.sendMessage("⚠️ Error adding scammer.", event.threadID, event.messageID);
+  // Insert scammer into shared SQL
+  db.run(
+    "INSERT INTO scammers (name, fb_link) VALUES (?, ?)",
+    [name, fb_link],
+    function(err) {
+      if (err) {
+        console.error(err);
+        return api.sendMessage(
+          "⚠️ Error adding scammer.",
+          threadID,
+          messageID
+        );
+      }
+      api.sendMessage(
+        `✅ Na-add si ${name} sa scammer list!`,
+        threadID,
+        messageID
+      );
     }
-    api.sendMessage(`✅ Na-add si ${name} sa scammer list!`, event.threadID, event.messageID);
-  });
+  );
 };
