@@ -1,31 +1,32 @@
 const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("database.sqlite");
+const db = new sqlite3.Database("bot.db"); // unified DB
 
-// Ensure bank table exists
-db.run("CREATE TABLE IF NOT EXISTS bank (user_id TEXT PRIMARY KEY, balance INTEGER)");
+// Ensure users table exists
+db.run("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, coins INTEGER)");
 
-function getBalance(userID, callback) {
-  db.get("SELECT balance FROM bank WHERE user_id = ?", [userID], (err, row) => {
+// Helper functions
+function getCoins(userID, callback) {
+  db.get("SELECT coins FROM users WHERE id = ?", [userID], (err, row) => {
     if (err) return callback(0);
     if (!row) {
-      db.run("INSERT INTO bank (user_id, balance) VALUES (?, ?)", [userID, 0]);
+      db.run("INSERT INTO users (id, coins) VALUES (?, ?)", [userID, 0]);
       return callback(0);
     }
-    callback(row.balance);
+    callback(row.coins);
   });
 }
 
-function setBalance(userID, amount, callback) {
+function setCoins(userID, amount, callback) {
   db.run(
-    "INSERT INTO bank (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = ?",
+    "INSERT INTO users (id, coins) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET coins = ?",
     [userID, amount, amount],
-    () => callback && callback()
+    () => { if (callback) callback(); }
   );
 }
 
 module.exports.config = {
   name: "slot",
-  version: "1.0.0",
+  version: "2.0.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Slot machine game to gamble coins",
@@ -40,11 +41,11 @@ module.exports.run = async function ({ api, event, args }) {
 
   if (isNaN(bet) || bet <= 0) return api.sendMessage("❌ Enter a valid bet amount.", threadID, messageID);
 
-  getBalance(senderID, (balance) => {
-    if (balance < bet) return api.sendMessage("⚠️ Not enough coins.", threadID, messageID);
+  getCoins(senderID, (coins) => {
+    if (coins < bet) return api.sendMessage("⚠️ Not enough coins.", threadID, messageID);
 
     // Deduct bet first
-    setBalance(senderID, balance - bet);
+    setCoins(senderID, coins - bet);
 
     // Slot symbols
     const symbols = ["🍒", "🍋", "🍉", "🍇", "⭐", "💎"];
@@ -61,13 +62,12 @@ module.exports.run = async function ({ api, event, args }) {
       win = bet * 2; // two match
     }
 
-    // Add winnings
-    if (win > 0) setBalance(senderID, balance - bet + win);
-
-    const result = `🎰 Slot Machine 🎰\n\n[ ${spin.join(" | ")} ]\n\n${
-      win > 0 ? `🎉 You won ${win} coins!` : `❌ You lost ${bet} coins.`
-    }\n💰 Your balance: ${win > 0 ? balance - bet + win : balance - bet} coins`;
-
-    api.sendMessage(result, threadID, messageID);
+    const finalCoins = coins - bet + win;
+    setCoins(senderID, finalCoins, () => {
+      const result = `🎰 Slot Machine 🎰\n\n[ ${spin.join(" | ")} ]\n\n${
+        win > 0 ? `🎉 You won ${win} coins!` : `❌ You lost ${bet} coins.`
+      }\n💰 Your balance: ${finalCoins} coins`;
+      api.sendMessage(result, threadID, messageID);
+    });
   });
 };
