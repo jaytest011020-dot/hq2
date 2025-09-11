@@ -3,13 +3,13 @@ const path = require("path");
 
 module.exports.config = {
   name: "scammerlist",
-  version: "1.3.0",
+  version: "1.4.0",
   hasPermission: 0,
   credits: "ChatGPT",
-  description: "Scammer list with JSON storage",
+  description: "Scammer list with JSON storage (add/remove by bot admin)",
   usePrefix: true,
   commandCategory: "system",
-  usages: "/scammer | /addscam <name> <fb_link>",
+  usages: "/scammer | /addscam <name> <fb_link> | /removescam <number>",
   cooldowns: 3
 };
 
@@ -51,16 +51,24 @@ module.exports.handleEvent = async function ({ api, event }) {
 
 // --- MANUAL COMMANDS ---
 module.exports.run = async function ({ api, event, args }) {
-  const { threadID, messageID } = event;
+  const { threadID, messageID, senderID } = event;
   let list = readList();
 
   // /scammer → show list
-  if (args.length === 0) {
+  if (args.length === 0 || args[0].toLowerCase() === "scammer") {
     return api.sendMessage(buildScammerList(list), threadID, messageID);
   }
 
   // /addscam <name> <link>
   if (args[0].toLowerCase() === "addscam") {
+    if (!global.config.ADMINBOT.includes(senderID)) {
+      return api.sendMessage(
+        "❌ Only bot admins can add scammers.",
+        threadID,
+        messageID
+      );
+    }
+
     if (args.length < 3) {
       return api.sendMessage(
         "⚠️ Usage: /addscam <name> <fb_link>",
@@ -69,8 +77,8 @@ module.exports.run = async function ({ api, event, args }) {
       );
     }
 
-    const name = args[1];
-    const fb = args.slice(2).join(" ");
+    const fb = args[args.length - 1];
+    const name = args.slice(1, -1).join(" ");
 
     list.push({ name, fb });
     saveList(list);
@@ -82,6 +90,43 @@ module.exports.run = async function ({ api, event, args }) {
     );
   }
 
+  // /removescam <number>
+  if (args[0].toLowerCase() === "removescam") {
+    if (!global.config.ADMINBOT.includes(senderID)) {
+      return api.sendMessage(
+        "❌ Only bot admins can remove scammers.",
+        threadID,
+        messageID
+      );
+    }
+
+    if (args.length < 2 || isNaN(args[1])) {
+      return api.sendMessage(
+        "⚠️ Usage: /removescam <number>",
+        threadID,
+        messageID
+      );
+    }
+
+    const index = parseInt(args[1]) - 1;
+    if (index < 0 || index >= list.length) {
+      return api.sendMessage("⚠️ Invalid number.", threadID, messageID);
+    }
+
+    const removed = list.splice(index, 1)[0];
+    saveList(list);
+
+    return api.sendMessage(
+      `🗑️ Natanggal sa scammer list:\n\n${removed.name}\n🔗 ${removed.fb}`,
+      threadID,
+      messageID
+    );
+  }
+
   // Invalid usage
-  return api.sendMessage("⚠️ Unknown command. Use /scammer or /addscam", threadID, messageID);
+  return api.sendMessage(
+    "⚠️ Unknown command. Use /scammer, /addscam or /removescam",
+    threadID,
+    messageID
+  );
 };
