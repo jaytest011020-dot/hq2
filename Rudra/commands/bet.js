@@ -1,59 +1,62 @@
-const fs = require("fs");
-const path = require("path");
-const bankFile = path.join(__dirname, "bank.json");
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("bank.db");
 
-// Load balances
-function loadBank() {
-  if (!fs.existsSync(bankFile)) {
-    fs.writeFileSync(bankFile, JSON.stringify({}), "utf-8");
-  }
-  return JSON.parse(fs.readFileSync(bankFile, "utf-8"));
+// Ensure table exists
+db.run("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, coins INTEGER)");
+
+function getCoins(userID, callback) {
+  db.get("SELECT coins FROM users WHERE id = ?", [userID], (err, row) => {
+    if (err) return callback(0);
+    if (!row) {
+      db.run("INSERT INTO users (id, coins) VALUES (?, ?)", [userID, 0]);
+      return callback(0);
+    }
+    callback(row.coins);
+  });
 }
 
-// Save balances
-function saveBank(data) {
-  fs.writeFileSync(bankFile, JSON.stringify(data, null, 2), "utf-8");
+function setCoins(userID, amount, callback) {
+  db.run(
+    "INSERT INTO users (id, coins) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET coins = ?",
+    [userID, amount, amount],
+    () => {
+      if (callback) callback();
+    }
+  );
 }
 
 module.exports.config = {
   name: "bet",
   version: "1.0.0",
-  hasPermssion: 0,
-  credits: "YourName",
-  description: "Bet coins 50% chance win or lose",
-  commandCategory: "game",
+  hasPermission: 0,
+  credits: "ChatGPT",
+  description: "Bet coins (40% win / 60% lose)",
+  usePrefix: true,
+  commandCategory: "economy",
   usages: "/bet <amount>",
-  cooldowns: 5
+  cooldowns: 3
 };
 
-module.exports.run = async function({ api, event, args }) {
+module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
-  const bank = loadBank();
-
-  if (!args[0]) {
-    const balance = bank[senderID] || 0;
-    return api.sendMessage(`💰 Your balance: ${balance} coins`, threadID, messageID);
-  }
 
   const amount = parseInt(args[0]);
   if (isNaN(amount) || amount <= 0) {
-    return api.sendMessage("❌ Invalid bet amount.", threadID, messageID);
+    return api.sendMessage("❌ Invalid amount. Example: /bet 100", threadID, messageID);
   }
 
-  if ((bank[senderID] || 0) < amount) {
-    return api.sendMessage("❌ Not enough coins to bet.", threadID, messageID);
-  }
+  getCoins(senderID, (coins) => {
+    if (coins < amount) {
+      return api.sendMessage("⚠️ You don’t have enough coins.", threadID, messageID);
+    }
 
-  // 50% chance
-  const win = Math.random() < 0.5;
-
-  if (win) {
-    bank[senderID] += amount; // double bet as reward
-    saveBank(bank);
-    return api.sendMessage(`🎉 You won! You gained ${amount} coins.\n💰 Balance: ${bank[senderID]} coins`, threadID, messageID);
-  } else {
-    bank[senderID] -= amount;
-    saveBank(bank);
-    return api.sendMessage(`😢 You lost ${amount} coins.\n💰 Balance: ${bank[senderID]} coins`, threadID, messageID);
-  }
+    const win = Math.random() < 0.4; // 40% win
+    if (win) {
+      setCoins(senderID, coins + amount);
+      api.sendMessage(`🎉 You WON! Now you have ${coins + amount} coins.`, threadID, messageID);
+    } else {
+      setCoins(senderID, coins - amount);
+      api.sendMessage(`😢 You LOST! Now you have ${coins - amount} coins.`, threadID, messageID);
+    }
+  });
 };
