@@ -1,131 +1,150 @@
 const sqlite3 = require("sqlite3").verbose();
 const db = new sqlite3.Database("database.sqlite");
 
-// change this to your FB UID (admin)
+// Ensure bank table exists
+db.run("CREATE TABLE IF NOT EXISTS bank (user_id TEXT PRIMARY KEY, balance INTEGER)");
+
+// Ensure redeem table exists
+db.run(`
+  CREATE TABLE IF NOT EXISTS redeem (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pet_name TEXT UNIQUE,
+    price INTEGER
+  )
+`);
+
+// Change to your bot admin FB ID
 const BOT_ADMIN = "61559999326713";
+
+function getBalance(userID, callback) {
+  db.get("SELECT balance FROM bank WHERE user_id = ?", [userID], (err, row) => {
+    if (err) return callback(0);
+    if (!row) {
+      db.run("INSERT INTO bank (user_id, balance) VALUES (?, ?)", [userID, 0]);
+      return callback(0);
+    }
+    callback(row.balance);
+  });
+}
+
+function setBalance(userID, amount, callback) {
+  db.run(
+    "INSERT INTO bank (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = ?",
+    [userID, amount, amount],
+    () => callback && callback()
+  );
+}
 
 module.exports.config = {
   name: "redeem",
-  version: "1.2.0",
-  hasPermssion: 0,
-  credits: "YourName",
+  version: "1.0.0",
+  hasPermission: 0,
+  credits: "ChatGPT",
   description: "Redeem pets using coins",
+  usePrefix: true,
   commandCategory: "economy",
-  usages: "/redeem | /redeem add/remove/list",
-  cooldowns: 2,
+  usages: "/redeem, /redeem add <pet> <price>, /redeem remove <pet>",
+  cooldowns: 3
 };
 
-module.exports.run = async function({ api, event, args }) {
-  const userId = event.senderID;
+module.exports.run = async function ({ api, event, args }) {
+  const { threadID, messageID, senderID, body } = event;
 
-  // Show pets for everyone
-  if (!args[0]) {
-    db.all("SELECT * FROM redeem", [], (err, rows) => {
-      if (err) return api.sendMessage("⚠️ Error loading pets.", event.threadID);
+  // ---------------- ADMIN COMMANDS ----------------
+  if (args[0] === "add") {
+    if (senderID !== BOT_ADMIN) {
+      return api.sendMessage("❌ Only bot admin can add pets.", threadID, messageID);
+    }
+    if (args.length < 3) {
+      return api.sendMessage("❌ Usage: /redeem add <petname> <price>", threadID, messageID);
+    }
 
-      if (rows.length === 0) {
-        return api.sendMessage("No pets available for redeem.", event.threadID);
+    const petName = args[1];
+    const price = parseInt(args[2]);
+
+    if (isNaN(price) || price <= 0) {
+      return api.sendMessage("❌ Invalid price.", threadID, messageID);
+    }
+
+    db.run(
+      "INSERT OR REPLACE INTO redeem (pet_name, price) VALUES (?, ?)",
+      [petName, price],
+      (err) => {
+        if (err) return api.sendMessage("⚠️ Failed to add pet.", threadID, messageID);
+        api.sendMessage(`✅ Added pet "${petName}" for ${price} coins.`, threadID, messageID);
       }
+    );
+    return;
+  }
 
-      let msg = "🐾 Available Pets for Redeem:\n";
-      rows.forEach((row, i) => {
-        msg += `${i + 1}. ${row.pet_name} - ${row.price} coins\n`;
-      });
-      msg += "\nReply with the number of the pet you want.";
+  if (args[0] === "remove") {
+    if (senderID !== BOT_ADMIN) {
+      return api.sendMessage("❌ Only bot admin can remove pets.", threadID, messageID);
+    }
+    if (args.length < 2) {
+      return api.sendMessage("❌ Usage: /redeem remove <petname>", threadID, messageID);
+    }
 
-      api.sendMessage(msg, event.threadID, (err, info) => {
-        global.client.handleReply.push({
-          name: module.exports.config.name,
-          messageID: info.messageID,
-          author: event.senderID,
-          type: "choosePet",
-          data: rows
-        });
-      });
+    const petName = args[1];
+    db.run("DELETE FROM redeem WHERE pet_name = ?", [petName], function (err) {
+      if (err) return api.sendMessage("⚠️ Failed to remove pet.", threadID, messageID);
+      if (this.changes === 0) {
+        return api.sendMessage("❌ Pet not found.", threadID, messageID);
+      }
+      api.sendMessage(`✅ Removed pet "${petName}".`, threadID, messageID);
     });
     return;
   }
 
-  // Admin-only commands
-  if (event.senderID !== BOT_ADMIN) {
-    return api.sendMessage("❌ This command is for the bot admin only.", event.threadID);
-  }
-
-  // /redeem add <pet> <price>
-  if (args[0] === "add") {
-    const petName = args[1];
-    const price = parseInt(args[2]);
-    if (!petName || isNaN(price)) {
-      return api.sendMessage("Usage: /redeem add <petname> <price>", event.threadID);
+  // ---------------- SHOW PET LIST ----------------
+  db.all("SELECT * FROM redeem", [], (err, rows) => {
+    if (err || rows.length === 0) {
+      return api.sendMessage("⚠️ No pets available to redeem.", threadID, messageID);
     }
 
-    db.run("INSERT INTO redeem (pet_name, price) VALUES (?, ?)", [petName, price], (err) => {
-      if (err) return api.sendMessage("⚠️ Failed to add pet.", event.threadID);
-      api.sendMessage(`✅ Pet "${petName}" added with price ${price} coins.`, event.threadID);
+    let msg = "🐾 Available Pets to Redeem 🐾\n\n";
+    rows.forEach((row, i) => {
+      msg += `${i + 1}. ${row.pet_name} - 💰 ${row.price} coins\n`;
     });
-  }
+    msg += "\nReply with the number of the pet to redeem.";
 
-  // /redeem remove <pet>
-  else if (args[0] === "remove") {
-    const petName = args[1];
-    if (!petName) {
-      return api.sendMessage("Usage: /redeem remove <petname>", event.threadID);
-    }
-
-    db.run("DELETE FROM redeem WHERE pet_name = ?", [petName], function(err) {
-      if (err) return api.sendMessage("⚠️ Failed to remove pet.", event.threadID);
-      if (this.changes === 0) {
-        return api.sendMessage(`❌ Pet "${petName}" not found.`, event.threadID);
-      }
-      api.sendMessage(`✅ Pet "${petName}" removed from redeem list.`, event.threadID);
-    });
-  }
-
-  // /redeem list
-  else if (args[0] === "list") {
-    db.all("SELECT * FROM redeem", [], (err, rows) => {
-      if (err) return api.sendMessage("⚠️ Error loading pets.", event.threadID);
-      if (rows.length === 0) return api.sendMessage("No pets available.", event.threadID);
-
-      let msg = "📋 Pet List:\n";
-      rows.forEach((row, i) => {
-        msg += `${i + 1}. ${row.pet_name} - ${row.price} coins\n`;
+    api.sendMessage(msg, threadID, (err, info) => {
+      global.client.handleReply.push({
+        type: "redeem_select",
+        name: this.config.name,
+        author: senderID,
+        messageID: info.messageID,
+        pets: rows
       });
-      api.sendMessage(msg, event.threadID);
     });
-  }
+  });
 };
 
-module.exports.handleReply = async function({ api, event, handleReply }) {
-  const choice = parseInt(event.body);
-  if (isNaN(choice) || choice < 1 || choice > handleReply.data.length) {
-    return api.sendMessage("Invalid choice.", event.threadID);
-  }
+// ---------------- HANDLE REPLY ----------------
+module.exports.handleReply = async function ({ api, event, handleReply }) {
+  const { threadID, messageID, senderID, body } = event;
 
-  const pet = handleReply.data[choice - 1];
-  const userId = event.senderID;
-
-  db.get("SELECT balance FROM bank WHERE user_id = ?", [userId], (err, row) => {
-    if (err) return api.sendMessage("⚠️ Error checking balance.", event.threadID);
-
-    if (!row || row.balance < pet.price) {
-      return api.sendMessage("❌ Not enough coins.", event.threadID);
+  if (handleReply.type === "redeem_select" && handleReply.author === senderID) {
+    const choice = parseInt(body);
+    if (isNaN(choice) || choice < 1 || choice > handleReply.pets.length) {
+      return api.sendMessage("❌ Invalid choice.", threadID, messageID);
     }
 
-    // Deduct coins
-    db.run("UPDATE bank SET balance = balance - ? WHERE user_id = ?", [pet.price, userId], (err2) => {
-      if (err2) return api.sendMessage("⚠️ Error deducting coins.", event.threadID);
+    const pet = handleReply.pets[choice - 1];
+    getBalance(senderID, (balance) => {
+      if (balance < pet.price) {
+        return api.sendMessage("⚠️ Not enough coins.", threadID, messageID);
+      }
 
-      api.sendMessage(`🎉 You redeemed a ${pet.pet_name} for ${pet.price} coins!`, event.threadID);
+      setBalance(senderID, balance - pet.price, () => {
+        api.sendMessage(`🎉 You redeemed ${pet.pet_name} for ${pet.price} coins!`, threadID, messageID);
 
-      // Notify ONLY bot admin
-      api.getUserInfo(userId, (err3, data) => {
-        const userName = data && data[userId]?.name ? data[userId].name : userId;
+        // Notify admin only
         api.sendMessage(
-          `📢 ${userName} (ID: ${userId}) redeemed ${pet.pet_name} for ${pet.price} coins.`,
+          `📩 User ${senderID} redeemed "${pet.pet_name}" for ${pet.price} coins.`,
           BOT_ADMIN
         );
       });
     });
-  });
+  }
 };
