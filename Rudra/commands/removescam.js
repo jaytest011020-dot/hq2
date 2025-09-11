@@ -1,13 +1,9 @@
-const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("scam.db");
-
-// Ensure table exists
-db.run("CREATE TABLE IF NOT EXISTS scammers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, fb TEXT)");
+const { db } = require("./db");
 
 module.exports.config = {
   name: "removescam",
-  version: "1.1.0",
-  hasPermssion: 2, // admin lang pwede
+  version: "1.2.0",
+  hasPermssion: 2, // admin only
   credits: "ChatGPT",
   description: "Remove scammer from list (by ID or Name)",
   commandCategory: "system",
@@ -16,29 +12,67 @@ module.exports.config = {
 };
 
 module.exports.run = async function({ api, event, args }) {
+  const { threadID, messageID } = event;
+
   if (args.length < 1) {
-    return api.sendMessage("❌ Usage: /removescam <id|name>", event.threadID, event.messageID);
+    return api.sendMessage(
+      "❌ Usage: /removescam <id|name>",
+      threadID,
+      messageID
+    );
   }
 
   const query = args.join(" ");
 
-  // Try to remove by ID first
+  // Remove by ID if numeric
   if (!isNaN(query)) {
-    db.run("DELETE FROM scammers WHERE id = ?", [query], function(err) {
-      if (err) return api.sendMessage("❌ Error removing scammer.", event.threadID, event.messageID);
-      if (this.changes === 0) {
-        return api.sendMessage(`❌ Walang scammer na may ID ${query}.`, event.threadID, event.messageID);
+    db.run(
+      "DELETE FROM scammers WHERE id = ?",
+      [query],
+      function(err) {
+        if (err)
+          return api.sendMessage(
+            "❌ Error removing scammer.",
+            threadID,
+            messageID
+          );
+        if (this.changes === 0)
+          return api.sendMessage(
+            `❌ Walang scammer na may ID ${query}.`,
+            threadID,
+            messageID
+          );
+        api.sendMessage(
+          `✅ Tinanggal ang scammer na may ID ${query}.`,
+          threadID,
+          messageID
+        );
       }
-      api.sendMessage(`✅ Tinanggal ang scammer na may ID ${query}.`, event.threadID, event.messageID);
-    });
+    );
   } else {
-    // Remove by name
-    db.run("DELETE FROM scammers WHERE LOWER(name) = LOWER(?)", [query], function(err) {
-      if (err) return api.sendMessage("❌ Error removing scammer.", event.threadID, event.messageID);
-      if (this.changes === 0) {
-        return api.sendMessage(`❌ Walang nakitang scammer na "${query}".`, event.threadID, event.messageID);
+    // Remove by name (case-insensitive)
+    db.run(
+      "DELETE FROM scammers WHERE LOWER(name) = LOWER(?)",
+      [query],
+      function(err) {
+        if (err)
+          return api.sendMessage(
+            "❌ Error removing scammer.",
+            threadID,
+            messageID
+          );
+        if (this.changes === 0)
+          return api.sendMessage(
+            `❌ Walang nakitang scammer na "${query}".`,
+            threadID,
+            messageID
+          );
+        api.sendMessage(
+          `✅ Tinanggal si ${query} sa scammer list.`,
+          threadID,
+          messageID
+        );
       }
-      api.sendMessage(`✅ Tinanggal si ${query} sa scammer list.`, event.threadID, event.messageID);
-    });
+    );
   }
 };
