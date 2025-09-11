@@ -1,61 +1,73 @@
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("database.sqlite");
+
+// Ensure bank table exists
+db.run("CREATE TABLE IF NOT EXISTS bank (user_id TEXT PRIMARY KEY, balance INTEGER)");
+
+function getBalance(userID, callback) {
+  db.get("SELECT balance FROM bank WHERE user_id = ?", [userID], (err, row) => {
+    if (err) return callback(0);
+    if (!row) {
+      db.run("INSERT INTO bank (user_id, balance) VALUES (?, ?)", [userID, 0]);
+      return callback(0);
+    }
+    callback(row.balance);
+  });
+}
+
+function setBalance(userID, amount, callback) {
+  db.run(
+    "INSERT INTO bank (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = ?",
+    [userID, amount, amount],
+    () => callback && callback()
+  );
+}
+
 module.exports.config = {
-    name: "slot",
-    version: "1.0.1",
-    hasPermssion: 0,
-    credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭",
-    description: "fair play",
-    commandCategory: "game-sp",
-    usages: "[number coin required]",
-    cooldowns: 5,
+  name: "slot",
+  version: "1.0.0",
+  hasPermssion: 0,
+  credits: "ChatGPT",
+  description: "Slot machine game to gamble coins",
+  commandCategory: "economy",
+  usages: "/slot <amount>",
+  cooldowns: 5
 };
 
-module.exports.languages = {
-    "vi": {
-        "missingInput": "[ SLOT ] Số tiền đặt cược không được để trống hoặc là số âm",
-        "moneyBetNotEnough": "[ SLOT ] Số tiền bạn đặt lớn hơn hoặc bằng số dư của bạn!",
-        "limitBet": "[ SLOT ] Số coin đặt không được dưới 50$!",
-        "returnWin": "🎰 %1 | %2 | %3 🎰\nBạn đã thắng với %4$",
-        "returnLose": "🎰 %1 | %2 | %3 🎰\nBạn đã thua và mất %4$"
-    },
-    "en": {
-        "missingInput": "[ SLOT ] The bet money must not be blank or a negative number",
-        "moneyBetNotEnough": "[ SLOT ] The money you betted is bigger than your balance!",
-        "limitBet": "[ SLOT ] Your bet is too low, the minimum is 50$",
-        "returnWin": "🎰 %1 | %2 | %3 🎰\nYou won with %4$",
-        "returnLose": "🎰 %1 | %2 | %3 🎰\nYou lost and loss %4$"
-    }
-}
+module.exports.run = async function ({ api, event, args }) {
+  const { threadID, messageID, senderID } = event;
+  const bet = parseInt(args[0]);
 
-module.exports.run = async function({ api, event, args, Currencies, getText }) {
-    const { threadID, messageID, senderID } = event;
-    const { getData, increaseMoney, decreaseMoney } = Currencies;
-    const slotItems = ["🍇", "🍉", "🍊", "🍏", "7⃣", "🍓", "🍒", "🍌", "🥝", "🥑", "🌽"];
-    const moneyUser = (await getData(senderID)).money;
+  if (isNaN(bet) || bet <= 0) return api.sendMessage("❌ Enter a valid bet amount.", threadID, messageID);
 
-    var moneyBet = parseInt(args[0]);
-    if (isNaN(moneyBet) || moneyBet <= 0) return api.sendMessage(getText("missingInput"), threadID, messageID);
-	if (moneyBet > moneyUser) return api.sendMessage(getText("moneyBetNotEnough"), threadID, messageID);
-	if (moneyBet < 50) return api.sendMessage(getText("limitBet"), threadID, messageID);
-    var number = [], win = false;
-    for (i = 0; i < 3; i++) number[i] = Math.floor(Math.random() * slotItems.length);
-    if (number[0] == number[1] && number[1] == number[2]) {
-        moneyBet *= 9;
-        win = true;
+  getBalance(senderID, (balance) => {
+    if (balance < bet) return api.sendMessage("⚠️ Not enough coins.", threadID, messageID);
+
+    // Deduct bet first
+    setBalance(senderID, balance - bet);
+
+    // Slot symbols
+    const symbols = ["🍒", "🍋", "🍉", "🍇", "⭐", "💎"];
+    const spin = [];
+    for (let i = 0; i < 3; i++) {
+      spin.push(symbols[Math.floor(Math.random() * symbols.length)]);
     }
-    else if (number[0] == number[1] || number[0] == number[2] || number[1] == number[2]) {
-        moneyBet *= 2;
-        win = true;
+
+    // Determine winnings
+    let win = 0;
+    if (spin[0] === spin[1] && spin[1] === spin[2]) {
+      win = bet * 5; // jackpot
+    } else if (spin[0] === spin[1] || spin[1] === spin[2] || spin[0] === spin[2]) {
+      win = bet * 2; // two match
     }
-    switch (win) {
-        case true: {
-            api.sendMessage(getText("returnWin", slotItems[number[0]], slotItems[number[1]], slotItems[number[2]], moneyBet), threadID, messageID);
-            await increaseMoney(senderID, moneyBet);
-            break;
-        }
-        case false: {
-            api.sendMessage(getText("returnLose", slotItems[number[0]], slotItems[number[1]], slotItems[number[2]], moneyBet), threadID, messageID);
-            await decreaseMoney(senderID, moneyBet);
-            break;
-        }
-    }
-}
+
+    // Add winnings
+    if (win > 0) setBalance(senderID, balance - bet + win);
+
+    const result = `🎰 Slot Machine 🎰\n\n[ ${spin.join(" | ")} ]\n\n${
+      win > 0 ? `🎉 You won ${win} coins!` : `❌ You lost ${bet} coins.`
+    }\n💰 Your balance: ${win > 0 ? balance - bet + win : balance - bet} coins`;
+
+    api.sendMessage(result, threadID, messageID);
+  });
+};
