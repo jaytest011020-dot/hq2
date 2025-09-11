@@ -33,26 +33,45 @@ function addCoins(userID, amount, callback) {
 
 module.exports.config = {
   name: "bank",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermission: 0,
   credits: "ChatGPT",
-  description: "Bank system",
+  description: "Bank system with coins",
   usePrefix: true,
   commandCategory: "economy",
-  usages: "/bank, /bank send @id <amount>",
+  usages: "/bank, /bank send @id <amount>, /bank all",
   cooldowns: 3
 };
 
-module.exports.run = async function ({ api, event, args }) {
+module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, messageID, senderID } = event;
 
   // Every message gives +5 coins
   addCoins(senderID, 5);
 
+  // Default - check own balance
   if (!args[0]) {
     getCoins(senderID, (coins) => {
       api.sendMessage(`💰 You have ${coins} coins.`, threadID, messageID);
     });
+    return;
+  }
+
+  // Show all balances
+  if (args[0] === "all") {
+    db.all("SELECT id, coins FROM users ORDER BY coins DESC", async (err, rows) => {
+      if (err) return api.sendMessage("⚠️ Error fetching balances.", threadID, messageID);
+      if (!rows || rows.length === 0) return api.sendMessage("📭 No users found.", threadID, messageID);
+
+      let msg = "🏦 Bank Leaderboard:\n";
+      let count = 1;
+      for (const row of rows) {
+        let name = await Users.getNameUser(row.id).catch(() => row.id);
+        msg += `${count++}. ${name}: ${row.coins} coins\n`;
+      }
+      api.sendMessage(msg, threadID, messageID);
+    });
+    return;
   }
 
   // Send coins
@@ -68,13 +87,18 @@ module.exports.run = async function ({ api, event, args }) {
       if (coins < amount) {
         return api.sendMessage("⚠️ Not enough coins.", threadID, messageID);
       }
-      setCoins(senderID, coins - amount);
-      addCoins(mentionID, amount);
-      api.sendMessage(
-        `✅ Sent ${amount} coins to ${mentionID}`,
-        threadID,
-        messageID
-      );
+      setCoins(senderID, coins - amount, () => {
+        addCoins(mentionID, amount, () => {
+          api.sendMessage(
+            `✅ Sent ${amount} coins to ${mentionID}`,
+            threadID,
+            messageID
+          );
+        });
+      });
     });
+    return;
   }
+
+  api.sendMessage("❌ Invalid command. Use /bank, /bank send @id <amount>, or /bank all", threadID, messageID);
 };
