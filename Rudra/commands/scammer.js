@@ -1,16 +1,9 @@
-const fs = require("fs");
-const path = require("path");
-const scamFile = path.join(__dirname, "scammers.json");
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("scam.db");
 
-// Load list
-function loadScammers() {
-  if (!fs.existsSync(scamFile)) {
-    fs.writeFileSync(scamFile, JSON.stringify({ scammers: [] }, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(scamFile));
-}
+// Ensure table exists
+db.run("CREATE TABLE IF NOT EXISTS scammers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, fb TEXT)");
 
-// Format list
 function buildScammerList(list) {
   if (list.length === 0) return "✅ Walang laman ang scammer list.";
   let msg = `⚠️ Scammer List (Total: ${list.length}) ⚠️\n\n`;
@@ -22,10 +15,10 @@ function buildScammerList(list) {
 
 module.exports.config = {
   name: "scam",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermssion: 0,
-  credits: "YourName",
-  description: "Auto-detect scam keyword or manual /scam command",
+  credits: "ChatGPT",
+  description: "Show scammer list (auto-trigger + /scam)",
   commandCategory: "system",
   usages: "/scam",
   cooldowns: 0
@@ -37,13 +30,17 @@ module.exports.handleEvent = function({ api, event }) {
 
   const text = event.body.toLowerCase();
   if (text.includes("scam")) {
-    const data = loadScammers();
-    api.sendMessage(buildScammerList(data.scammers), event.threadID, event.messageID);
+    db.all("SELECT * FROM scammers", (err, rows) => {
+      if (err) return console.error(err);
+      api.sendMessage(buildScammerList(rows), event.threadID, event.messageID);
+    });
   }
 };
 
 // 🔹 Manual /scam command
 module.exports.run = async function({ api, event }) {
-  const data = loadScammers();
-  api.sendMessage(buildScammerList(data.scammers), event.threadID, event.messageID);
+  db.all("SELECT * FROM scammers", (err, rows) => {
+    if (err) return console.error(err);
+    api.sendMessage(buildScammerList(rows), event.threadID, event.messageID);
+  });
 };
