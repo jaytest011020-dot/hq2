@@ -25,17 +25,17 @@ function saveBank(data) {
 
 module.exports.config = {
   name: "bank",
-  version: "1.3.0",
+  version: "1.4.0",
   hasPermssion: 0,
-  credits: "ChatGPT",
+  credits: "ChatGPT + Jaylord",
   description: "Simple bank system with admin add feature (+ earn 5 coins per normal message)",
   commandCategory: "Economy",
-  usages: "/bank, /bank all, /bank @mention <amount>",
+  usages: "/bank, /bank all, /bank add <uid> <amount>",
   cooldowns: 3,
 };
 
 // 🔑 Bot admins (add your Facebook UID here)
-const BOT_ADMINS = ["61559999326713"]; // replace with your UID(s)
+const BOT_ADMINS = ["61559999326713"]; // <-- your UID
 
 // Format balance with style
 function formatBalance(user, balance) {
@@ -59,7 +59,7 @@ module.exports.handleEvent = function ({ event }) {
 
 // 🔹 Run command
 module.exports.run = async function ({ api, event, args, Users }) {
-  const { threadID, senderID, mentions } = event;
+  const { threadID, senderID } = event;
   const bank = loadBank();
 
   // Ensure user exists in bank
@@ -72,7 +72,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
   if (command === "all") {
     let arr = [];
     for (const [id, data] of Object.entries(bank)) {
-      const name = await Users.getNameUser(id);
+      const name = await Users.getNameUser(id).catch(() => id);
       arr.push({ name, balance: data.balance });
     }
 
@@ -86,24 +86,24 @@ module.exports.run = async function ({ api, event, args, Users }) {
     return api.sendMessage(msg, threadID);
   }
 
-  // 🔹 Admin-only: add money to mentioned user
-  if (Object.keys(mentions).length > 0 && args[1]) {
+  // 🔹 Admin-only: add money by UID
+  if (command === "add") {
     if (!BOT_ADMINS.includes(senderID)) {
-      return api.sendMessage("❌ Only bot admins can add coins to others.", threadID);
+      return api.sendMessage("❌ Only bot admins can add coins.", threadID);
     }
 
-    const mentionedID = Object.keys(mentions)[0];
-    const amount = parseInt(args[1]);
+    const targetUID = args[1];
+    const amount = parseInt(args[2]);
 
-    if (isNaN(amount) || amount <= 0) {
-      return api.sendMessage("❌ Please provide a valid amount.", threadID);
+    if (!targetUID || isNaN(amount) || amount <= 0) {
+      return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID);
     }
 
-    if (!bank[mentionedID]) bank[mentionedID] = { balance: 0 };
-    bank[mentionedID].balance += amount;
+    if (!bank[targetUID]) bank[targetUID] = { balance: 0 };
+    bank[targetUID].balance += amount;
     saveBank(bank);
 
-    const name = await Users.getNameUser(mentionedID);
+    const name = await Users.getNameUser(targetUID).catch(() => targetUID);
     return api.sendMessage(
       `✅ Added 💰 ${amount.toLocaleString()} coins to ${name}'s account.`,
       threadID
@@ -111,6 +111,6 @@ module.exports.run = async function ({ api, event, args, Users }) {
   }
 
   // Default: show own balance
-  const name = await Users.getNameUser(senderID);
+  const name = await Users.getNameUser(senderID).catch(() => senderID);
   return api.sendMessage(formatBalance(name, bank[senderID].balance), threadID);
 };
