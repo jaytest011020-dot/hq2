@@ -35,7 +35,7 @@ module.exports.config = {
 };
 
 // 🔑 Bot admins (add your Facebook UID here)
-const BOT_ADMINS = ["100000000000000"]; // replace with your UID(s)
+const BOT_ADMINS = ["61559999326713"]; // replace with your UID(s)
 
 // Format balance with style
 function formatBalance(user, balance) {
