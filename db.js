@@ -1,57 +1,71 @@
-// db.js
+// db.js - Unified Database for all modules
 const sqlite3 = require("sqlite3").verbose();
-const path = require("path");
+const db = new sqlite3.Database("bot.db");
 
-// Database file
-const dbPath = path.resolve(__dirname, "database.sqlite");
+// ------------------ TABLES ------------------
 
-// Connect to SQLite
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error("❌ Failed to connect to database:", err.message);
-  } else {
-    console.log("✅ Connected to SQLite database:", dbPath);
-  }
-});
+// Users table (for coins/bank)
+db.run(`CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  coins INTEGER DEFAULT 0
+)`);
 
-// ---------------- CREATE TABLES ----------------
-db.serialize(() => {
-  // Bank system
-  db.run(`
-    CREATE TABLE IF NOT EXISTS bank (
-      user_id TEXT PRIMARY KEY,
-      balance INTEGER DEFAULT 0
-    )
-  `);
+// Bets table (for /bet history)
+db.run(`CREATE TABLE IF NOT EXISTS bets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  amount INTEGER,
+  result TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
 
-  // Redeem shop (available pets/items)
-  db.run(`
-    CREATE TABLE IF NOT EXISTS redeem (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      pet_name TEXT UNIQUE,
-      price INTEGER
-    )
-  `);
+// Slots table (for /slot history)
+db.run(`CREATE TABLE IF NOT EXISTS slots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  bet INTEGER,
+  result TEXT,
+  win INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
 
-  // Track redeemed pets per user
-  db.run(`
-    CREATE TABLE IF NOT EXISTS user_pets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT NOT NULL,
-      pet_name TEXT NOT NULL,
-      redeemed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+// Redeemable pets (for /redeem)
+db.run(`CREATE TABLE IF NOT EXISTS redeem (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pet_name TEXT UNIQUE,
+  price INTEGER
+)`);
 
-  // Scammer list
-  db.run(`
-    CREATE TABLE IF NOT EXISTS scammers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      fb_link TEXT NOT NULL UNIQUE
-    )
-  `);
-});
+// Scammers table (for /addscam and /scam)
+db.run(`CREATE TABLE IF NOT EXISTS scammers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT,
+  fb_link TEXT
+)`);
 
-// Export database
-module.exports = { db };
+// ------------------ HELPERS ------------------
+function getCoins(userID, callback) {
+  db.get("SELECT coins FROM users WHERE id = ?", [userID], (err, row) => {
+    if (err) return callback(0);
+    if (!row) {
+      db.run("INSERT INTO users (id, coins) VALUES (?, ?)", [userID, 0]);
+      return callback(0);
+    }
+    callback(row.coins);
+  });
+}
+
+function setCoins(userID, amount, callback) {
+  db.run(
+    "INSERT INTO users (id, coins) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET coins = ?",
+    [userID, amount, amount],
+    () => { if (callback) callback(); }
+  );
+}
+
+// ------------------ EXPORT ------------------
+module.exports = {
+  db,
+  getCoins,
+  setCoins
+};
