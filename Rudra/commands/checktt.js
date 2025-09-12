@@ -1,42 +1,73 @@
-const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("data.db");
+const fs = require("fs");
+const path = require("path");
 
-// Create table if not exists
-db.run(`
-  CREATE TABLE IF NOT EXISTS checktt (
-    threadID TEXT,
-    userID TEXT,
-    count INTEGER,
-    PRIMARY KEY (threadID, userID)
-  )
-`);
+// Paths
+const dataFile = path.join(__dirname, "check.json");
+const backupDir = path.join(__dirname, "check_backups");
+
+// Ensure files/folders exist
+if (!fs.existsSync(dataFile)) {
+  fs.writeFileSync(dataFile, JSON.stringify({}), "utf8");
+}
+if (!fs.existsSync(backupDir)) {
+  fs.mkdirSync(backupDir);
+}
+
+// Load data
+function loadData() {
+  try {
+    return JSON.parse(fs.readFileSync(dataFile, "utf8"));
+  } catch (e) {
+    return {};
+  }
+}
+
+// Save data
+function saveData(data) {
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), "utf8");
+}
 
 // Add message count
 function addMessage(threadID, userID) {
-  db.run(
-    `INSERT INTO checktt (threadID, userID, count) VALUES (?, ?, 1)
-     ON CONFLICT(threadID, userID) DO UPDATE SET count = count + 1`,
-    [threadID, userID]
-  );
+  const data = loadData();
+  if (!data[threadID]) data[threadID] = {};
+  if (!data[threadID][userID]) data[threadID][userID] = 0;
+  data[threadID][userID]++;
+  saveData(data);
 }
 
 // Get all message counts for a thread
-function getThreadData(threadID, callback) {
-  db.all("SELECT * FROM checktt WHERE threadID = ?", [threadID], (err, rows) => {
-    if (err) return callback([]);
-    callback(rows);
-  });
+function getThreadData(threadID) {
+  const data = loadData();
+  if (!data[threadID]) return [];
+  return Object.entries(data[threadID]).map(([userID, count]) => ({
+    userID,
+    count,
+  }));
 }
 
+// 🔹 Auto-backup every 5 minutes
+setInterval(() => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupFile = path.join(backupDir, `check_backup_${timestamp}.json`);
+  try {
+    fs.copyFileSync(dataFile, backupFile);
+    console.log(`[Backup] Saved to ${backupFile}`);
+  } catch (e) {
+    console.error("[Backup Error]", e);
+  }
+}, 5 * 60 * 1000); // 5 minutes
+
+// === Command Config ===
 module.exports.config = {
   name: "check",
-  version: "2.0.1",
+  version: "2.0.3",
   hasPermssion: 0,
   credits: "ChatGPT + Priyansh Rajput",
-  description: "Interactive message check (SQL version)",
+  description: "Interactive message check (JSON version with auto-backup)",
   commandCategory: "Utilities",
   usages: "check / check all / check rank",
-  cooldowns: 5
+  cooldowns: 5,
 };
 
 const getRankName = (count) => {
@@ -75,47 +106,46 @@ module.exports.handleEvent = function ({ event }) {
   addMessage(threadID, senderID);
 };
 
-// 🔹 Run checktt command
+// 🔹 Run check command
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID, mentions } = event;
   const query = args[0] ? args[0].toLowerCase() : "";
 
-  getThreadData(threadID, async (rows) => {
-    let msg = "";
-    let storage = [];
+  let rows = getThreadData(threadID);
+  let msg = "";
+  let storage = [];
 
-    for (const row of rows) {
-      const name = await Users.getNameUser(row.userID);
-      storage.push({ id: row.userID, name, count: row.count });
-    }
+  for (const row of rows) {
+    const name = await Users.getNameUser(row.userID);
+    storage.push({ id: row.userID, name, count: row.count });
+  }
 
-    storage.sort((a, b) => {
-      if (a.count > b.count) return -1;
-      if (a.count < b.count) return 1;
-      return a.name.localeCompare(b.name);
-    });
-
-    if (query === "all") {
-      msg = "=== CHECKTT ===";
-      let rank = 1;
-      for (const user of storage) {
-        msg += `\n${rank++}. ${user.name} - ${user.count}`;
-      }
-    } else if (query === "rank") {
-      msg = "Copper 1 (10 msgs)\nCopper 2 (100 msgs)\nCopper 3 (500 msgs)\nSilver 1 (900 msgs)\nSilver 2 (1000 msgs)\nSilver 3 (1200 msgs)\nGold 1 (1500 msgs)\nGold 2 (2000 msgs)\nGold 3 (2300 msgs)\nGold 4 (2500 msgs)\nPlatinum 1 (2900 msgs)\nPlatinum 2 (3000 msgs)\nPlatinum 3 (3200 msgs)\nPlatinum 4 (3500 msgs)\nDiamond 1 (3800 msgs)\nDiamond 2 (4000 msgs)\nDiamond 3 (4500 msgs)\nDiamond 4 (4800 msgs)\nDiamond 5 (5000 msgs)\nElite 1 (5200 msgs)\nElite 2 (5700 msgs)\nElite 3 (5900 msgs)\nElite 4 (6100 msgs)\nElite 5 (8000 msgs)\nMaster (9000 msgs)\nWar Generals (50000 msgs)";
-    } else {
-      let userID = senderID;
-      if (Object.keys(mentions).length > 0) {
-        userID = Object.keys(mentions)[0];
-      }
-      const rankUser = storage.findIndex((e) => e.id == userID);
-      if (rankUser === -1) {
-        msg = "❌ No data for this user.";
-      } else {
-        msg = `${userID == senderID ? "💠Friend" : storage[rankUser].name} ranked ${rankUser + 1}\n💌Number of messages: ${storage[rankUser].count}\n🔰Rank ${getRankName(storage[rankUser].count)}`;
-      }
-    }
-
-    api.sendMessage(msg, threadID);
+  storage.sort((a, b) => {
+    if (a.count > b.count) return -1;
+    if (a.count < b.count) return 1;
+    return a.name.localeCompare(b.name);
   });
+
+  if (query === "all") {
+    msg = "=== CHECK ===";
+    let rank = 1;
+    for (const user of storage) {
+      msg += `\n${rank++}. ${user.name} - ${user.count}`;
+    }
+  } else if (query === "rank") {
+    msg = "Copper 1 (10 msgs)\nCopper 2 (100 msgs)\nCopper 3 (500 msgs)\nSilver 1 (900 msgs)\nSilver 2 (1000 msgs)\nSilver 3 (1200 msgs)\nGold 1 (1500 msgs)\nGold 2 (2000 msgs)\nGold 3 (2300 msgs)\nGold 4 (2500 msgs)\nPlatinum 1 (2900 msgs)\nPlatinum 2 (3000 msgs)\nPlatinum 3 (3200 msgs)\nPlatinum 4 (3500 msgs)\nDiamond 1 (3800 msgs)\nDiamond 2 (4000 msgs)\nDiamond 3 (4500 msgs)\nDiamond 4 (4800 msgs)\nDiamond 5 (5000 msgs)\nElite 1 (5200 msgs)\nElite 2 (5700 msgs)\nElite 3 (5900 msgs)\nElite 4 (6100 msgs)\nElite 5 (8000 msgs)\nMaster (9000 msgs)\nWar Generals (50000 msgs)";
+  } else {
+    let userID = senderID;
+    if (Object.keys(mentions).length > 0) {
+      userID = Object.keys(mentions)[0];
+    }
+    const rankUser = storage.findIndex((e) => e.id == userID);
+    if (rankUser === -1) {
+      msg = "❌ No data for this user.";
+    } else {
+      msg = `${userID == senderID ? "💠Friend" : storage[rankUser].name} ranked ${rankUser + 1}\n💌Number of messages: ${storage[rankUser].count}\n🔰Rank ${getRankName(storage[rankUser].count)}`;
+    }
+  }
+
+  api.sendMessage(msg, threadID);
 };
