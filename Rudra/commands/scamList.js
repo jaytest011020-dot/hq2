@@ -1,12 +1,18 @@
 const fs = require("fs");
 const path = require("path");
 
-// Path to JSON file
+// Paths
 const dataFile = path.join(__dirname, "scamlist.json");
+const backupDir = path.join(__dirname, "scamlist_backups");
 
-// Ensure file exists
+// Ensure scamlist.json exists
 if (!fs.existsSync(dataFile)) {
   fs.writeFileSync(dataFile, JSON.stringify({ scammers: [] }, null, 2), "utf8");
+}
+
+// Ensure backup folder exists
+if (!fs.existsSync(backupDir)) {
+  fs.mkdirSync(backupDir);
 }
 
 // Load scammers
@@ -23,24 +29,36 @@ function saveScamList(data) {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// Auto-save every 1 minute
+// 🔹 Auto-save every 1 minute
 setInterval(() => {
   const data = loadScamList();
   saveScamList(data);
 }, 60 * 1000);
 
+// 🔹 Auto-backup every 5 minutes
+setInterval(() => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupFile = path.join(backupDir, `scamlist_backup_${timestamp}.json`);
+  try {
+    fs.copyFileSync(dataFile, backupFile);
+    console.log(`[Scamlist Backup] Saved to ${backupFile}`);
+  } catch (e) {
+    console.error("[Scamlist Backup Error]", e);
+  }
+}, 5 * 60 * 1000);
+
 module.exports.config = {
-  name: "scam",
-  version: "1.0.0",
+  name: "scamlist",
+  version: "1.2.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Scam detection & scamlist storage",
+  description: "Show scammer list & auto scam detection",
   commandCategory: "Safety",
-  usages: "scam list",
+  usages: "/scamlist",
   cooldowns: 5,
 };
 
-// Detect scam messages without prefix
+// 🔹 Auto detect scam messages
 module.exports.handleEvent = function ({ event, api }) {
   const msg = event.body?.toLowerCase() || "";
   if (msg.includes("scam") || msg.includes("scammer")) {
@@ -54,19 +72,15 @@ module.exports.handleEvent = function ({ event, api }) {
   }
 };
 
-// Run command (only list here, add/remove are in separate modules)
-module.exports.run = function ({ api, event, args }) {
+// 🔹 Run command (/scamlist)
+module.exports.run = function ({ api, event }) {
   const scamData = loadScamList();
-  if (args[0] && args[0].toLowerCase() === "list") {
-    if (scamData.scammers.length === 0) {
-      return api.sendMessage("✅ Scam list is empty.", event.threadID);
-    }
-    let msg = "⚠️ Scam List:\n";
-    scamData.scammers.forEach((s, i) => {
-      msg += `\n${i + 1}. ${s.name} - ${s.link}`;
-    });
-    api.sendMessage(msg, event.threadID);
-  } else {
-    api.sendMessage("Use: /scam list", event.threadID);
+  if (scamData.scammers.length === 0) {
+    return api.sendMessage("✅ Scam list is empty.", event.threadID);
   }
+  let msg = "⚠️ Scam List:\n";
+  scamData.scammers.forEach((s, i) => {
+    msg += `\n${i + 1}. ${s.name} - ${s.link}`;
+  });
+  api.sendMessage(msg, event.threadID);
 };
