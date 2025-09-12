@@ -5,11 +5,11 @@ const path = require("path");
 const bankFile = path.join(__dirname, "bank.json");
 const shopFile = path.join(__dirname, "shop.json");
 
-// === Ensure files exist ===
+// Ensure files exist
 if (!fs.existsSync(bankFile)) fs.writeFileSync(bankFile, JSON.stringify({}, null, 2), "utf8");
 if (!fs.existsSync(shopFile)) fs.writeFileSync(shopFile, JSON.stringify([], null, 2), "utf8");
 
-// === Load/Save Bank ===
+// Bank helpers
 function loadBank() {
   try {
     return JSON.parse(fs.readFileSync(bankFile, "utf8"));
@@ -21,7 +21,7 @@ function saveBank(data) {
   fs.writeFileSync(bankFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// === Load/Save Shop ===
+// Shop helpers
 function loadShop() {
   try {
     return JSON.parse(fs.readFileSync(shopFile, "utf8"));
@@ -33,7 +33,7 @@ function saveShop(data) {
   fs.writeFileSync(shopFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// === Format Date ===
+// Format PH time
 function formatDate() {
   const now = new Date();
   return now.toLocaleString("en-PH", { timeZone: "Asia/Manila" });
@@ -41,42 +41,53 @@ function formatDate() {
 
 module.exports.config = {
   name: "shop",
-  version: "1.0.0",
+  version: "3.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Auto Shop system with coin deduction",
+  description: "Auto Shop system (deduct new add + batch cycle)",
   commandCategory: "Economy",
-  usages: "/shop <details> <fb link> | /shop remove",
+  usages: "/shop <details> | /shop remove",
   cooldowns: 5,
 };
 
-// === Command ===
+let shopTimer = null; // Global 20-min cycle timer
+
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
-  const bank = loadBank();
+  let bank = loadBank();
   let shopList = loadShop();
 
-  // Ensure user exists in bank
   if (!bank[senderID]) bank[senderID] = { balance: 0 };
 
   const sub = args[0]?.toLowerCase();
 
-  // Remove shop
+  // Remove item
   if (sub === "remove") {
     shopList = shopList.filter(item => item.seller !== senderID);
     saveShop(shopList);
     return api.sendMessage("✅ Tinanggal na ang entry mo sa Auto Shop.", threadID);
   }
 
-  // Add shop
-  if (args.length < 2) {
-    return api.sendMessage("❌ Usage: /shop <details> <fb link>", threadID);
+  // Require details
+  if (args.length < 1) {
+    return api.sendMessage("❌ Usage: /shop <details>", threadID);
   }
 
-  const fbLink = args[args.length - 1];
-  const details = args.slice(0, -1).join(" ");
+  const details = args.join(" ");
   const name = await Users.getNameUser(senderID);
 
+  // Auto-get FB link
+  const info = await Users.getInfo(senderID);
+  const fbLink = info?.profileUrl || `https://facebook.com/${senderID}`;
+
+  // Deduct 50 coins agad sa bagong add
+  if (bank[senderID].balance < 50) {
+    return api.sendMessage("❌ Kailangan mo ng at least 50 coins para makapag-add sa Auto Shop.", threadID);
+  }
+  bank[senderID].balance -= 50;
+  saveBank(bank);
+
+  // Add to shop list
   shopList.push({
     seller: senderID,
     name,
@@ -84,31 +95,39 @@ module.exports.run = async function ({ api, event, args, Users }) {
     details,
     threadID,
   });
-
   saveShop(shopList);
 
-  return api.sendMessage(
-    `✅ Naidagdag ka sa Auto Shop!\n👤 ${name}\n📦 ${details}\n🔗 ${fbLink}\n\n💰 Bawat auto-post ay babawasan ka ng 50 coins.`,
-    threadID
-  );
-};
+  // Immediate post for this seller
+  const msg = `🛒 AUTO SHOP POST 🛒\n
+👤 Seller: ${name}
+🔗 ${fbLink}
+📦 Item: ${details}
+💰 Balance: ${bank[senderID].balance.toLocaleString()} coins
+🕒 Posted: ${formatDate()}
 
-// === Auto-post every 20 minutes ===
-setInterval(() => {
-  let bank = loadBank();
-  let shopList = loadShop();
-  let changed = false;
+━━━━━━━━━━━━━━
+👉 Gusto mo rin ma-post ang binebenta mo?
+Type: /shop <details> (50 coins bawat auto-post)
+`;
+  api.sendMessage(msg, threadID);
 
-  shopList = shopList.filter(item => {
-    if (!bank[item.seller] || bank[item.seller].balance < 50) {
-      changed = true;
-      return false; // remove pag wala coins
-    }
+  // Reset timer (start new 20-min cycle for ALL sellers)
+  if (shopTimer) clearInterval(shopTimer);
 
-    // Deduct 50 coins
-    bank[item.seller].balance -= 50;
+  shopTimer = setInterval(() => {
+    let bank = loadBank();
+    let shopList = loadShop();
+    let changed = false;
 
-    const msg = `🛒 AUTO SHOP POST 🛒\n
+    shopList = shopList.filter(item => {
+      if (!bank[item.seller] || bank[item.seller].balance < 50) {
+        changed = true;
+        return false;
+      }
+
+      bank[item.seller].balance -= 50;
+
+      const autoMsg = `🛒 AUTO SHOP POST 🛒\n
 👤 Seller: ${item.name}
 🔗 ${item.fbLink}
 📦 Item: ${item.details}
@@ -117,17 +136,23 @@ setInterval(() => {
 
 ━━━━━━━━━━━━━━
 👉 Gusto mo rin ma-post ang binebenta mo?
-Type: /shop <details ng binebenta mo> <fb link> (50 coins bawat post)
+Type: /shop <details> (50 coins bawat auto-post)
 `;
 
-    try {
-      api.sendMessage(msg, item.threadID);
-    } catch (e) {
-      console.error("Shop auto-post error:", e);
-    }
-    return true;
-  });
+      try {
+        api.sendMessage(autoMsg, item.threadID);
+      } catch (e) {
+        console.error("Shop auto-post error:", e);
+      }
+      return true;
+    });
 
-  if (changed) saveShop(shopList);
-  saveBank(bank);
-}, 20 * 60 * 1000); // every 20 minutes
+    if (changed) saveShop(shopList);
+    saveBank(bank);
+  }, 20 * 60 * 1000);
+
+  return api.sendMessage(
+    `✅ Naidagdag ka sa Auto Shop!\n👤 ${name}\n📦 ${details}\n\n💰 Bawas agad: 50 coins.\n⏰ Susunod na cycle: lahat ng sellers mababawasan ulit.`,
+    threadID
+  );
+};
