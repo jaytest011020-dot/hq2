@@ -14,7 +14,7 @@ module.exports.run = async function({ event, api }) {
   if (lockedName && logMessageData?.name !== lockedName) {
     try {
       await api.setTitle(lockedName, threadID);
-      return api.sendMessage(`⚠️ Locked name restore kiya: ${lockedName}`, threadID);
+      return api.sendMessage(`⚠️ Group name was locked. Restored to: ${lockedName}`, threadID);
     } catch (err) {
       console.log("Error restoring name:", err);
     }
