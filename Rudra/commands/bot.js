@@ -5,7 +5,7 @@ module.exports.config = {
   version: "2.3.0",
   hasPermssion: 0,
   credits: "ChatGPT + DaikyuMisugi",
-  description: "Chat with Simsimi AI (via Daikyu API)",
+  description: "Chat with Simsimi AI (ooguy API)",
   commandCategory: "AI",
   usePrefix: true,
   usages: "/simsimi <message>",
@@ -42,20 +42,28 @@ module.exports.handleEvent = async function ({ api, event }) {
   }
 };
 
-// 🔹 Simsimi handler (Daikyu API)
+// 🔹 Simsimi handler (ooguy API)
 async function simsimiReply(api, event, userMessage) {
   api.setMessageReaction("🤖", event.messageID, () => {}, true);
 
   let reply;
   try {
-    let res = await axios.get("https://daikyu-api.up.railway.app/api/sim-simi", {
-      params: { talk: userMessage },
+    let res = await axios.get("https://simsimi.ooguy.com/sim", {
+      params: {
+        query: userMessage,
+        apikey: "937e288d38e944108cc7c3de462fc35f6ce5a865"
+      },
       timeout: 8000
     });
 
-    reply = res.data?.response;
+    // 🔎 Log raw response for debugging
+    console.log("🔎 Simsimi API raw response:", res.data);
+
+    // Use "message" field (based on API docs)
+    reply = res.data?.message;
+
   } catch (e) {
-    console.error("❌ Simsimi API Error:", e.message);
+    console.error("❌ Simsimi API Error:", e.response?.data || e.message);
   }
 
   // 🔹 Fallback replies
@@ -71,4 +79,4 @@ async function simsimiReply(api, event, userMessage) {
 
   api.setMessageReaction("✅", event.messageID, () => {}, true);
   return api.sendMessage(reply, event.threadID, event.messageID);
-      }
+}
