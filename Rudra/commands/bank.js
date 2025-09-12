@@ -25,7 +25,7 @@ function saveBank(data) {
 
 module.exports.config = {
   name: "bank",
-  version: "1.4.0",
+  version: "1.5.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaylord",
   description: "Simple bank system with admin add feature (+ earn 5 coins per normal message)",
@@ -35,9 +35,9 @@ module.exports.config = {
 };
 
 // 🔑 Bot admins (add your Facebook UID here)
-const BOT_ADMINS = ["61559999326713"]; // <-- your UID
+const BOT_ADMINS = ["61559999326713"]; // <-- replace with your UID(s)
 
-// Format balance with style
+// Format balance
 function formatBalance(user, balance) {
   return `🏦 Bank Account 🏦\n\n👤 ${user}\n💰 Balance: ${balance.toLocaleString()} coins`;
 }
@@ -72,7 +72,12 @@ module.exports.run = async function ({ api, event, args, Users }) {
   if (command === "all") {
     let arr = [];
     for (const [id, data] of Object.entries(bank)) {
-      const name = await Users.getNameUser(id).catch(() => id);
+      let name;
+      try {
+        name = await Users.getNameUser(id);
+      } catch {
+        name = id; // fallback to UID
+      }
       arr.push({ name, balance: data.balance });
     }
 
@@ -103,7 +108,13 @@ module.exports.run = async function ({ api, event, args, Users }) {
     bank[targetUID].balance += amount;
     saveBank(bank);
 
-    const name = await Users.getNameUser(targetUID).catch(() => targetUID);
+    let name;
+    try {
+      name = await Users.getNameUser(targetUID);
+    } catch {
+      name = targetUID;
+    }
+
     return api.sendMessage(
       `✅ Added 💰 ${amount.toLocaleString()} coins to ${name}'s account.`,
       threadID
@@ -111,6 +122,12 @@ module.exports.run = async function ({ api, event, args, Users }) {
   }
 
   // Default: show own balance
-  const name = await Users.getNameUser(senderID).catch(() => senderID);
+  let name;
+  try {
+    name = await Users.getNameUser(senderID);
+  } catch {
+    name = senderID;
+  }
+
   return api.sendMessage(formatBalance(name, bank[senderID].balance), threadID);
 };
