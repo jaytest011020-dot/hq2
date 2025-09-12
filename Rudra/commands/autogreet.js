@@ -1,6 +1,6 @@
 module.exports.config = {
   name: "autogreet",
-  version: "1.1.2",
+  version: "1.1.3",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Auto greetings depending on the time",
@@ -36,7 +36,7 @@ function getTimeInKolkata() {
   };
 }
 
-module.exports.onLoad = function({ api, Threads }) {
+module.exports.onLoad = function({ api }) {
   console.log("✅ Auto-greet module loaded.");
 
   if (autoGreetInterval) return; // avoid multiple timers
@@ -55,9 +55,12 @@ module.exports.onLoad = function({ api, Threads }) {
 
       let threads = [];
       try {
-        threads = await api.getThreadList(200, null, ["INBOX"]);
+        // fetch only 100 to avoid malformed response
+        threads = await api.getThreadList(100, null, ["INBOX"]);
+        if (!Array.isArray(threads)) threads = [];
       } catch (err) {
         console.error("⚠️ Could not fetch thread list:", err.message);
+        threads = [];
       }
 
       const groupThreads = threads.filter(t => t.isGroup);
@@ -65,11 +68,16 @@ module.exports.onLoad = function({ api, Threads }) {
 
       for (const t of groupThreads) {
         try {
-          await api.sendMessage(greet.msg, t.threadID);
+          // use callback instead of await (avoids malformed on some fca versions)
+          api.sendMessage(greet.msg, t.threadID, (err) => {
+            if (err) {
+              console.error(`❌ Failed to send greeting to ${t.threadID}:`, err.error || err.message);
+            }
+          });
           sent++;
-          await sleep(400); // avoid spam/rate limit
+          await sleep(500); // small delay to avoid spam/rate limit
         } catch (err) {
-          console.error(`❌ Failed to send greeting to ${t.threadID}:`, err.message);
+          console.error(`❌ Error loop sending to ${t.threadID}:`, err.message);
         }
       }
 
