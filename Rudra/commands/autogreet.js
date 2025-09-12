@@ -1,6 +1,6 @@
 module.exports.config = {
   name: "autogreet",
-  version: "1.1.0",
+  version: "1.1.2",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Auto greetings depending on the time",
@@ -16,31 +16,75 @@ const greetings = [
   { hour: 22, msg: "🌙 Good night, rest well!" }
 ];
 
-module.exports.onLoad = function({ api }) {
+let autoGreetInterval = null;
+let lastSentKey = null; // prevent duplicates
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// helper: get current hour/minute in Asia/Kolkata without moment
+function getTimeInKolkata() {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const istOffset = 5.5 * 60 * 60000; // +5:30 hours
+  const istDate = new Date(utc + istOffset);
+  return {
+    hour: istDate.getHours(),
+    minute: istDate.getMinutes(),
+    full: istDate.toISOString().replace("T", " ").slice(0, 16)
+  };
+}
+
+module.exports.onLoad = function({ api, Threads }) {
   console.log("✅ Auto-greet module loaded.");
 
-  // Run every 1 minute
-  setInterval(async () => {
-    const now = new Date();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
+  if (autoGreetInterval) return; // avoid multiple timers
 
-    if (minute === 0) {
+  autoGreetInterval = setInterval(async () => {
+    try {
+      const { hour, minute, full } = getTimeInKolkata();
+
+      if (minute !== 0) return;
+
       const greet = greetings.find(g => g.hour === hour);
-      if (greet) {
+      if (!greet) return;
+
+      const currentKey = `${hour}:${minute}`;
+      if (lastSentKey === currentKey) return; // already sent this hour
+
+      let threads = [];
+      try {
+        threads = await api.getThreadList(200, null, ["INBOX"]);
+      } catch (err) {
+        console.error("⚠️ Could not fetch thread list:", err.message);
+      }
+
+      const groupThreads = threads.filter(t => t.isGroup);
+      let sent = 0;
+
+      for (const t of groupThreads) {
         try {
-          const threads = await api.getThreadList(100, null, ["INBOX"]);
-          const groupThreads = threads.filter(t => t.isGroup); // only group chats
-
-          for (const thread of groupThreads) {
-            api.sendMessage(greet.msg, thread.threadID);
-          }
-
-          console.log(`✅ Sent greeting: "${greet.msg}" to ${groupThreads.length} groups.`);
+          await api.sendMessage(greet.msg, t.threadID);
+          sent++;
+          await sleep(400); // avoid spam/rate limit
         } catch (err) {
-          console.error("❌ Auto-greet error:", err);
+          console.error(`❌ Failed to send greeting to ${t.threadID}:`, err.message);
         }
       }
+
+      lastSentKey = currentKey;
+      console.log(`✅ Sent "${greet.msg}" to ${sent} groups at ${full} IST`);
+    } catch (err) {
+      console.error("❌ Auto-greet error:", err.message);
     }
-  }, 60 * 1000);
+  }, 30 * 1000);
+};
+
+module.exports.onUnload = function() {
+  if (autoGreetInterval) {
+    clearInterval(autoGreetInterval);
+    autoGreetInterval = null;
+  }
+  console.log("✅ Auto-greet module unloaded.");
 };
