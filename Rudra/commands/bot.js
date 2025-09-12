@@ -2,13 +2,13 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "simsimi",
-  version: "2.3.0",
+  version: "2.2.0",
   hasPermssion: 0,
-  credits: "ChatGPT + DaikyuMisugi",
-  description: "Chat with Simsimi AI (ooguy API)",
-  commandCategory: "AI",
+  credits: "ChatGPT",
+  description: "Chat with Simsimi AI (stable, no history)",
+  commandCategory: "ai",
   usePrefix: true,
-  usages: "/simsimi <message>",
+  usages: "simsimi <message>",
   cooldowns: 5,
 };
 
@@ -21,7 +21,7 @@ module.exports.run = async function ({ api, event, args }) {
   return simsimiReply(api, event, userMessage);
 };
 
-// 🔹 Auto-detect messages
+// 🔹 Auto-detect + reply
 module.exports.handleEvent = async function ({ api, event }) {
   const rawMessage = event.body?.trim();
   if (!rawMessage) return;
@@ -33,7 +33,7 @@ module.exports.handleEvent = async function ({ api, event }) {
     return simsimiReply(api, event, cleaned);
   }
 
-  // Case 2: replying directly to bot's message
+  // Case 2: user replies to bot's message
   if (event.type === "message_reply" && event.messageReply) {
     const botID = api.getCurrentUserID();
     if (event.messageReply.senderID == botID) {
@@ -42,32 +42,25 @@ module.exports.handleEvent = async function ({ api, event }) {
   }
 };
 
-// 🔹 Simsimi handler (ooguy API)
+// 🔹 Simsimi handler (no history)
 async function simsimiReply(api, event, userMessage) {
   api.setMessageReaction("🤖", event.messageID, () => {}, true);
 
-  let reply;
+  let reply = null;
+
   try {
     let res = await axios.get("https://simsimi.ooguy.com/sim", {
-      params: {
-        query: userMessage,
-        apikey: "937e288d38e944108cc7c3de462fc35f6ce5a865"
-      },
+      params: { query: userMessage, apikey: "937e288d38e944108cc7c3de462fc35f6ce5a865" },
       timeout: 8000
     });
 
-    // 🔎 Log raw response for debugging
-    console.log("🔎 Simsimi API raw response:", res.data);
-
-    // Use "message" field (based on API docs)
-    reply = res.data?.message;
-
+    reply = res.data?.respond;
   } catch (e) {
-    console.error("❌ Simsimi API Error:", e.response?.data || e.message);
+    console.error("❌ Simsimi API Error:", e.message);
   }
 
-  // 🔹 Fallback replies
-  if (!reply || reply.length < 1) {
+  // 🔹 Fallback if no reply
+  if (!reply || reply.length < 2) {
     const fallbacks = [
       "😅 Hindi ako makakonek kay Simsimi ngayon.",
       "🤖 Pasensya, down yung Simsimi server.",
