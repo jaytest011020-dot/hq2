@@ -93,4 +93,4 @@ module.exports.run = async function ({ event, api, Threads,Users }) {
         }
         await setData(threadID, { threadInfo: dataThread });
     } catch (e) { console.log(e) };
-          }
+		}
