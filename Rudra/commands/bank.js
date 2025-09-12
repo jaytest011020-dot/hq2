@@ -25,10 +25,10 @@ function saveBank(data) {
 
 module.exports.config = {
   name: "bank",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Simple bank system to store coins",
+  description: "Simple bank system to store coins (+ earn 5 coins per message)",
   commandCategory: "Economy",
   usages: "/bank or /bank all",
   cooldowns: 3,
@@ -39,6 +39,19 @@ function formatBalance(user, balance) {
   return `🏦 Bank Account 🏦\n\n👤 ${user}\n💰 Balance: ${balance.toLocaleString()} coins`;
 }
 
+// 🔹 Add 5 coins per message
+module.exports.handleEvent = function ({ event }) {
+  const { senderID } = event;
+  if (!senderID) return;
+
+  const bank = loadBank();
+  if (!bank[senderID]) bank[senderID] = { balance: 0 };
+
+  bank[senderID].balance += 5; // earn 5 coins each message
+  saveBank(bank);
+};
+
+// 🔹 Run command
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
   const bank = loadBank();
