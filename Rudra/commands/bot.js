@@ -2,13 +2,13 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "simsimi",
-  version: "2.2.0",
+  version: "2.3.0",
   hasPermssion: 0,
-  credits: "ChatGPT",
-  description: "Chat with Simsimi AI (stable, no history)",
-  commandCategory: "ai",
+  credits: "ChatGPT + DaikyuMisugi",
+  description: "Chat with Simsimi AI (via Daikyu API)",
+  commandCategory: "AI",
   usePrefix: true,
-  usages: "simsimi <message>",
+  usages: "/simsimi <message>",
   cooldowns: 5,
 };
 
@@ -21,7 +21,7 @@ module.exports.run = async function ({ api, event, args }) {
   return simsimiReply(api, event, userMessage);
 };
 
-// 🔹 Auto-detect + reply
+// 🔹 Auto-detect messages
 module.exports.handleEvent = async function ({ api, event }) {
   const rawMessage = event.body?.trim();
   if (!rawMessage) return;
@@ -33,7 +33,7 @@ module.exports.handleEvent = async function ({ api, event }) {
     return simsimiReply(api, event, cleaned);
   }
 
-  // Case 2: user replies to bot's message
+  // Case 2: replying directly to bot's message
   if (event.type === "message_reply" && event.messageReply) {
     const botID = api.getCurrentUserID();
     if (event.messageReply.senderID == botID) {
@@ -42,25 +42,24 @@ module.exports.handleEvent = async function ({ api, event }) {
   }
 };
 
-// 🔹 Simsimi handler (no history)
+// 🔹 Simsimi handler (Daikyu API)
 async function simsimiReply(api, event, userMessage) {
   api.setMessageReaction("🤖", event.messageID, () => {}, true);
 
-  let reply = null;
-
+  let reply;
   try {
-    let res = await axios.get("https://simsimi.ooguy.com/sim", {
-      params: { query: userMessage, apikey: "937e288d38e944108cc7c3de462fc35f6ce5a865" },
+    let res = await axios.get("https://daikyu-api.up.railway.app/api/sim-simi", {
+      params: { talk: userMessage },
       timeout: 8000
     });
 
-    reply = res.data?.respond;
+    reply = res.data?.response;
   } catch (e) {
     console.error("❌ Simsimi API Error:", e.message);
   }
 
-  // 🔹 Fallback if no reply
-  if (!reply || reply.length < 2) {
+  // 🔹 Fallback replies
+  if (!reply || reply.length < 1) {
     const fallbacks = [
       "😅 Hindi ako makakonek kay Simsimi ngayon.",
       "🤖 Pasensya, down yung Simsimi server.",
@@ -72,4 +71,4 @@ async function simsimiReply(api, event, userMessage) {
 
   api.setMessageReaction("✅", event.messageID, () => {}, true);
   return api.sendMessage(reply, event.threadID, event.messageID);
-}
+      }
