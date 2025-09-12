@@ -10,7 +10,7 @@ const BOT_ADMIN = "61559999326713"; // Change to your bot admin FB ID
 
 module.exports.config = {
   name: "redeem",
-  version: "1.1.0",
+  version: "1.2.0",
   hasPermission: 0,
   credits: "ChatGPT",
   description: "Redeem pets using coins",
@@ -24,7 +24,7 @@ module.exports.config = {
 function getBalance(userID, callback) {
   db.get("SELECT balance FROM bank WHERE user_id = ?", [userID], (err, row) => {
     if (err || !row) {
-      db.run("INSERT OR IGNORE INTO bank (user_id, balance) VALUES (?, ?)", [userID, 0]);
+      db.run("INSERT OR IGNORE INTO bank (user_id, balance) VALUES (?, 0)", [userID]);
       return callback(0);
     }
     callback(row.balance);
@@ -32,8 +32,11 @@ function getBalance(userID, callback) {
 }
 
 function setBalance(userID, amount, callback) {
-  db.run("INSERT INTO bank (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = ?",
-    [userID, amount, amount], () => callback && callback());
+  db.run(
+    "INSERT INTO bank (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = ?",
+    [userID, amount, amount],
+    () => callback && callback()
+  );
 }
 
 // ---------------- RUN COMMAND ----------------
@@ -42,12 +45,17 @@ module.exports.run = async function ({ api, event, args }) {
 
   // ---------- ADMIN ADD PET ----------
   if (args[0] === "add") {
-    if (senderID !== BOT_ADMIN) return api.sendMessage("❌ Only bot admin can add pets.", threadID, messageID);
-    if (args.length < 3) return api.sendMessage("❌ Usage: /redeem add <petname> <price>", threadID, messageID);
+    if (senderID !== BOT_ADMIN) 
+      return api.sendMessage("❌ Only bot admin can add pets.", threadID, messageID);
+
+    if (args.length < 3) 
+      return api.sendMessage("❌ Usage: /redeem add <petname> <price>", threadID, messageID);
 
     const petName = args[1];
     const price = parseInt(args[2]);
-    if (isNaN(price) || price <= 0) return api.sendMessage("❌ Invalid price.", threadID, messageID);
+
+    if (isNaN(price) || price <= 0) 
+      return api.sendMessage("❌ Invalid price.", threadID, messageID);
 
     db.run("INSERT OR REPLACE INTO redeem (pet_name, price) VALUES (?, ?)", [petName, price], (err) => {
       if (err) return api.sendMessage("⚠️ Failed to add pet.", threadID, messageID);
@@ -58,8 +66,11 @@ module.exports.run = async function ({ api, event, args }) {
 
   // ---------- ADMIN REMOVE PET ----------
   if (args[0] === "remove") {
-    if (senderID !== BOT_ADMIN) return api.sendMessage("❌ Only bot admin can remove pets.", threadID, messageID);
-    if (args.length < 2) return api.sendMessage("❌ Usage: /redeem remove <petname>", threadID, messageID);
+    if (senderID !== BOT_ADMIN) 
+      return api.sendMessage("❌ Only bot admin can remove pets.", threadID, messageID);
+
+    if (args.length < 2) 
+      return api.sendMessage("❌ Usage: /redeem remove <petname>", threadID, messageID);
 
     const petName = args[1];
     db.run("DELETE FROM redeem WHERE pet_name = ?", [petName], function (err) {
@@ -70,9 +81,10 @@ module.exports.run = async function ({ api, event, args }) {
     return;
   }
 
-  // ---------- SHOW PET LIST ----------
+  // ---------- SHOW PET LIST (Anyone can redeem) ----------
   db.all("SELECT * FROM redeem", [], (err, rows) => {
-    if (err || rows.length === 0) return api.sendMessage("⚠️ No pets available to redeem.", threadID, messageID);
+    if (err || rows.length === 0) 
+      return api.sendMessage("⚠️ No pets available to redeem.", threadID, messageID);
 
     let msg = "🐾 Available Pets to Redeem 🐾\n\n";
     rows.forEach((row, i) => {
@@ -80,16 +92,17 @@ module.exports.run = async function ({ api, event, args }) {
     });
     msg += "\nReply with the number of the pet to redeem.";
 
-    // Push handleReply
+    // Store reply info
     global.client.handleReply.push({
       type: "redeem_select",
       name: "redeem",
       author: senderID,
-      messageID: messageID,
       pets: rows
     });
 
-    api.sendMessage(msg, threadID);
+    api.sendMessage(msg, threadID, (err, info) => {
+      if (!err) global.client.handleReply.slice(-1)[0].messageID = info.messageID;
+    });
   });
 };
 
@@ -107,13 +120,17 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
   const pet = handleReply.pets[choice - 1];
 
   getBalance(senderID, (balance) => {
-    if (balance < pet.price) return api.sendMessage("⚠️ Not enough coins.", threadID, messageID);
+    if (balance < pet.price) 
+      return api.sendMessage("⚠️ Not enough coins.", threadID, messageID);
 
     setBalance(senderID, balance - pet.price, () => {
       api.sendMessage(`🎉 You redeemed ${pet.pet_name} for ${pet.price} coins!`, threadID, messageID);
 
-      // Notify admin only
-      api.sendMessage(`📩 User ${senderID} redeemed "${pet.pet_name}" for ${pet.price} coins.`, BOT_ADMIN);
+      // Notify admin privately
+      api.sendMessage(
+        `📩 User ${senderID} redeemed "${pet.pet_name}" for ${pet.price} coins.`,
+        BOT_ADMIN
+      );
     });
   });
 };
