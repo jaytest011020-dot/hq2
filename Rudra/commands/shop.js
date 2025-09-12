@@ -39,10 +39,10 @@ function formatDate() {
 
 module.exports.config = {
   name: "shop",
-  version: "4.0.0",
+  version: "5.0.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Per-GC Auto Shop system",
+  description: "Per-GC Auto Shop system (combined post every 20 minutes)",
   commandCategory: "Economy",
   usages: "/shop <details> | /shop remove",
   cooldowns: 5,
@@ -94,19 +94,15 @@ module.exports.run = async function ({ api, event, args, Users }) {
   });
   saveShop(shopData);
 
-  // post immediately
-  const msg = `🛒 AUTO SHOP POST 🛒\n
-👤 Seller: ${name}
-🔗 ${fbLink}
-📦 Item: ${details}
-💰 Balance: ${bank[senderID].balance.toLocaleString()} coins
-🕒 Posted: ${formatDate()}
+  // immediate combined post
+  let postContent = `🛒 AUTO SHOP POST (Auto post every 20 minutes) 🛒\n\n`;
+  shopData[threadID].sellers.forEach(seller => {
+    const bal = bank[seller.seller]?.balance ?? 0;
+    postContent += `👤 Seller: ${seller.name}\n🔗 ${seller.fbLink}\n📦 Item: ${seller.details}\n💰 Balance: ${bal.toLocaleString()} coins\n\n━━━━━━━━━━━━━━\n\n`;
+  });
+  postContent += `🕒 Posted: ${formatDate()}\n\n👉 Gusto mo rin ma-post ang binebenta mo?\nType: /shop <details> (50 coins bawat auto-post)`;
 
-━━━━━━━━━━━━━━
-👉 Gusto mo rin ma-post ang binebenta mo?
-Type: /shop <details> (50 coins bawat auto-post)
-`;
-  api.sendMessage(msg, threadID);
+  api.sendMessage(postContent, threadID);
 
   // reset interval for this thread
   if (shopTimers[threadID]) clearInterval(shopTimers[threadID]);
@@ -117,30 +113,25 @@ Type: /shop <details> (50 coins bawat auto-post)
     if (!shopData[threadID] || shopData[threadID].sellers.length === 0) return;
 
     let newList = [];
+    let autoPost = `🛒 AUTO SHOP POST (Auto post every 20 minutes) 🛒\n\n`;
+
     shopData[threadID].sellers.forEach(seller => {
       if (!bank[seller.seller] || bank[seller.seller].balance < 50) {
-        // skip if no coins
-        return;
+        return; // skip if no coins
       }
 
       bank[seller.seller].balance -= 50;
-      const autoMsg = `🛒 AUTO SHOP POST 🛒\n
-👤 Seller: ${seller.name}
-🔗 ${seller.fbLink}
-📦 Item: ${seller.details}
-💰 Balance: ${bank[seller.seller].balance.toLocaleString()} coins
-🕒 Posted: ${formatDate()}
-
-━━━━━━━━━━━━━━
-👉 Gusto mo rin ma-post ang binebenta mo?
-Type: /shop <details> (50 coins bawat auto-post)
-`;
-      api.sendMessage(autoMsg, threadID);
+      autoPost += `👤 Seller: ${seller.name}\n🔗 ${seller.fbLink}\n📦 Item: ${seller.details}\n💰 Balance: ${bank[seller.seller].balance.toLocaleString()} coins\n\n━━━━━━━━━━━━━━\n\n`;
       newList.push(seller);
     });
+
+    if (newList.length > 0) {
+      autoPost += `🕒 Updated: ${formatDate()}\n\n👉 Want to post your items too?\nType: /shop <details> (50 coins per auto-post)`;
+      api.sendMessage(autoPost, threadID);
+    }
 
     shopData[threadID].sellers = newList;
     saveShop(shopData);
     saveBank(bank);
-  }, 20 * 60 * 1000); // 20 minutes
+  }, 20 * 60 * 1000); // every 20 minutes
 };
