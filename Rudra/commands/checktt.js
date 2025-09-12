@@ -5,46 +5,47 @@ const path = require("path");
 const dataFile = path.join(__dirname, "check.json");
 const backupDir = path.join(__dirname, "check_backups");
 
-// Ensure files/folders exist
-if (!fs.existsSync(dataFile)) {
-  fs.writeFileSync(dataFile, JSON.stringify({}), "utf8");
-}
+// Ensure backup folder exists
 if (!fs.existsSync(backupDir)) {
   fs.mkdirSync(backupDir);
 }
 
-// Load data
-function loadData() {
+// Global in-memory data
+let data = {};
+if (fs.existsSync(dataFile)) {
   try {
-    return JSON.parse(fs.readFileSync(dataFile, "utf8"));
-  } catch (e) {
-    return {};
+    data = JSON.parse(fs.readFileSync(dataFile, "utf8"));
+  } catch {
+    data = {};
   }
+} else {
+  data = {};
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// Save data
-function saveData(data) {
+// Save data (persistent)
+function saveData() {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), "utf8");
 }
 
 // Add message count
 function addMessage(threadID, userID) {
-  const data = loadData();
   if (!data[threadID]) data[threadID] = {};
   if (!data[threadID][userID]) data[threadID][userID] = 0;
   data[threadID][userID]++;
-  saveData(data);
 }
 
 // Get all message counts for a thread
 function getThreadData(threadID) {
-  const data = loadData();
   if (!data[threadID]) return [];
   return Object.entries(data[threadID]).map(([userID, count]) => ({
     userID,
     count,
   }));
 }
+
+// 🔹 Auto-save every 1 minute
+setInterval(saveData, 60 * 1000);
 
 // 🔹 Auto-backup every 5 minutes
 setInterval(() => {
@@ -56,15 +57,15 @@ setInterval(() => {
   } catch (e) {
     console.error("[Backup Error]", e);
   }
-}, 5 * 60 * 1000); // 5 minutes
+}, 5 * 60 * 1000);
 
 // === Command Config ===
 module.exports.config = {
   name: "check",
-  version: "2.0.3",
+  version: "2.1.0",
   hasPermssion: 0,
   credits: "ChatGPT + Priyansh Rajput",
-  description: "Interactive message check (JSON version with auto-backup)",
+  description: "Interactive message check (persistent + backup)",
   commandCategory: "Utilities",
   usages: "check / check all / check rank",
   cooldowns: 5,
