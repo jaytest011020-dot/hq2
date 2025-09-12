@@ -2,7 +2,7 @@ const { db } = require("./db");
 
 module.exports.config = {
   name: "addscam",
-  version: "1.2.0",
+  version: "1.3.0",
   hasPermssion: 2, // bot admin only
   credits: "ChatGPT",
   description: "Add scammer to SQL database",
@@ -22,10 +22,13 @@ module.exports.run = async function({ api, event, args }) {
     );
   }
 
-  const name = args[0];
-  const fb_link = args[1];
+  const fb_link = args[args.length - 1];
+  const name = args.slice(0, -1).join(" ");
 
-  // Insert scammer into shared SQL
+  if (!fb_link.startsWith("http")) {
+    return api.sendMessage("❌ Invalid Facebook link.", threadID, messageID);
+  }
+
   db.run(
     "INSERT INTO scammers (name, fb_link) VALUES (?, ?)",
     [name, fb_link],
@@ -33,13 +36,13 @@ module.exports.run = async function({ api, event, args }) {
       if (err) {
         console.error(err);
         return api.sendMessage(
-          "⚠️ Error adding scammer.",
+          "⚠️ Error adding scammer (maybe already exists?).",
           threadID,
           messageID
         );
       }
       api.sendMessage(
-        `✅ Na-add si ${name} sa scammer list!`,
+        `✅ Na-add si ${name} sa scammer list!\n🔗 ${fb_link}`,
         threadID,
         messageID
       );
