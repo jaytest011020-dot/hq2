@@ -5,7 +5,7 @@ const startTime = new Date(); // Moved outside onStart
 
 module.exports = {
   config: {
-    name: "uptime3",
+    name: "uptime",
     version: "1.0.0",
     hasPermssion: 0,
     credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭",
