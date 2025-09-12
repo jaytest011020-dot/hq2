@@ -1,43 +1,57 @@
+// db.js
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 
-// Unified bot database
-const db = new sqlite3.Database(path.join(__dirname, "bot.db"));
+// Database file
+const dbPath = path.resolve(__dirname, "database.sqlite");
 
-// Ensure scammers table exists
-db.run(`
-  CREATE TABLE IF NOT EXISTS scammers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    fb_link TEXT
-  )
-`);
+// Connect to SQLite
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error("❌ Failed to connect to database:", err.message);
+  } else {
+    console.log("✅ Connected to SQLite database:", dbPath);
+  }
+});
 
-// Ensure users table exists for coins
-db.run(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    coins INTEGER
-  )
-`);
+// ---------------- CREATE TABLES ----------------
+db.serialize(() => {
+  // Bank system
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bank (
+      user_id TEXT PRIMARY KEY,
+      balance INTEGER DEFAULT 0
+    )
+  `);
 
-// Ensure checktt table exists
-db.run(`
-  CREATE TABLE IF NOT EXISTS checktt (
-    threadID TEXT,
-    userID TEXT,
-    count INTEGER,
-    PRIMARY KEY (threadID, userID)
-  )
-`);
+  // Redeem shop (available pets/items)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS redeem (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pet_name TEXT UNIQUE,
+      price INTEGER
+    )
+  `);
 
-// Ensure redeem table exists
-db.run(`
-  CREATE TABLE IF NOT EXISTS redeem (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pet_name TEXT UNIQUE,
-    price INTEGER
-  )
-`);
+  // Track redeemed pets per user
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_pets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      pet_name TEXT NOT NULL,
+      redeemed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
+  // Scammer list
+  db.run(`
+    CREATE TABLE IF NOT EXISTS scammers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      fb_link TEXT NOT NULL UNIQUE
+    )
+  `);
+});
+
+// Export database
 module.exports = { db };
