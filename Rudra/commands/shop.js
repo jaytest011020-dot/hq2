@@ -1,5 +1,23 @@
 // Global auto poster (every 20 mins across all GCs)
 let started = false;
+
+// ✅ Placeholder functions para hindi mag-error
+function loadBank() {
+  return {}; // dapat naka-load ito sa file/database
+}
+function saveBank(data) {
+  return true; // dapat ito nagse-save sa file/database
+}
+function loadShop() {
+  return {}; // dapat naka-load ito sa file/database
+}
+function saveShop(data) {
+  return true; // dapat ito nagse-save sa file/database
+}
+function formatDate() {
+  return new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
+}
+
 module.exports.handleEvent = async function ({ api }) {
   if (started) return;
   started = true;
@@ -11,6 +29,7 @@ module.exports.handleEvent = async function ({ api }) {
     // gumawa ng global sellers list (lahat ng GC)
     let globalSellers = [];
     for (const threadID of Object.keys(shopData)) {
+      if (!shopData[threadID]?.sellers) continue; // ✅ fix kapag undefined
       shopData[threadID].sellers.forEach(s => {
         globalSellers.push({
           ...s,
@@ -43,7 +62,7 @@ module.exports.handleEvent = async function ({ api }) {
     });
 
     if (stillActive.length > 0) {
-      postMessage += `🕒 Updated: ${formatDate()}\n\n👉 Gusto mo rin ma-post ang items mo?\nType: /shop <details> (20 coins bawat 20 mins auto-post)\n\n📖 Type /help para makita ang lahat ng command\n\n👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:\nhttps://m.me/j/AbYBqABSq7cyHsBk/`;
+      postMessage += `🕒 Updated: ${formatDate()}\n\n👉 Gusto mo rin ma-post ang items mo?\nType: /shop <details> (20 coins bawat 20 mins auto-post)\n\n📖 𝗧𝘆𝗽𝗲 /help para makita ang lahat ng command\n\n👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:\nhttps://m.me/j/AbYBqABSq7cyHsBk/`;
 
       // ipadala sa lahat ng GC kung saan naka join ang bot
       for (const threadID of Object.keys(shopData)) {
