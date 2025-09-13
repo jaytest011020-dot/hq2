@@ -1,6 +1,6 @@
 module.exports.config = {
   name: "help",
-  version: "2.0.0",
+  version: "2.0.2",
   hasPermssion: 0,
   credits: "Edited by ChatGPT",
   description: "Custom Help Command (only selected commands shown)",
@@ -44,9 +44,9 @@ module.exports.run = function ({ api, event }) {
 📌 Pet calculator para sa stats at growth.
 📝 Example: /petcalc raccoon
 
-🤖 /𝗕𝗢𝗧
-📌 Info tungkol sa bot at commands.
-📝 Example: /bot
+🤖 /𝗝𝗔𝗡𝗗𝗘𝗟
+📌 Info tungkol kay Jandel at commands.
+📝 Example: /jandel
 
 🧠 /𝗚𝗣𝗧
 📌 Makipag-usap sa AI assistant.
