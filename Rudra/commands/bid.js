@@ -20,7 +20,7 @@ function saveAuctions(data) {
 
 module.exports.config = {
   name: "bid",
-  version: "2.0.0",
+  version: "2.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Auction system for group chats",
@@ -42,8 +42,14 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
       return api.sendMessage("⚠️ An auction is already active. End it before starting a new one.", threadID, messageID);
     }
 
-    const item = args[1];
-    const startAmount = parseInt(args[2]);
+    // Extract item name + starting bid (last number only)
+    const match = args.join(" ").match(/start\s+(.+)\s+(\d+)$/i);
+    if (!match) {
+      return api.sendMessage("❌ Usage: /bid start <item> <starting_amount>", threadID, messageID);
+    }
+
+    const item = match[1].trim();
+    const startAmount = parseInt(match[2]);
 
     if (!item || isNaN(startAmount)) {
       return api.sendMessage("❌ Usage: /bid start <item> <starting_amount>", threadID, messageID);
