@@ -2,7 +2,7 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "simsimi",
-  version: "2.3.0",
+  version: "2.3.1",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Chat with Simsimi AI (stable, no history)",
@@ -21,14 +21,14 @@ module.exports.run = async function ({ api, event, args }) {
   return simsimiReply(api, event, userMessage);
 };
 
-// 🔹 Auto-detect kapag may 'bot' lang
+// 🔹 Auto-detect kapag may "jandel"
 module.exports.handleEvent = async function ({ api, event }) {
   const rawMessage = event.body?.trim();
   if (!rawMessage) return;
 
-  // Case: message contains "bot"
-  if (/\bbot\b/i.test(rawMessage)) {
-    let cleaned = rawMessage.replace(/\bbot\b/gi, "").trim();
+  // Case: message contains "jandel"
+  if (/\bjandel\b/i.test(rawMessage)) {
+    let cleaned = rawMessage.replace(/\bjandel\b/gi, "").trim();
     if (!cleaned) cleaned = "hello there";
     return simsimiReply(api, event, cleaned);
   }
