@@ -1,11 +1,11 @@
 module.exports.config = {
   name: "autogreet",
-  version: "1.1.3",
+  version: "1.1.5",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Auto greetings depending on the time",
+  description: "Automatically greets groups depending on the time of day",
   commandCategory: "system",
-  usages: "This runs automatically",
+  usages: "This runs automatically (no command needed)",
   cooldowns: 0
 };
 
@@ -17,82 +17,72 @@ const greetings = [
 ];
 
 let autoGreetInterval = null;
-let lastSentKey = null; // prevent duplicates
+let lastSentKey = null;
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(res => setTimeout(res, ms));
 }
 
-// helper: get current hour/minute in Asia/Kolkata without moment
 function getTimeInKolkata() {
   const now = new Date();
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const istOffset = 5.5 * 60 * 60000; // +5:30 hours
+  const istOffset = 5.5 * 60 * 60000;
   const istDate = new Date(utc + istOffset);
-  return {
-    hour: istDate.getHours(),
-    minute: istDate.getMinutes(),
-    full: istDate.toISOString().replace("T", " ").slice(0, 16)
-  };
+  return { hour: istDate.getHours(), minute: istDate.getMinutes() };
 }
 
-module.exports.onLoad = function({ api }) {
-  console.log("✅ Auto-greet module loaded.");
+// 🔹 Run command (optional, won’t error if you type /autogreet)
+module.exports.run = async function ({ api, event }) {
+  return api.sendMessage(
+    "✅ Auto-greet is active. Greetings will be sent at 6AM, 12PM, 6PM, and 10PM IST.",
+    event.threadID
+  );
+};
 
-  if (autoGreetInterval) return; // avoid multiple timers
+// 🔹 Safe autostart
+module.exports.onLoad = function ({ api }) {
+  console.log("✅ Auto-greet loaded.");
+
+  if (autoGreetInterval) return; // don’t start twice
 
   autoGreetInterval = setInterval(async () => {
     try {
-      const { hour, minute, full } = getTimeInKolkata();
-
+      const { hour, minute } = getTimeInKolkata();
       if (minute !== 0) return;
 
       const greet = greetings.find(g => g.hour === hour);
       if (!greet) return;
 
       const currentKey = `${hour}:${minute}`;
-      if (lastSentKey === currentKey) return; // already sent this hour
+      if (lastSentKey === currentKey) return;
 
       let threads = [];
       try {
-        // fetch only 100 to avoid malformed response
-        threads = await api.getThreadList(100, null, ["INBOX"]);
-        if (!Array.isArray(threads)) threads = [];
+        threads = await api.getThreadList(50, null, ["INBOX"]);
       } catch (err) {
-        console.error("⚠️ Could not fetch thread list:", err.message);
-        threads = [];
+        return console.error("⚠️ Could not fetch thread list:", err.message);
       }
 
-      const groupThreads = threads.filter(t => t.isGroup);
-      let sent = 0;
-
-      for (const t of groupThreads) {
-        try {
-          // use callback instead of await (avoids malformed on some fca versions)
-          api.sendMessage(greet.msg, t.threadID, (err) => {
-            if (err) {
-              console.error(`❌ Failed to send greeting to ${t.threadID}:`, err.error || err.message);
-            }
-          });
-          sent++;
-          await sleep(500); // small delay to avoid spam/rate limit
-        } catch (err) {
-          console.error(`❌ Error loop sending to ${t.threadID}:`, err.message);
-        }
+      const groups = threads.filter(t => t.isGroup);
+      for (const g of groups) {
+        api.sendMessage(greet.msg, g.threadID, (err) => {
+          if (err) console.error(`❌ Failed to greet ${g.threadID}:`, err.message);
+        });
+        await sleep(500);
       }
 
       lastSentKey = currentKey;
-      console.log(`✅ Sent "${greet.msg}" to ${sent} groups at ${full} IST`);
+      console.log(`✅ Sent greeting: "${greet.msg}"`);
     } catch (err) {
-      console.error("❌ Auto-greet error:", err.message);
+      console.error("❌ Auto-greet crash prevented:", err.message);
     }
   }, 30 * 1000);
 };
 
-module.exports.onUnload = function() {
+module.exports.onUnload = function () {
   if (autoGreetInterval) {
     clearInterval(autoGreetInterval);
     autoGreetInterval = null;
   }
-  console.log("✅ Auto-greet module unloaded.");
+  console.log("✅ Auto-greet stopped.");
 };
