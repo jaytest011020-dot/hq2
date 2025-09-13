@@ -1,6 +1,6 @@
 module.exports.config = {
-  name: "help", // Command ay /help
-  version: "2.2.0",
+  name: "help", // Command is /help
+  version: "2.2.1",
   hasPermssion: 0,
   credits: "Edited by ChatGPT",
   description: "Custom Help Command (only selected commands shown)",
@@ -14,65 +14,65 @@ module.exports.run = function ({ api, event }) {
 
   // Unicode Bold Help Menu
   const helpMenu = `
-📖 𝗝𝗔𝗡𝗗𝗘𝗟 𝗖𝗢𝗠𝗠𝗔𝗡𝗗 𝗚𝗨𝗜𝗗𝗘
+📖 𝗕𝗢𝗧 𝗖𝗢𝗠𝗠𝗔𝗡𝗗 𝗚𝗨𝗜𝗗𝗘
 
-💰 /𝗕𝗔𝗡𝗞
-📌 Tingnan ang iyong balance, magdeposito o magwithdraw ng coins.
-📝 Example: /bank deposit 100
+💰 /𝗕𝗔𝗡𝗞  
+📌 Check your balance, deposit, or withdraw coins.  
+📝 Example: /bank deposit 100  
 
-📦 /𝗦𝗛𝗢𝗣
-📌 Maglagay ng item para i-auto post sa lahat ng GC kada 20 minutes (20 coins bawat post).
-📝 Example: /shop iPhone 14 Pro Max 1000gcash
-📝 Example: /shop list
-📝 Example: /shop remove
+📦 /𝗦𝗛𝗢𝗣  
+📌 Add an item to auto-post in all GCs every 20 minutes (20 coins per post).  
+📝 Example: /shop iPhone 14 Pro Max 1000gcash  
+📝 Example: /shop list  
+📝 Example: /shop remove  
 
-🎯 /𝗕𝗜𝗗
-📌 Gumawa ng bidding system para sa items.
-📝 Example: /bid start raccoon 50
-📝 Example: /bid end
+🎯 /𝗕𝗜𝗗  
+📌 Create a bidding system for items.  
+📝 Example: /bid start raccoon 50  
+📝 Example: /bid end  
 
-📊 /𝗦𝗧𝗢𝗖𝗞
-📌 Tingnan o i-manage ang stock ng items.
-📝 Example: /stock add raccoon 10
-📝 Example: /stock list
+📊 /𝗦𝗧𝗢𝗖𝗞  
+📌 View or manage item stock.  
+📝 Example: /stock add raccoon 10  
+📝 Example: /stock list  
 
-🔍 /𝗖𝗛𝗘𝗖𝗞
-📌 I-check ang profile o info ng isang user.
-📝 Example: /check @mention
+🔍 /𝗖𝗛𝗘𝗖𝗞  
+📌 Check a user's profile or info.  
+📝 Example: /check @mention  
 
-🐾 /𝗣𝗘𝗧𝗖𝗔𝗟𝗖
-📌 Pet calculator para sa stats at growth.
-📝 Example: /petcalc raccoon
+🐾 /𝗣𝗘𝗧𝗖𝗔𝗟𝗖  
+📌 Pet calculator for stats and growth.  
+📝 Example: /petcalc raccoon  
 
-🤖 /𝗝𝗔𝗡𝗗𝗘𝗟
-📌 Makipag usap sa bot
-📝 Example: jandel hai
+🤖 /𝗕𝗢𝗧  
+📌 Chat with the bot.  
+📝 Example: bot hello  
 
-🧠 /𝗚𝗣𝗧
-📌 Makipag-usap sa AI assistant.
-📝 Example: /gpt gumawa ka ng tula
+🧠 /𝗚𝗣𝗧  
+📌 Chat with the AI assistant.  
+📝 Example: /gpt make me a poem  
 
-🚨 /𝗦𝗖𝗔𝗠𝗠𝗘𝗥
-📌 Tingnan ang scammer list ng GC.
-📝 Example: /scammer add @mention
-📝 Example: /scammer list
+🚨 /𝗦𝗖𝗔𝗠𝗠𝗘𝗥  
+📌 View or update the scammer list of the GC.  
+📝 Example: /scammer add @mention  
+📝 Example: /scammer list  
 
-📜 /𝗥𝗨𝗟𝗘𝗦
-📌 Ipakita ang rules ng GC at ng jandel.
-📝 Example: /rules
+📜 /𝗥𝗨𝗟𝗘𝗦  
+📌 Show the GC and bot rules.  
+📝 Example: /rules  
 
-🎰 /𝗦𝗟𝗢𝗧
-📌 Subukan ang iyong swerte sa slot game.
-📝 Example: /slot 100
+🎰 /𝗦𝗟𝗢𝗧  
+📌 Try your luck with a slot game.  
+📝 Example: /slot 100  
 
-👢 /𝗞𝗜𝗖𝗞
-📌 I-kick ang member gamit mention.
-📝 Example: /kick @mention
+👢 /𝗞𝗜𝗖𝗞  
+📌 Kick a member using mention.  
+📝 Example: /kick @mention  
 
-━━━━━━━━━━━━━━━
-✨ Gumamit ng /help <command> para makita ulit ang usage.
+━━━━━━━━━━━━━━━  
+✨ Use /help <command> to see detailed usage.  
 
-👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:  
+👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗕𝘂𝘆 & 𝗦𝗲𝗹𝗹 𝗚𝗖:  
 **https://m.me/j/AbYBqABSq7cyHsBk/**
 `;
 
