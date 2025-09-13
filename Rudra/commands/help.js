@@ -1,9 +1,9 @@
 module.exports.config = {
 	name: "help",
-	version: "1.2.0",
+	version: "1.3.0",
 	hasPermssion: 0,
 	credits: "Edited by ChatGPT",
-	description: "Beginner's Guide with usage under each command",
+	description: "Beginner's Guide with bold styled output",
 	commandCategory: "system",
 	usages: "[module name]",
 	cooldowns: 1,
@@ -29,6 +29,19 @@ module.exports.languages = {
 	}
 };
 
+// allowed commands lang
+const allowed = ["bank", "bid", "bot", "check", "petcalc", "shop", "stock"];
+
+// function pang-convert ng normal text to bold unicode
+function toBold(str) {
+	const normal = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+	const bold   = "𝗔𝗕𝗖𝗗𝗘𝗙𝗚𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇";
+	return str.split("").map(ch => {
+		const idx = normal.indexOf(ch);
+		return idx !== -1 ? bold[idx] : ch;
+	}).join("");
+}
+
 module.exports.run = function ({ api, event, args, getText }) {
 	const { commands } = global.client;
 	const { threadID } = event;
@@ -37,34 +50,19 @@ module.exports.run = function ({ api, event, args, getText }) {
 	const { autoUnsend, delayUnsend } = global.configModule[this.config.name];
 	const prefix = (threadSetting.hasOwnProperty("PREFIX")) ? threadSetting.PREFIX : global.config.PREFIX;
 
-	// kapag walang specific command → list lahat (name + usage sa baba)
+	// kapag walang specific command → list ng allowed commands lang
 	if (!command) {
-		const arrayInfo = [];
-		const page = parseInt(args[0]) || 1;
-		const numberOfOnePage = 200;
-		let i = 0;
-		let msg = "";
+		let msg = "📄 𝗔𝗟𝗟𝗢𝗪𝗘𝗗 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦\n✨ Type /help <command> to see full details\n\n";
 
-		for (var [name, value] of commands) {
-			arrayInfo.push({ name, config: value.config });
+		for (let name of allowed) {
+			const cmd = commands.get(name);
+			if (!cmd) continue;
+
+			msg += `✨ ${toBold(name.toUpperCase())}\n`;
+			msg += `   ➝ Usage: ${prefix}${cmd.config.name} ${(cmd.config.usages) ? cmd.config.usages : ""}\n\n`;
 		}
 
-		// ayusin alphabetical
-		arrayInfo.sort((a, b) => a.name.localeCompare(b.name));
-
-		const startSlice = numberOfOnePage * page - numberOfOnePage;
-		i = startSlice;
-		const returnArray = arrayInfo.slice(startSlice, startSlice + numberOfOnePage);
-
-		for (let item of returnArray) {
-			msg += `「 ${++i} 」${prefix}${item.name}\n`;
-			msg += `   ➝ Usage: ${prefix}${item.name} ${(item.config.usages) ? item.config.usages : ""}\n\n`;
-		}
-
-		const header = `📄 Command List\n✨ Type /help <command> to see full details`;
-		const footer = `\nPage (${page}/${Math.ceil(arrayInfo.length / numberOfOnePage)})`;
-
-		return api.sendMessage(header + "\n\n" + msg + footer, threadID, async (error, info) => {
+		return api.sendMessage(msg, threadID, async (error, info) => {
 			if (autoUnsend) {
 				await new Promise(resolve => setTimeout(resolve, delayUnsend * 1000));
 				return api.unsendMessage(info.messageID);
@@ -73,10 +71,14 @@ module.exports.run = function ({ api, event, args, getText }) {
 	}
 
 	// kapag may specific command → show full details
+	if (!allowed.includes(command.config.name)) {
+		return api.sendMessage("⚠️ Hindi kasama ang command na ito sa help list.", threadID, event.messageID);
+	}
+
 	return api.sendMessage(
 		getText(
 			"moduleInfo",
-			command.config.name,
+			toBold(command.config.name.toUpperCase()),
 			command.config.description,
 			`${prefix}${command.config.name} ${(command.config.usages) ? command.config.usages : ""}`,
 			command.config.commandCategory,
