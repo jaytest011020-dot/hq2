@@ -20,7 +20,7 @@ function saveAuctions(data) {
 
 module.exports.config = {
   name: "bid",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Auction system for group chats",
@@ -49,6 +49,8 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
       return api.sendMessage("❌ Usage: /bid start <item> <starting_amount>", threadID, messageID);
     }
 
+    const hostName = await Users.getNameUser(senderID);
+
     auctions[threadID] = {
       active: true,
       item,
@@ -56,13 +58,14 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
       bidder: null,
       bidderID: null,
       postID: null,
-      hostID: senderID
+      hostID: senderID,
+      hostName
     };
 
     saveAuctions(auctions);
 
     return api.sendMessage(
-      `📢 Auction Started!\n📦 Item: ${item}\n💵 Starting Bid: ${startAmount}\n\nReply to this message with your bid!`,
+      `📢 Auction Started!\n📦 Item: ${item}\n💵 Starting Bid: ${startAmount}\n👑 Host: ${hostName}\n\nReply to this message with your bid!`,
       threadID,
       (err, info) => {
         if (!err) {
@@ -93,10 +96,12 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
       ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
       : `❌ No valid bids were placed for ${auction.item}.`;
 
+    const hostLine = `👑 Host: ${auction.hostName}`;
+
     auctions[threadID] = { active: false };
     saveAuctions(auctions);
 
-    return api.sendMessage(`📌 Auction Ended!\n${winner}`, threadID);
+    return api.sendMessage(`📌 Auction Ended!\n${hostLine}\n${winner}`, threadID);
   }
 
   return api.sendMessage("❌ Usage: /bid start <item> <amount> | /bid end", threadID, messageID);
@@ -133,7 +138,7 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
   saveAuctions(auctions);
 
   api.sendMessage(
-    `📢 New Highest Bid!\n📦 Item: ${auction.item}\n💵 Bid: ${bidAmount}\n👤 Bidder: ${name}`,
+    `📢 New Highest Bid!\n📦 Item: ${auction.item}\n💵 Bid: ${bidAmount}\n👤 Bidder: ${name}\n👑 Host: ${auction.hostName}`,
     threadID
   );
 };
