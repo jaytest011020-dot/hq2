@@ -39,7 +39,7 @@ function formatDate() {
 
 module.exports.config = {
   name: "shop",
-  version: "7.2.0",
+  version: "8.0.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Global Auto Shop system (post every 20 minutes across all GCs)",
@@ -66,16 +66,16 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
     return api.sendMessage("✅ Tinanggal na ang entry mo sa shop.", threadID);
   }
 
-  // list sellers
+  // list sellers (pang current GC lang)
   if (sub === "list") {
-    if (!shopData[threadID] || shopData[threadID].sellers.length === 0) {
+    if (shopData[threadID].sellers.length === 0) {
       return api.sendMessage("📭 Walang active sellers sa shop na ito.", threadID);
     }
 
     let listMsg = `🛒 ACTIVE SHOP SELLERS (This GC) 🛒\n\n`;
     shopData[threadID].sellers.forEach((s, i) => {
       const bal = bank[s.seller]?.balance ?? 0;
-      listMsg += `${i + 1}. 👤 ${s.name}\n📦 ${s.details}\n💰 Balance: ${bal.toLocaleString()} coins\n💬 From: ${s.threadName}\n🔗 ${s.fbLink}\n\n`;
+      listMsg += `${i + 1}. 👤 ${s.name}\n📦 ${s.details}\n💰 Balance: ${bal.toLocaleString()} coins\n\n`;
     });
     listMsg += `🕒 Last Checked: ${formatDate()}`;
     return api.sendMessage(listMsg, threadID);
@@ -93,12 +93,12 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
   const threadInfo = await Threads.getInfo(threadID);
   const threadName = threadInfo.threadName || "Unnamed Group";
 
+  // check kung may at least 20 coins (para may pang-auto post later)
   if (bank[senderID].balance < 20) {
-    return api.sendMessage("❌ Kailangan ng at least 20 coins.", threadID);
+    return api.sendMessage("❌ Kailangan ng at least 20 coins para makapasok sa auto shop.", threadID);
   }
-  bank[senderID].balance -= 20;
-  saveBank(bank);
 
+  // add seller entry (walang bawas muna)
   shopData[threadID].sellers.push({
     seller: senderID,
     name,
@@ -108,10 +108,10 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
   });
   saveShop(shopData);
 
-  return api.sendMessage(`✅ Na-add ka sa auto shop! Bawas 20 coins.`, threadID);
+  return api.sendMessage(`✅ Na-add ka sa auto shop! Hintayin ang susunod na auto post. (20 coins bawas kada 20 mins)`, threadID);
 };
 
-// Auto-poster
+// Global auto poster (every 20 mins across all GCs)
 let started = false;
 module.exports.handleEvent = async function ({ api }) {
   if (started) return;
@@ -121,41 +121,49 @@ module.exports.handleEvent = async function ({ api }) {
     let bank = loadBank();
     let shopData = loadShop();
 
+    // gumawa ng global sellers list (lahat ng GC)
     let globalSellers = [];
     for (const threadID of Object.keys(shopData)) {
-      if (!shopData[threadID] || !shopData[threadID].sellers) continue;
+      if (!shopData[threadID].sellers) continue;
       shopData[threadID].sellers.forEach(s => {
-        globalSellers.push({ ...s, threadID });
+        globalSellers.push({
+          ...s,
+          threadID
+        });
       });
     }
 
+    // tanggalin lang yung nawalan ng coins
     let stillActive = [];
-    let postMessage = `🛒 GLOBAL AUTO SHOP POST (Every 20 minutes) 🛒\n📢 This post is sent to all groups where the bot is a member!\n\n`;
+    let postMessage = `🛒 GLOBAL AUTO SHOP POST (Every 20 minutes) 🛒\n📢 Sent to all groups where the bot is a member!\n\n`;
 
-    for (const seller of globalSellers) {
+    globalSellers.forEach(seller => {
       if (!bank[seller.seller] || bank[seller.seller].balance < 20) {
         api.sendMessage(
           `⚠️ ${seller.name}, na-remove ka sa auto shop kasi naubusan ka ng coins.`,
           seller.threadID
         );
-        continue;
+        return;
       }
 
+      // bawas coins dito lang
       bank[seller.seller].balance -= 20;
 
-      postMessage += `👤 Seller: ${seller.name}\n🔗 ${seller.fbLink}\n📦 Item: ${seller.details}\n💬 From: ${seller.threadName}\n💰 Balance: ${bank[seller.seller].balance.toLocaleString()} coins\n\n━━━━━━━━━━━━━━\n\n`;
+      postMessage += `👤 Seller: ${seller.name}\n🔗 ${seller.fbLink}\n📦 ${seller.details}\n💬 From: ${seller.threadName}\n💰 Balance: ${bank[seller.seller].balance.toLocaleString()} coins\n\n━━━━━━━━━━━━━━\n\n`;
 
       stillActive.push(seller);
-    }
+    });
 
     if (stillActive.length > 0) {
       postMessage += `🕒 Updated: ${formatDate()}\n\n👉 Gusto mo rin ma-post ang items mo?\nType: /shop <details> (20 coins bawat 20 mins auto-post)\n\n📖 Type /help para makita ang lahat ng command\n\n👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:\nhttps://m.me/j/AbYBqABSq7cyHsBk/`;
 
+      // ipadala sa lahat ng GC
       for (const threadID of Object.keys(shopData)) {
         api.sendMessage(postMessage, threadID);
       }
     }
 
+    // update shop data
     let newShopData = {};
     stillActive.forEach(seller => {
       if (!newShopData[seller.threadID]) newShopData[seller.threadID] = { sellers: [] };
@@ -164,5 +172,5 @@ module.exports.handleEvent = async function ({ api }) {
 
     saveShop(newShopData);
     saveBank(bank);
-  }, 20 * 60 * 1000);
+  }, 20 * 60 * 1000); // every 20 mins
 };
