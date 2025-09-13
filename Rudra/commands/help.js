@@ -1,6 +1,6 @@
 module.exports.config = {
   name: "help",
-  version: "2.0.2",
+  version: "2.0.4",
   hasPermssion: 0,
   credits: "Edited by ChatGPT",
   description: "Custom Help Command (only selected commands shown)",
@@ -12,7 +12,6 @@ module.exports.config = {
 module.exports.run = function ({ api, event }) {
   const { threadID } = event;
 
-  // Unicode Bold Commands
   const helpMenu = `
 📖 𝗕𝗢𝗧 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦 𝗚𝗨𝗜𝗗𝗘
 
@@ -71,6 +70,9 @@ module.exports.run = function ({ api, event }) {
 
 ━━━━━━━━━━━━━━━
 ✨ Gumamit ng /help <command> para makita ulit ang usage.
+
+📢 Join my GAG BUY/SELL Group:
+👉 https://m.me/j/AbYBqABSq7cyHsBk/
 `;
 
   return api.sendMessage(helpMenu, threadID);
