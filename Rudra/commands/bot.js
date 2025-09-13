@@ -1,14 +1,14 @@
 const axios = require("axios");
 
 module.exports.config = {
-  name: "simsimi",
-  version: "2.3.1",
+  name: "bot",
+  version: "2.3.2",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Chat with Simsimi AI (stable, no history)",
   commandCategory: "ai",
   usePrefix: true,
-  usages: "simsimi <message>",
+  usages: "bot <message>",
   cooldowns: 5,
 };
 
@@ -21,14 +21,14 @@ module.exports.run = async function ({ api, event, args }) {
   return simsimiReply(api, event, userMessage);
 };
 
-// 🔹 Auto-detect kapag may "jandel"
+// 🔹 Auto-detect kapag may "jandel" o "bot"
 module.exports.handleEvent = async function ({ api, event }) {
   const rawMessage = event.body?.trim();
   if (!rawMessage) return;
 
-  // Case: message contains "jandel"
-  if (/\bjandel\b/i.test(rawMessage)) {
-    let cleaned = rawMessage.replace(/\bjandel\b/gi, "").trim();
+  // Case: message contains "jandel" or "bot"
+  if (/\bjandel\b/i.test(rawMessage) || /\bbot\b/i.test(rawMessage)) {
+    let cleaned = rawMessage.replace(/\bjandel\b/gi, "").replace(/\bbot\b/gi, "").trim();
     if (!cleaned) cleaned = "hello there";
     return simsimiReply(api, event, cleaned);
   }
@@ -54,10 +54,10 @@ async function simsimiReply(api, event, userMessage) {
   // 🔹 Fallback if no reply
   if (!reply || reply.length < 2) {
     const fallbacks = [
-      "😅 Hindi ako makakonek kay Simsimi ngayon.",
-      "🤖 Pasensya, down yung Simsimi server.",
-      "😕 Hindi ko gets, pwede mo ulitin?",
-      "⚠️ Error sa Simsimi, pero nandito pa rin ako."
+      "😅 I can’t connect to Simsimi right now.",
+      "🤖 Sorry, the Simsimi server seems down.",
+      "😕 I don’t understand, can you repeat?",
+      "⚠️ Simsimi error, but I’m still here."
     ];
     reply = fallbacks[Math.floor(Math.random() * fallbacks.length)];
   }
