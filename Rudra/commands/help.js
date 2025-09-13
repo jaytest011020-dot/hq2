@@ -1,9 +1,9 @@
 module.exports.config = {
 	name: "help",
-	version: "1.0.2",
+	version: "1.2.0",
 	hasPermssion: 0,
-	credits: "Priyansh Rajput",
-	description: "Beginner's Guide",
+	credits: "Edited by ChatGPT",
+	description: "Beginner's Guide with usage under each command",
 	commandCategory: "system",
 	usages: "[module name]",
 	cooldowns: 1,
@@ -15,48 +15,29 @@ module.exports.config = {
 
 module.exports.languages = {
 	"en": {
-		"moduleInfo": "「 %1 」\n%2\n\n❯ Usage: %3\n❯ Category: %4\n❯ Cooldown: %5 second(s)\n❯ Permission: %6\n\n» Module code by %7 «",
-		"helpList": '[ There are %1 commands on this bot, use: "%2help commandName" to know how to use them! ]',
+		"moduleInfo":
+`📌 Command: %1
+📖 Description: %2
+⚙️ Usage: %3
+📂 Category: %4
+⏳ Cooldown: %5 second(s)
+👤 Permission: %6
+✍️ Credits: %7`,
 		"user": "User",
 		"adminGroup": "Admin group",
 		"adminBot": "Admin bot"
 	}
 };
 
-module.exports.handleEvent = function ({ api, event, getText }) {
-	const { commands } = global.client;
-	const { threadID, messageID, body } = event;
-
-	if (!body || typeof body == "undefined" || body.indexOf("help") != 0) return;
-	const splitBody = body.slice(body.indexOf("help")).trim().split(/\s+/);
-	if (splitBody.length == 1 || !commands.has(splitBody[1].toLowerCase())) return;
-	const threadSetting = global.data.threadData.get(parseInt(threadID)) || {};
-	const command = commands.get(splitBody[1].toLowerCase());
-	const prefix = (threadSetting.hasOwnProperty("PREFIX")) ? threadSetting.PREFIX : global.config.PREFIX;
-	return api.sendMessage(
-		getText(
-			"moduleInfo",
-			command.config.name,
-			command.config.description,
-			`${prefix}${command.config.name} ${(command.config.usages) ? command.config.usages : ""}`,
-			command.config.commandCategory,
-			command.config.cooldowns,
-			((command.config.hasPermssion == 0) ? getText("user") : (command.config.hasPermssion == 1) ? getText("adminGroup") : getText("adminBot")),
-			command.config.credits
-		),
-		threadID,
-		messageID
-	);
-};
-
 module.exports.run = function ({ api, event, args, getText }) {
 	const { commands } = global.client;
-	const { threadID, messageID } = event;
+	const { threadID } = event;
 	const command = commands.get((args[0] || "").toLowerCase());
 	const threadSetting = global.data.threadData.get(parseInt(threadID)) || {};
 	const { autoUnsend, delayUnsend } = global.configModule[this.config.name];
 	const prefix = (threadSetting.hasOwnProperty("PREFIX")) ? threadSetting.PREFIX : global.config.PREFIX;
 
+	// kapag walang specific command → list lahat (name + usage sa baba)
 	if (!command) {
 		const arrayInfo = [];
 		const page = parseInt(args[0]) || 1;
@@ -64,31 +45,34 @@ module.exports.run = function ({ api, event, args, getText }) {
 		let i = 0;
 		let msg = "";
 
-		for (var [name] of commands) {
-			name += ``;
-			arrayInfo.push(name);
+		for (var [name, value] of commands) {
+			arrayInfo.push({ name, config: value.config });
 		}
 
-		// Fixed sorting by name
-		arrayInfo.sort((a, b) => a.localeCompare(b));
+		// ayusin alphabetical
+		arrayInfo.sort((a, b) => a.name.localeCompare(b.name));
 
 		const startSlice = numberOfOnePage * page - numberOfOnePage;
 		i = startSlice;
 		const returnArray = arrayInfo.slice(startSlice, startSlice + numberOfOnePage);
 
-		for (let item of returnArray) msg += `「 ${++i} 」${prefix}${item}\n`;
+		for (let item of returnArray) {
+			msg += `「 ${++i} 」${prefix}${item.name}\n`;
+			msg += `   ➝ Usage: ${prefix}${item.name} ${(item.config.usages) ? item.config.usages : ""}\n\n`;
+		}
 
-		const header = `Command list 📄\nType /help (command name) ✨\n󰂆 󰟯 󰟰 󰟷 󰟺 󰟵 󰟫`;
-		const footer = `\nPage (${page}/${Math.ceil(arrayInfo.length / numberOfOnePage)})\n`;
+		const header = `📄 Command List\n✨ Type /help <command> to see full details`;
+		const footer = `\nPage (${page}/${Math.ceil(arrayInfo.length / numberOfOnePage)})`;
 
 		return api.sendMessage(header + "\n\n" + msg + footer, threadID, async (error, info) => {
 			if (autoUnsend) {
 				await new Promise(resolve => setTimeout(resolve, delayUnsend * 1000));
 				return api.unsendMessage(info.messageID);
-			} else return;
+			}
 		}, event.messageID);
 	}
 
+	// kapag may specific command → show full details
 	return api.sendMessage(
 		getText(
 			"moduleInfo",
@@ -101,6 +85,6 @@ module.exports.run = function ({ api, event, args, getText }) {
 			command.config.credits
 		),
 		threadID,
-		messageID
+		event.messageID
 	);
 };
