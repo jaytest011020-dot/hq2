@@ -1,6 +1,5 @@
 const fs = require("fs");
 const path = require("path");
-const { v4: uuidv4 } = require("uuid");
 
 const auctionFile = path.join(__dirname, "auctions.json");
 
@@ -19,14 +18,19 @@ function saveAuctions(data) {
   fs.writeFileSync(auctionFile, JSON.stringify(data, null, 2), "utf8");
 }
 
+// generate 6-digit ID
+function generateID() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 module.exports.config = {
   name: "bid",
-  version: "3.0.0",
+  version: "3.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Auction system with multiple simultaneous bids",
+  description: "Auction system with 6-digit IDs, auto-end in 24h, and resend option",
   commandCategory: "Utility",
-  usages: "/bid start <item> <amount> | /bid end <auction_id>",
+  usages: "/bid start <item> <amount> | /bid end <id> | /bid resend <id>",
   cooldowns: 5,
 };
 
@@ -51,9 +55,8 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
     }
 
     const hostName = await Users.getNameUser(senderID);
-
     const newAuction = {
-      id: uuidv4(), // unique ID for each auction
+      id: generateID(), // ✅ 6 digit ID
       active: true,
       item,
       highest: startAmount,
@@ -110,7 +113,31 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
     return api.sendMessage(`📌 Auction Ended!\n${winner}`, threadID);
   }
 
-  return api.sendMessage("❌ Usage: /bid start <item> <amount> | /bid end <auction_id>", threadID, messageID);
+  // resend auction post
+  if (sub === "resend") {
+    const auctionID = args[1];
+    if (!auctionID) {
+      return api.sendMessage("❌ Usage: /bid resend <auction_id>", threadID, messageID);
+    }
+
+    const auction = auctions[threadID]?.find(a => a.id === auctionID && a.active);
+    if (!auction) {
+      return api.sendMessage("⚠️ Auction not found or already ended.", threadID, messageID);
+    }
+
+    return api.sendMessage(
+      `📢 Auction Resent!\n📦 Item: ${auction.item}\n💵 Current Highest: ${auction.highest}\n👤 Bidder: ${auction.bidder || "None"}\n👑 Host: ${auction.hostName}\n🆔 Auction ID: ${auction.id}\n\n📝 Reply to this message with your bid!`,
+      threadID,
+      (err, info) => {
+        if (!err) {
+          auction.postID = info.messageID; // update para yung bagong reply dito na lang
+          saveAuctions(auctions);
+        }
+      }
+    );
+  }
+
+  return api.sendMessage("❌ Usage: /bid start <item> <amount> | /bid end <id> | /bid resend <id>", threadID, messageID);
 };
 
 // Handle replies for bidding
@@ -171,7 +198,7 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
     threadID,
     (err, info) => {
       if (!err) {
-        auction.postID = info.messageID;
+        auction.postID = info.messageID; // update latest post
         saveAuctions(auctions);
       }
     }
