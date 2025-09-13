@@ -3,7 +3,7 @@ const path = require("path");
 
 const NICKNAME_LOCK_FILE = path.join(__dirname, "../data/locked_nicknames.json");
 
-// डेटा लोड करने के लिए फंक्शन
+// Function to load locked nickname data
 function loadLockedNicknames() {
     try {
         if (fs.existsSync(NICKNAME_LOCK_FILE)) {
@@ -17,48 +17,49 @@ function loadLockedNicknames() {
 
 module.exports.config = {
   name: "nicknameLockEvent",
-  eventType: ["log:thread-nickname"], // यह स्पेसिफिक इवेंट टाइप को सुनता है
-  version: "1.1", // Version updated
+  eventType: ["log:thread-nickname"], // Listens to nickname change events
+  version: "1.1",
   credits: "Rudra x ChatGPT"
 };
 
 module.exports.run = async function({ event, api }) {
   const { threadID, logMessageData } = event;
 
-  // डेटा को सीधे JSON फ़ाइल से लोड करें
+  // Load locked nickname data directly from JSON file
   const lockedNicknamesData = loadLockedNicknames();
 
-  // यदि इस थ्रेड के लिए निकनेम लॉक नहीं है तो वापस आ जाएं
+  // If nickname lock is not enabled for this thread, stop here
   if (!lockedNicknamesData[threadID]) return;
 
   const changedUserID = logMessageData.participant_id;
   const newNickname = logMessageData.nickname;
 
-  // यदि बॉट खुद निकनेम बदल रहा है तो उसे अनदेखा करें ताकि लूप न हो
+  // Ignore if the bot itself changed the nickname (to prevent infinite loop)
   if (changedUserID === api.getCurrentUserID()) {
     return;
   }
 
+  // Get the originally locked nickname for this user
   const originalLockedNick = lockedNicknamesData[threadID][changedUserID];
 
-  // यदि बदला गया निकनेम लॉक किए गए निकनेम से भिन्न है
+  // If the new nickname is different from the locked nickname
   if (typeof originalLockedNick !== 'undefined' && newNickname !== originalLockedNick) {
     try {
+      // Reset nickname back to locked value
       await api.changeNickname(originalLockedNick, threadID, changedUserID);
 
-      // चेतावनी संदेश भेजें कि नाम वापस सेट कर दिया गया है
+      // Send warning message to user
       api.sendMessage(
-        `⚠️ @${changedUserID}, आपका निकनेम लॉक है। इसे "${originalLockedNick || "blank"}" पर वापस सेट कर दिया गया है। कृपया इसे बदलने की कोशिश न करें।`,
+        `⚠️ @${changedUserID}, your nickname is locked. It has been reset to "${originalLockedNick || "blank"}". Please don’t try to change it.`,
         threadID,
-        (err) => { // Message callback to mention user
+        (err) => { 
           if (err) console.error("Error sending mention message:", err);
         },
-        [changedUserID] // User ID to mention
+        [changedUserID] // Mention the user who tried to change nickname
       );
     } catch (err) {
       console.error(`Error resetting nickname for user ${changedUserID} in thread ${threadID}:`, err);
-      // यदि निकनेम रीसेट करने में कोई गंभीर त्रुटि हो तो मालिक को सूचित करें
-      // api.sendMessage(`❌ निकनेm रीसेट करने में त्रुटि हुई for user ID: ${changedUserID}.`, threadID);
+      // If something goes seriously wrong, you could notify the bot owner here
     }
   }
 };
