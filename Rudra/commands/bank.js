@@ -1,117 +1,136 @@
-// Global Auto Poster (every 20 mins across all GCs)
 const fs = require("fs");
 const path = require("path");
 
-// ==========================
-// 📂 File Paths
-// ==========================
-const bankFile = path.join(__dirname, "bank.json");
-const shopFile = path.join(__dirname, "shop.json");
+// Path to JSON file
+const dataFile = path.join(__dirname, "bank.json");
 
-// ==========================
-// 🏦 BANK SYSTEM
-// ==========================
+// Ensure file exists
+if (!fs.existsSync(dataFile)) {
+fs.writeFileSync(dataFile, JSON.stringify({}, null, 2), "utf8");
+}
+
+// Load data
 function loadBank() {
-  if (!fs.existsSync(bankFile)) fs.writeFileSync(bankFile, JSON.stringify({}, null, 2), "utf8");
-  try {
-    return JSON.parse(fs.readFileSync(bankFile, "utf8"));
-  } catch {
-    return {};
-  }
+try {
+return JSON.parse(fs.readFileSync(dataFile, "utf8"));
+} catch {
+return {};
+}
 }
 
+// Save data
 function saveBank(data) {
-  fs.writeFileSync(bankFile, JSON.stringify(data, null, 2), "utf8");
+fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// ==========================
-// 🛒 SHOP SYSTEM
-// ==========================
-function loadShop() {
-  if (!fs.existsSync(shopFile)) fs.writeFileSync(shopFile, JSON.stringify({}, null, 2), "utf8");
-  try {
-    return JSON.parse(fs.readFileSync(shopFile, "utf8"));
-  } catch {
-    return {};
-  }
-}
-
-function saveShop(data) {
-  fs.writeFileSync(shopFile, JSON.stringify(data, null, 2), "utf8");
-}
-
-// ==========================
-// ⏰ Date Formatter
-// ==========================
-function formatDate() {
-  return new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
-}
-
-// ==========================
-// 🔁 Auto Poster
-// ==========================
-let started = false;
-module.exports.handleEvent = async function ({ api }) {
-  if (started) return;
-  started = true;
-
-  setInterval(async () => {
-    let bank = loadBank();
-    let shopData = loadShop();
-
-    // gumawa ng global sellers list (lahat ng GC)
-    let globalSellers = [];
-    for (const threadID of Object.keys(shopData)) {
-      if (shopData[threadID]?.sellers) {
-        shopData[threadID].sellers.forEach(s => {
-          globalSellers.push({
-            ...s,
-            threadID
-          });
-        });
-      }
-    }
-
-    // tanggalin lang yung nawalan ng coins
-    let stillActive = [];
-    let postMessage = `🛒 GLOBAL AUTO SHOP POST (Every 20 minutes) 🛒\n📢 This post is sent to all groups where the bot is a member!\n\n`;
-
-    globalSellers.forEach(seller => {
-      if (!bank[seller.seller] || bank[seller.seller].balance < 20) {
-        // wala nang coins → tanggalin
-        api.sendMessage(
-          `⚠️ ${seller.name}, na-remove ka sa auto shop kasi naubusan ka ng coins.`,
-          seller.threadID
-        );
-        return;
-      }
-
-      // bawas coins
-      bank[seller.seller].balance -= 20;
-
-      // add to post
-      postMessage += `👤 Seller: ${seller.name}\n🔗 ${seller.fbLink}\n📦 Item: ${seller.details}\n💬 From: ${seller.threadName}\n💰 Balance: ${bank[seller.seller].balance.toLocaleString()} coins\n\n━━━━━━━━━━━━━━\n\n`;
-
-      stillActive.push(seller);
-    });
-
-    if (stillActive.length > 0) {
-      postMessage += `🕒 Updated: ${formatDate()}\n\n👉 Gusto mo rin ma-post ang items mo?\nType: /shop <details> (20 coins bawat 20 mins auto-post)\n\n📖 Type /help para makita ang lahat ng command\n\n👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:\nhttps://m.me/j/AbYBqABSq7cyHsBk/`;
-
-      // ipadala sa lahat ng GC kung saan naka join ang bot
-      for (const threadID of Object.keys(shopData)) {
-        api.sendMessage(postMessage, threadID);
-      }
-    }
-
-    // i-update lang yung active sellers
-    let newShopData = {};
-    stillActive.forEach(seller => {
-      if (!newShopData[seller.threadID]) newShopData[seller.threadID] = { sellers: [] };
-      newShopData[seller.threadID].sellers.push(seller);
-    });
-
-    saveShop(newShopData);
-    saveBank(bank);
-  }, 20 * 60 * 1000); // every 20 mins
+module.exports.config = {
+name: "bank",
+version: "1.5.0",
+hasPermssion: 0,
+credits: "ChatGPT + Jaylord",
+description: "Simple bank system with admin add feature (+ earn 5 coins per normal message)",
+commandCategory: "Economy",
+usages: "/bank, /bank all, /bank add <uid> <amount>",
+cooldowns: 3,
 };
+
+// 🔑 Bot admins (add your Facebook UID here)
+const BOT_ADMINS = ["61559999326713"]; // <-- replace with your UID(s)
+
+// Format balance
+function formatBalance(user, balance) {
+return 🏦 Bank Account 🏦\n\n👤 ${user}\n💰 Balance: ${balance.toLocaleString()} coins;
+}
+
+// 🔹 Add 5 coins per normal message (not a command)
+module.exports.handleEvent = function ({ event }) {
+const { senderID, body } = event;
+if (!senderID || !body) return;
+
+// If message starts with "/" → it's a command, no coins
+if (body.trim().startsWith("/")) return;
+
+const bank = loadBank();
+if (!bank[senderID]) bank[senderID] = { balance: 0 };
+
+bank[senderID].balance += 5; // earn 5 coins each normal message
+saveBank(bank);
+};
+
+// 🔹 Run command
+module.exports.run = async function ({ api, event, args, Users }) {
+const { threadID, senderID } = event;
+const bank = loadBank();
+
+// Ensure user exists in bank
+if (!bank[senderID]) bank[senderID] = { balance: 0 };
+saveBank(bank);
+
+const command = args[0]?.toLowerCase();
+
+// Show all accounts
+if (command === "all") {
+let arr = [];
+for (const [id, data] of Object.entries(bank)) {
+let name;
+try {
+name = await Users.getNameUser(id);
+} catch {
+name = id; // fallback to UID
+}
+arr.push({ name, balance: data.balance });
+}
+
+arr.sort((a, b) => b.balance - a.balance);  
+
+let msg = `📋 All Bank Accounts (Total: ${arr.length}) 📋\n`;  
+arr.forEach((u, i) => {  
+  msg += `\n${i + 1}. ${u.name} - 💰 ${u.balance.toLocaleString()} coins`;  
+});  
+
+return api.sendMessage(msg, threadID);
+
+}
+
+// 🔹 Admin-only: add money by UID
+if (command === "add") {
+if (!BOT_ADMINS.includes(senderID)) {
+return api.sendMessage("❌ Only bot admins can add coins.", threadID);
+}
+
+const targetUID = args[1];  
+const amount = parseInt(args[2]);  
+
+if (!targetUID || isNaN(amount) || amount <= 0) {  
+  return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID);  
+}  
+
+if (!bank[targetUID]) bank[targetUID] = { balance: 0 };  
+bank[targetUID].balance += amount;  
+saveBank(bank);  
+
+let name;  
+try {  
+  name = await Users.getNameUser(targetUID);  
+} catch {  
+  name = targetUID;  
+}  
+
+return api.sendMessage(  
+  `✅ Added 💰 ${amount.toLocaleString()} coins to ${name}'s account.`,  
+  threadID  
+);
+
+}
+
+// Default: show own balance
+let name;
+try {
+name = await Users.getNameUser(senderID);
+} catch {
+name = senderID;
+}
+
+return api.sendMessage(formatBalance(name, bank[senderID].balance), threadID);
+};
+
