@@ -39,12 +39,12 @@ function formatDate() {
 
 module.exports.config = {
   name: "shop",
-  version: "5.0.1",
+  version: "5.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Per-GC Auto Shop system (combined post every 20 minutes)",
   commandCategory: "Economy",
-  usages: "/shop <details> | /shop remove",
+  usages: "/shop <details> | /shop remove | /shop list",
   cooldowns: 5,
 };
 
@@ -69,8 +69,24 @@ module.exports.run = async function ({ api, event, args, Users }) {
     return api.sendMessage("✅ Tinanggal na ang entry mo sa shop ng GC na ito.", threadID);
   }
 
+  // list sellers
+  if (sub === "list") {
+    if (shopData[threadID].sellers.length === 0) {
+      return api.sendMessage("📭 Walang active sellers sa GC shop na ito.", threadID);
+    }
+
+    let listMsg = `🛒 ACTIVE SHOP SELLERS 🛒\n\n`;
+    shopData[threadID].sellers.forEach((s, i) => {
+      const bal = bank[s.seller]?.balance ?? 0;
+      listMsg += `${i + 1}. 👤 ${s.name}\n📦 ${s.details}\n💰 Balance: ${bal.toLocaleString()} coins\n\n`;
+    });
+    listMsg += `🕒 Last Checked: ${formatDate()}`;
+    return api.sendMessage(listMsg, threadID);
+  }
+
+  // add seller
   if (args.length < 1) {
-    return api.sendMessage("❌ Usage: /shop <details>", threadID);
+    return api.sendMessage("❌ Usage: /shop <details> | /shop remove | /shop list", threadID);
   }
 
   const details = args.join(" ");
@@ -117,7 +133,11 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
     shopData[threadID].sellers.forEach(seller => {
       if (!bank[seller.seller] || bank[seller.seller].balance < 50) {
-        // ❌ Wala nang coins → hindi na isasama
+        // ❌ Wala nang coins → remove sila at pwede optional i-notify
+        api.sendMessage(
+          `⚠️ ${seller.name}, na-remove ka sa auto shop kasi naubusan ka ng coins.`,
+          threadID
+        );
         return;
       }
 
