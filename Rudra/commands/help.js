@@ -1,92 +1,77 @@
 module.exports.config = {
-	name: "help",
-	version: "1.3.0",
-	hasPermssion: 0,
-	credits: "Edited by ChatGPT",
-	description: "Beginner's Guide with bold styled output",
-	commandCategory: "system",
-	usages: "[module name]",
-	cooldowns: 1,
-	envConfig: {
-		autoUnsend: true,
-		delayUnsend: 300
-	}
+  name: "help",
+  version: "2.0.0",
+  hasPermssion: 0,
+  credits: "Edited by ChatGPT",
+  description: "Custom Help Command (only selected commands shown)",
+  commandCategory: "system",
+  usages: "/help",
+  cooldowns: 1
 };
 
-module.exports.languages = {
-	"en": {
-		"moduleInfo":
-`📌 Command: %1
-📖 Description: %2
-⚙️ Usage: %3
-📂 Category: %4
-⏳ Cooldown: %5 second(s)
-👤 Permission: %6
-✍️ Credits: %7`,
-		"user": "User",
-		"adminGroup": "Admin group",
-		"adminBot": "Admin bot"
-	}
-};
+module.exports.run = function ({ api, event }) {
+  const { threadID } = event;
 
-// allowed commands lang
-const allowed = ["bank", "bid", "bot", "check", "petcalc", "shop", "stock"];
+  // Unicode Bold Commands
+  const helpMenu = `
+📖 𝗕𝗢𝗧 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦 𝗚𝗨𝗜𝗗𝗘
 
-// function pang-convert ng normal text to bold unicode
-function toBold(str) {
-	const normal = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-	const bold   = "𝗔𝗕𝗖𝗗𝗘𝗙𝗚𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇";
-	return str.split("").map(ch => {
-		const idx = normal.indexOf(ch);
-		return idx !== -1 ? bold[idx] : ch;
-	}).join("");
-}
+💰 /𝗕𝗔𝗡𝗞
+📌 Tingnan ang iyong balance, magdeposito o magwithdraw ng coins.
+📝 Example: /bank deposit 100
 
-module.exports.run = function ({ api, event, args, getText }) {
-	const { commands } = global.client;
-	const { threadID } = event;
-	const command = commands.get((args[0] || "").toLowerCase());
-	const threadSetting = global.data.threadData.get(parseInt(threadID)) || {};
-	const { autoUnsend, delayUnsend } = global.configModule[this.config.name];
-	const prefix = (threadSetting.hasOwnProperty("PREFIX")) ? threadSetting.PREFIX : global.config.PREFIX;
+📦 /𝗦𝗛𝗢𝗣
+📌 Maglagay ng item para i-auto post sa lahat ng GC kada 20 minutes (20 coins bawat post).
+📝 Example: /shop iPhone 14 Pro Max 1000gcash
+📝 Example: /shop list
+📝 Example: /shop remove
 
-	// kapag walang specific command → list ng allowed commands lang
-	if (!command) {
-		let msg = "📄 𝗔𝗟𝗟𝗢𝗪𝗘𝗗 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦\n✨ Type /help <command> to see full details\n\n";
+🎯 /𝗕𝗜𝗗
+📌 Gumawa ng bidding system para sa items.
+📝 Example: /bid start raccoon 50
+📝 Example: /bid end
 
-		for (let name of allowed) {
-			const cmd = commands.get(name);
-			if (!cmd) continue;
+📊 /𝗦𝗧𝗢𝗖𝗞
+📌 Tingnan o i-manage ang stock ng items.
+📝 Example: /stock add raccoon 10
+📝 Example: /stock list
 
-			msg += `✨ ${toBold(name.toUpperCase())}\n`;
-			msg += `   ➝ Usage: ${prefix}${cmd.config.name} ${(cmd.config.usages) ? cmd.config.usages : ""}\n\n`;
-		}
+🔍 /𝗖𝗛𝗘𝗖𝗞
+📌 I-check ang profile o info ng isang user.
+📝 Example: /check @mention
 
-		return api.sendMessage(msg, threadID, async (error, info) => {
-			if (autoUnsend) {
-				await new Promise(resolve => setTimeout(resolve, delayUnsend * 1000));
-				return api.unsendMessage(info.messageID);
-			}
-		}, event.messageID);
-	}
+🐾 /𝗣𝗘𝗧𝗖𝗔𝗟𝗖
+📌 Pet calculator para sa stats at growth.
+📝 Example: /petcalc raccoon
 
-	// kapag may specific command → show full details
-	if (!allowed.includes(command.config.name)) {
-		return api.sendMessage("⚠️ Hindi kasama ang command na ito sa help list.", threadID, event.messageID);
-	}
+🤖 /𝗕𝗢𝗧
+📌 Info tungkol sa bot at commands.
+📝 Example: /bot
 
-	return api.sendMessage(
-		getText(
-			"moduleInfo",
-			toBold(command.config.name.toUpperCase()),
-			command.config.description,
-			`${prefix}${command.config.name} ${(command.config.usages) ? command.config.usages : ""}`,
-			command.config.commandCategory,
-			command.config.cooldowns,
-			((command.config.hasPermssion == 0) ? getText("user") : (command.config.hasPermssion == 1) ? getText("adminGroup") : getText("adminBot")),
-			command.config.credits
-		),
-		threadID,
-		event.messageID
-	);
+🧠 /𝗚𝗣𝗧
+📌 Makipag-usap sa AI assistant.
+📝 Example: /gpt gumawa ka ng tula
+
+🚨 /𝗦𝗖𝗔𝗠𝗠𝗘𝗥
+📌 Tingnan ang scammer list ng GC.
+📝 Example: /scammer add @mention
+📝 Example: /scammer list
+
+📜 /𝗥𝗨𝗟𝗘𝗦
+📌 Ipakita ang rules ng GC at ng bot.
+📝 Example: /rules
+
+🎰 /𝗦𝗟𝗢𝗧
+📌 Subukan ang iyong swerte sa slot game.
+📝 Example: /slot 100
+
+👢 /𝗞𝗜𝗖𝗞
+📌 I-kick ang member gamit mention.
+📝 Example: /kick @mention
+
+━━━━━━━━━━━━━━━
+✨ Gumamit ng /help <command> para makita ulit ang usage.
+`;
+
+  return api.sendMessage(helpMenu, threadID);
 };
