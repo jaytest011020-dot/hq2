@@ -32,19 +32,14 @@ function saveShop(data) {
   fs.writeFileSync(shopFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// PH time
-function formatDate() {
-  return new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
-}
-
 module.exports.config = {
   name: "shop",
-  version: "8.0.0",
+  version: "10.0.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Global Auto Shop system (post every 20 minutes across all GCs)",
   commandCategory: "Economy",
-  usages: "/shop <details> | /shop remove | /shop list",
+  usages: "/shop add <details> | /shop remove | /shop list",
   cooldowns: 5,
 };
 
@@ -77,38 +72,41 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
       const bal = bank[s.seller]?.balance ?? 0;
       listMsg += `${i + 1}. 👤 ${s.name}\n📦 ${s.details}\n💰 Balance: ${bal.toLocaleString()} coins\n\n`;
     });
-    listMsg += `🕒 Last Checked: ${formatDate()}`;
     return api.sendMessage(listMsg, threadID);
   }
 
   // add seller
-  if (args.length < 1) {
-    return api.sendMessage("❌ Usage: /shop <details> | /shop remove | /shop list", threadID);
+  if (sub === "add") {
+    if (args.length < 2) {
+      return api.sendMessage("❌ Usage: /shop add <details>", threadID);
+    }
+
+    const details = args.slice(1).join(" "); // skip "add"
+    const name = await Users.getNameUser(senderID);
+    const info = await Users.getInfo(senderID);
+    const fbLink = info?.profileUrl || `https://facebook.com/${senderID}`;
+    const threadInfo = await Threads.getInfo(threadID);
+    const threadName = threadInfo.threadName || "Unnamed Group";
+
+    // check kung may at least 50 coins (para may pang-auto post later)
+    if (bank[senderID].balance < 50) {
+      return api.sendMessage("❌ Kailangan ng at least 50 coins para makapasok sa auto shop.", threadID);
+    }
+
+    // add seller entry (walang bawas muna)
+    shopData[threadID].sellers.push({
+      seller: senderID,
+      name,
+      fbLink,
+      details,
+      threadName
+    });
+    saveShop(shopData);
+
+    return api.sendMessage(`✅ Na-add ka sa auto shop! Hintayin ang susunod na auto post. (50 coins bawas kada 20 mins)`, threadID);
   }
 
-  const details = args.join(" ");
-  const name = await Users.getNameUser(senderID);
-  const info = await Users.getInfo(senderID);
-  const fbLink = info?.profileUrl || `https://facebook.com/${senderID}`;
-  const threadInfo = await Threads.getInfo(threadID);
-  const threadName = threadInfo.threadName || "Unnamed Group";
-
-  // check kung may at least 20 coins (para may pang-auto post later)
-  if (bank[senderID].balance < 20) {
-    return api.sendMessage("❌ Kailangan ng at least 20 coins para makapasok sa auto shop.", threadID);
-  }
-
-  // add seller entry (walang bawas muna)
-  shopData[threadID].sellers.push({
-    seller: senderID,
-    name,
-    fbLink,
-    details,
-    threadName
-  });
-  saveShop(shopData);
-
-  return api.sendMessage(`✅ Na-add ka sa auto shop! Hintayin ang susunod na auto post. (20 coins bawas kada 20 mins)`, threadID);
+  return api.sendMessage("❌ Usage: /shop add <details> | /shop remove | /shop list", threadID);
 };
 
 // Global auto poster (every 20 mins across all GCs)
@@ -138,7 +136,7 @@ module.exports.handleEvent = async function ({ api }) {
     let postMessage = `🛒 GLOBAL AUTO SHOP POST (Every 20 minutes) 🛒\n📢 Sent to all groups where the bot is a member!\n\n`;
 
     globalSellers.forEach(seller => {
-      if (!bank[seller.seller] || bank[seller.seller].balance < 20) {
+      if (!bank[seller.seller] || bank[seller.seller].balance < 50) {
         api.sendMessage(
           `⚠️ ${seller.name}, na-remove ka sa auto shop kasi naubusan ka ng coins.`,
           seller.threadID
@@ -147,7 +145,7 @@ module.exports.handleEvent = async function ({ api }) {
       }
 
       // bawas coins dito lang
-      bank[seller.seller].balance -= 20;
+      bank[seller.seller].balance -= 50;
 
       postMessage += `👤 Seller: ${seller.name}\n🔗 ${seller.fbLink}\n📦 ${seller.details}\n💬 From: ${seller.threadName}\n💰 Balance: ${bank[seller.seller].balance.toLocaleString()} coins\n\n━━━━━━━━━━━━━━\n\n`;
 
@@ -155,7 +153,7 @@ module.exports.handleEvent = async function ({ api }) {
     });
 
     if (stillActive.length > 0) {
-      postMessage += `🕒 Updated: ${formatDate()}\n\n👉 Gusto mo rin ma-post ang items mo?\nType: /shop <details> (20 coins bawat 20 mins auto-post)\n\n📖 Type /help para makita ang lahat ng command\n\n👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:\nhttps://m.me/j/AbYBqABSq7cyHsBk/`;
+      postMessage += `👉 Gusto mo rin ma-post ang items mo?\nType: /shop add <details> (50 coins bawat 20 mins auto-post)\n\n📖 Type /help para makita ang lahat ng command\n\n👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:\nhttps://m.me/j/AbYBqABSq7cyHsBk/`;
 
       // ipadala sa lahat ng GC
       for (const threadID of Object.keys(shopData)) {
