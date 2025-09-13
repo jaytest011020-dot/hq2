@@ -43,7 +43,7 @@ module.exports.handleEvent = async function ({ api }) {
     });
 
     if (stillActive.length > 0) {
-      postMessage += `🕒 Updated: ${formatDate()}\n\n👉 Gusto mo rin ma-post ang items mo?\nType: /shop <details> (20 coins bawat 20 mins auto-post)\n\n📖 Type /help para makita ang lahat ng command`;
+      postMessage += `🕒 Updated: ${formatDate()}\n\n👉 Gusto mo rin ma-post ang items mo?\nType: /shop <details> (20 coins bawat 20 mins auto-post)\n\n📖 Type /help para makita ang lahat ng command\n\n👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:\nhttps://m.me/j/AbYBqABSq7cyHsBk/`;
 
       // ipadala sa lahat ng GC kung saan naka join ang bot
       for (const threadID of Object.keys(shopData)) {
