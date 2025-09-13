@@ -1,78 +1,59 @@
 module.exports.config = {
-  name: "petcalc",
-  version: "2.3.0",
-  hasPermission: 0,
-  credits: "ChatGPT",
-  description: "Calculate pet weights (Age 1 → Age 100, linear growth up to 10× Age 1)",
-  usePrefix: true,
-  commandCategory: "game",
-  usages: "/petcalc <ageLevel> <weightKgAtThatAge>",
-  cooldowns: 5
+  name: "help",
+  version: "1.3.0",
+  hasPermssion: 0,
+  credits: "Modified by ChatGPT (base Priyansh Rajput)",
+  description: "Restricted Beginner's Guide",
+  commandCategory: "system",
+  usages: "[command name]",
+  cooldowns: 1,
+  envConfig: {
+    autoUnsend: false,
+    delayUnsend: 60
+  }
 };
 
-module.exports.run = async function ({ api, event, args }) {
+// ✅ Allowed commands only
+const allowedCommands = ["bank", "bid", "bot", "check", "petcalc", "shop", "stock"];
+
+module.exports.run = function ({ api, event, args }) {
+  const { commands } = global.client;
   const { threadID, messageID } = event;
+  const prefix = global.config.PREFIX;
 
-  if (args.length < 2) {
-    return api.sendMessage(
-      "Usage: /petcalc <ageLevel> <weightKgAtThatAge>\n\nExample:\n/petcalc 5 2.7",
-      threadID,
-      messageID
-    );
+  // 📌 Kung walang argument → listahan ng allowed commands + usage
+  if (!args[0]) {
+    let msg = "📌 Available Commands:\n\n";
+    allowedCommands.forEach((cmd, i) => {
+      const c = commands.get(cmd);
+      if (c) {
+        msg += `${i + 1}. ${prefix}${c.config.name} → ${c.config.description}\n`;
+        msg += `   Usage: ${prefix}${c.config.name} ${c.config.usages || ""}\n\n`;
+      }
+    });
+    msg += `👉 Type: ${prefix}help [command name] para makita ang full details.`;
+    return api.sendMessage(msg, threadID, messageID);
   }
 
-  let givenAge = parseInt(args[0]);
-  let givenWeight = parseFloat(args[1]);
-
-  if (isNaN(givenAge) || givenAge < 1 || givenAge > 100) {
-    return api.sendMessage("⚠️ Age level must be between 1 and 100.", threadID, messageID);
+  // 🔎 Kung may argument → check kung allowed
+  const cmdName = args[0].toLowerCase();
+  if (!allowedCommands.includes(cmdName)) {
+    return api.sendMessage(`❌ The command "${cmdName}" is not available in help.`, threadID, messageID);
   }
 
-  if (isNaN(givenWeight) || givenWeight <= 0) {
-    return api.sendMessage("⚠️ Please provide a valid weight (kg).", threadID, messageID);
+  const command = commands.get(cmdName);
+  if (!command) {
+    return api.sendMessage(`⚠️ Command "${cmdName}" not found.`, threadID, messageID);
   }
 
-  // Scale factor at the given age (1.0 at Age 1 → 10.0 at Age 100)
-  let scaleAtAge = 1 + (givenAge - 1) * (9 / 99);
-
-  // Recalculate the true base weight at Age 1
-  let baseWeight = givenWeight / scaleAtAge;
-
-  // Max weight at Age 100
-  let maxWeight = baseWeight * 10;
-
-  // Linear growth step per age
-  const growthPerAge = (maxWeight - baseWeight) / 99;
-
-  // Size category at Age 1
-  let sizeCategory = "Unknown";
-  if (baseWeight >= 0.1 && baseWeight <= 0.9) sizeCategory = "🟢 Small";
-  else if (baseWeight >= 1 && baseWeight <= 4.9) sizeCategory = "🔵 Normal";
-  else if (baseWeight >= 5 && baseWeight <= 9.9) sizeCategory = "🟡 Huge";
-  else if (baseWeight >= 10 && baseWeight <= 19.9) sizeCategory = "🔴 Titanic";
-  else if (baseWeight >= 20 && baseWeight <= 100) sizeCategory = "🟣 Godly";
-
-  // Build results
-  let result = `🐾 Pet Calculator 🐾\n\n` +
-               `Input: ${givenWeight} kg (Age ${givenAge})\n` +
-               `Calculated Base Weight (Age 1): ${baseWeight.toFixed(2)} kg\n` +
-               `Size Category (at Age 1): ${sizeCategory}\n\nEstimated weights:\n`;
-
-  // Show only key ages (1, 10, 20, …, 100)
-  for (let i = 1; i <= 100; i++) {
-    if (i === 1 || i % 10 === 0 || i === givenAge || i === 100) {
-      let est = baseWeight + growthPerAge * (i - 1);
-      result += `Age ${i}: ${est.toFixed(2)} kg\n`;
-    }
-  }
-
-  // Highlight the requested age
-  let requested = baseWeight + growthPerAge * (givenAge - 1);
-  result += `\n➡️ At Age ${givenAge}, your pet weighs: ${requested.toFixed(2)} kg`;
-
-  // Split into chunks if too long
-  const chunks = result.match(/[\s\S]{1,1800}/g);
-  for (const chunk of chunks) {
-    await api.sendMessage(chunk, threadID, messageID);
-  }
+  // 📖 Detalyadong info ng command
+  return api.sendMessage(
+    `「 ${command.config.name} 」\n${command.config.description}\n\n` +
+    `❯ Usage: ${prefix}${command.config.name} ${(command.config.usages) ? command.config.usages : ""}\n` +
+    `❯ Category: ${command.config.commandCategory}\n❯ Cooldown: ${command.config.cooldowns}s\n` +
+    `❯ Permission: ${(command.config.hasPermssion == 0) ? "User" : (command.config.hasPermssion == 1) ? "Admin group" : "Admin bot"}\n\n` +
+    `Code by: ${command.config.credits}`,
+    threadID,
+    messageID
+  );
 };
