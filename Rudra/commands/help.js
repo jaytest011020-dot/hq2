@@ -1,6 +1,6 @@
 module.exports.config = {
-  name: "help",
-  version: "2.0.4",
+  name: "help", // Command ay /help
+  version: "2.2.0",
   hasPermssion: 0,
   credits: "Edited by ChatGPT",
   description: "Custom Help Command (only selected commands shown)",
@@ -12,8 +12,9 @@ module.exports.config = {
 module.exports.run = function ({ api, event }) {
   const { threadID } = event;
 
+  // Unicode Bold Help Menu
   const helpMenu = `
-📖 𝗕𝗢𝗧 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦 𝗚𝗨𝗜𝗗𝗘
+📖 𝗝𝗔𝗡𝗗𝗘𝗟 𝗖𝗢𝗠𝗠𝗔𝗡𝗗 𝗚𝗨𝗜𝗗𝗘
 
 💰 /𝗕𝗔𝗡𝗞
 📌 Tingnan ang iyong balance, magdeposito o magwithdraw ng coins.
@@ -44,8 +45,8 @@ module.exports.run = function ({ api, event }) {
 📝 Example: /petcalc raccoon
 
 🤖 /𝗝𝗔𝗡𝗗𝗘𝗟
-📌 Info tungkol kay Jandel at commands.
-📝 Example: /jandel
+📌 Makipag usap sa bot
+📝 Example: jandel hai
 
 🧠 /𝗚𝗣𝗧
 📌 Makipag-usap sa AI assistant.
@@ -57,7 +58,7 @@ module.exports.run = function ({ api, event }) {
 📝 Example: /scammer list
 
 📜 /𝗥𝗨𝗟𝗘𝗦
-📌 Ipakita ang rules ng GC at ng bot.
+📌 Ipakita ang rules ng GC at ng jandel.
 📝 Example: /rules
 
 🎰 /𝗦𝗟𝗢𝗧
@@ -71,8 +72,8 @@ module.exports.run = function ({ api, event }) {
 ━━━━━━━━━━━━━━━
 ✨ Gumamit ng /help <command> para makita ulit ang usage.
 
-📢 Join my GAG BUY/SELL Group:
-👉 https://m.me/j/AbYBqABSq7cyHsBk/
+👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗚𝗮𝗴 𝗕𝘂𝘆 𝗮𝗻𝗱 𝗦𝗲𝗹𝗹 𝗚𝗖:  
+**https://m.me/j/AbYBqABSq7cyHsBk/**
 `;
 
   return api.sendMessage(helpMenu, threadID);
