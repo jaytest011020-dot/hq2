@@ -20,7 +20,7 @@ function saveAuctions(data) {
 
 module.exports.config = {
   name: "bid",
-  version: "1.2.0",
+  version: "2.0.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Auction system for group chats",
@@ -60,13 +60,13 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
       postID: null,
       hostID: senderID,
       hostName,
-      startTime: Date.now() // save start time
+      endTime: Date.now() + 24 * 60 * 60 * 1000 // 24h auto end
     };
 
     saveAuctions(auctions);
 
     return api.sendMessage(
-      `📢 Auction Started!\n📦 Item: ${item}\n💵 Starting Bid: ${startAmount}\n👑 Host: ${hostName}\n⏳ Auto ends in 24h if not ended manually.\n\nReply to this message with your bid!`,
+      `📢 Auction Started!\n📦 Item: ${item}\n💵 Starting Bid: ${startAmount}\n👑 Host: ${hostName}\n\n📝 Reply to this message with your bid!`,
       threadID,
       (err, info) => {
         if (!err) {
@@ -97,12 +97,10 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
       ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
       : `❌ No valid bids were placed for ${auction.item}.`;
 
-    const hostLine = `👑 Host: ${auction.hostName}`;
-
     auctions[threadID] = { active: false };
     saveAuctions(auctions);
 
-    return api.sendMessage(`📌 Auction Ended!\n${hostLine}\n${winner}`, threadID);
+    return api.sendMessage(`📌 Auction Ended!\n${winner}`, threadID);
   }
 
   return api.sendMessage("❌ Usage: /bid start <item> <amount> | /bid end", threadID, messageID);
@@ -117,20 +115,19 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
   const auction = auctions[threadID];
   if (!auction || !auction.active) return;
 
-  // ⏳ Auto remove check (24h = 86400000ms)
-  if (Date.now() - auction.startTime >= 86400000) {
+  // Auto-end if expired
+  if (Date.now() > auction.endTime) {
     const winner = auction.bidder
       ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
       : `❌ No valid bids were placed for ${auction.item}.`;
-    const hostLine = `👑 Host: ${auction.hostName}`;
 
     auctions[threadID] = { active: false };
     saveAuctions(auctions);
 
-    return api.sendMessage(`⏰ Auction Auto-Ended (24h reached)!\n${hostLine}\n${winner}`, threadID);
+    return api.sendMessage(`📌 Auction Ended (24h Auto)!\n${winner}`, threadID);
   }
 
-  // Only detect replies to the auction post
+  // Only detect replies to the auction anchor (latest postID)
   if (!messageReply || messageReply.messageID !== auction.postID) return;
 
   // Extract first number in message
@@ -140,19 +137,39 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
   }
 
   const bidAmount = parseInt(match[0]);
+
+  // ❌ If bid is too low
   if (bidAmount <= auction.highest) {
-    return api.sendMessage(`⚠️ Your bid must be higher than ${auction.highest}.`, threadID, messageID);
+    return api.sendMessage(
+      `⚠️ Your bid (${bidAmount}) must be higher than the current highest bid: ${auction.highest}.`,
+      threadID,
+      messageID
+    );
   }
 
+  // ✅ If bid is valid
   const name = await Users.getNameUser(senderID);
 
   auction.highest = bidAmount;
   auction.bidder = name;
   auction.bidderID = senderID;
+
   saveAuctions(auctions);
 
   api.sendMessage(
-    `📢 New Highest Bid!\n📦 Item: ${auction.item}\n💵 Bid: ${bidAmount}\n👤 Bidder: ${name}\n👑 Host: ${auction.hostName}`,
-    threadID
+    `📢 New Highest Bid!\n` +
+    `📦 Item: ${auction.item}\n` +
+    `💵 Bid: ${bidAmount}\n` +
+    `👤 Bidder: ${name}\n` +
+    `👑 Host: ${auction.hostName}\n\n` +
+    `📝 Reply to this message to bid higher!`,
+    threadID,
+    (err, info) => {
+      if (!err) {
+        // Update reply anchor to latest message
+        auction.postID = info.messageID;
+        saveAuctions(auctions);
+      }
+    }
   );
 };
