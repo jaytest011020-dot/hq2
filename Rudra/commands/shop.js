@@ -39,7 +39,7 @@ function formatDate() {
 
 module.exports.config = {
   name: "shop",
-  version: "5.0.0",
+  version: "5.0.1",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Per-GC Auto Shop system (combined post every 20 minutes)",
@@ -112,25 +112,28 @@ module.exports.run = async function ({ api, event, args, Users }) {
     let shopData = loadShop();
     if (!shopData[threadID] || shopData[threadID].sellers.length === 0) return;
 
-    let newList = [];
+    let stillActive = [];
     let autoPost = `🛒 AUTO SHOP POST (Auto post every 20 minutes) 🛒\n\n`;
 
     shopData[threadID].sellers.forEach(seller => {
       if (!bank[seller.seller] || bank[seller.seller].balance < 50) {
-        return; // skip if no coins
+        // ❌ Wala nang coins → hindi na isasama
+        return;
       }
 
+      // ✅ May sapat na coins → bawasan at isama sa post
       bank[seller.seller].balance -= 50;
       autoPost += `👤 Seller: ${seller.name}\n🔗 ${seller.fbLink}\n📦 Item: ${seller.details}\n💰 Balance: ${bank[seller.seller].balance.toLocaleString()} coins\n\n━━━━━━━━━━━━━━\n\n`;
-      newList.push(seller);
+      stillActive.push(seller);
     });
 
-    if (newList.length > 0) {
+    if (stillActive.length > 0) {
       autoPost += `🕒 Updated: ${formatDate()}\n\n👉 Want to post your items too?\nType: /shop <details> (50 coins per auto-post)`;
       api.sendMessage(autoPost, threadID);
     }
 
-    shopData[threadID].sellers = newList;
+    // ✅ Update sellers list with only those who still have coins
+    shopData[threadID].sellers = stillActive;
     saveShop(shopData);
     saveBank(bank);
   }, 20 * 60 * 1000); // every 20 minutes
