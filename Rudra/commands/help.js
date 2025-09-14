@@ -18,11 +18,12 @@ module.exports.run = function ({ api, event }) {
 
 💰 /𝗕𝗔𝗡𝗞  
 📌 Check your balance, deposit, or withdraw coins.  
-📝 Example: /bank deposit 100  
+📝 Example: /bank
+📝 Example: /bank all
 
 📦 /𝗦𝗛𝗢𝗣  
 📌 Add an item to auto-post in all GCs every 20 minutes (20 coins per post).  
-📝 Example: /shop iPhone 14 Pro Max 1000gcash  
+📝 Example: /shop add For Sale Raccoon
 📝 Example: /shop list  
 📝 Example: /shop remove  
 
@@ -33,16 +34,19 @@ module.exports.run = function ({ api, event }) {
 
 📊 /𝗦𝗧𝗢𝗖𝗞  
 📌 View or manage item stock.  
-📝 Example: /stock add raccoon 10  
-📝 Example: /stock list  
+📝 Example: /stock
+📝 Example: /stock on
+📝 Example: /stock off 
 
 🔍 /𝗖𝗛𝗘𝗖𝗞  
-📌 Check a user's profile or info.  
+📌 Check a user's profile or info.
+📝 Example: /check
 📝 Example: /check @mention  
+📝 Example: /check all
 
 🐾 /𝗣𝗘𝗧𝗖𝗔𝗟𝗖  
 📌 Pet calculator for stats and growth.  
-📝 Example: /petcalc raccoon  
+📝 Example: /petcalc 1 3.7 
 
 🤖 /𝗕𝗢𝗧  
 📌 Chat with the bot.  
