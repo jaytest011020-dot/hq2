@@ -1,81 +1,75 @@
 const fs = require("fs");
 const axios = require("axios");
 
-// Storage para sa locked group settings
 const lockedNames = {};
 const lockedImages = {};
 
 module.exports.config = {
   name: "lockgroup",
-  version: "1.0",
+  version: "1.1",
   credits: "ChatGPT",
   description: "Lock group name or image",
   commandCategory: "group",
-  usages: "/lockgroup lockname <name>\n/lockgroup lockimg <url>",
+  usages: "/lockgroup lockname <name>\n/lockgroup lockimg <url>\n/lockgroup unlock",
   cooldowns: 5
 };
 
-// Command handler (para mag-lock ng name or image)
 module.exports.run = async ({ api, event, args }) => {
   const { threadID } = event;
 
   if (args[0] === "lockname") {
     const name = args.slice(1).join(" ");
-    if (!name) return api.sendMessage("❌ Please provide a group name to lock.", threadID);
+    if (!name) return api.sendMessage("❌ Provide a group name.", threadID);
 
     lockedNames[threadID] = name;
-    return api.sendMessage(`🔒 Group name locked: ${name}`, threadID);
+    return api.sendMessage(`🔒 Locked group name: ${name}`, threadID);
   }
 
   if (args[0] === "lockimg") {
     const url = args[1];
-    if (!url) return api.sendMessage("❌ Please provide an image URL.", threadID);
+    if (!url) return api.sendMessage("❌ Provide an image URL.", threadID);
 
     const path = __dirname + `/cache/lock_${threadID}.jpg`;
     try {
       const res = await axios.get(url, { responseType: "arraybuffer" });
       fs.writeFileSync(path, res.data);
       lockedImages[threadID] = path;
-      return api.sendMessage(`🖼️ Group image locked.`, threadID);
+      return api.sendMessage("🖼️ Group image locked.", threadID);
     } catch (e) {
       return api.sendMessage("❌ Failed to download image.", threadID);
     }
   }
 
-  return api.sendMessage("❌ Invalid usage.\n/lockgroup lockname <name>\n/lockgroup lockimg <url>", threadID);
-};
-
-// Event handler (para mag-restore pag may nagbago)
-module.exports.handleEvent = async ({ api, event }) => {
-  const { threadID, logMessageType, logMessageData, author } = event;
-
-  // Debug logs (para makita natin kung tama yung field names)
-  console.log("EVENT:", logMessageType, logMessageData);
-
-  // If group name changed
-  if (logMessageType === "log:thread-name") {
-    const lockedName = lockedNames[threadID];
-    if (lockedName) {
-      const newName = logMessageData?.name || logMessageData?.threadName;
-      if (newName !== lockedName) {
-        await api.setTitle(lockedName, threadID);
-        return api.sendMessage(
-          `⚠️ ${author} tried to change group name.\nRestored to: ${lockedName}`,
-          threadID
-        );
-      }
-    }
+  if (args[0] === "unlock") {
+    delete lockedNames[threadID];
+    delete lockedImages[threadID];
+    return api.sendMessage("✅ Lock removed.", threadID);
   }
 
-  // If group image changed
-  if (logMessageType === "log:thread-image") {
+  return api.sendMessage("❌ Invalid usage.", threadID);
+};
+
+module.exports.handleEvent = async ({ api, event }) => {
+  const { threadID, logMessageType, author } = event;
+
+  // Kung nagbago ang group name
+  if (logMessageType === "log:thread-name" && lockedNames[threadID]) {
+    const lockedName = lockedNames[threadID];
+    // ibalik agad yung naka-lock na name
+    await api.setTitle(lockedName, threadID);
+    return api.sendMessage(
+      `⚠️ ${author} tried to change group name.\nRestored to: ${lockedName}`,
+      threadID
+    );
+  }
+
+  // Kung nagbago ang group image
+  if (logMessageType === "log:thread-image" && lockedImages[threadID]) {
     const lockedImg = lockedImages[threadID];
-    if (lockedImg) {
-      await api.changeGroupImage(fs.createReadStream(lockedImg), threadID);
-      return api.sendMessage(
-        `⚠️ ${author} tried to change group image.\nRestored.`,
-        threadID
-      );
-    }
+    await api.changeGroupImage(fs.createReadStream(lockedImg), threadID);
+    return api.sendMessage(
+      `⚠️ ${author} tried to change group image.\nRestored.`,
+      threadID
+    );
   }
 };
