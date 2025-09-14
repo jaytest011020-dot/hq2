@@ -1,47 +1,99 @@
-const OWNER_UID = "61550558518720";
-let lockedGroupNames = {};
+const OWNER_UID = "61559999326713"; // ikaw lang makakagamit
+let lockedGroups = {}; // para i-store ang locked data per GC
 
 module.exports.config = {
-  name: "lockname",
-  version: "1.0.1",
+  name: "lockgroup",
+  version: "1.0.0",
   hasPermssion: 0,
-  credits: "Rudra x ChatGPT",
-  description: "Lock group name. If changed, bot resets it. Owner-only.",
+  credits: "ChatGPT",
+  description: "Lock group name & image. If changed, bot restores it.",
   commandCategory: "group",
-  usages: "lockname lock/unlock/reset",
-  cooldowns: 3
+  usages: "lockgroup name <text> | lockgroup image (with attachment) | lockgroup unlock | lockgroup reset",
+  cooldowns: 3,
+  eventType: ["log:thread-name", "log:thread-icon"]
 };
 
 module.exports.run = async ({ api, event, args }) => {
   const { threadID, senderID } = event;
-  if (senderID !== OWNER_UID) return api.sendMessage("⛔ Sirf malik use kar sakta hai!", threadID);
+  if (senderID !== OWNER_UID) return api.sendMessage("⛔ Only the owner can use this command!", threadID);
 
   const subcmd = args[0]?.toLowerCase();
-  if (!subcmd) return api.sendMessage("⚠️ Usage: lockname lock/unlock/reset <name>", threadID);
+  if (!subcmd) return api.sendMessage("⚠️ Usage: lockgroup name/image/unlock/reset", threadID);
 
   switch (subcmd) {
-    case "lock": {
+    case "name": {
       const name = args.slice(1).join(" ");
-      if (!name) return api.sendMessage("❗ Naam bhi do!\nUsage: lockname lock Rudra Army", threadID);
-      lockedGroupNames[threadID] = name;
+      if (!name) return api.sendMessage("❗ Please provide a group name!\nUsage: lockgroup name My Group", threadID);
+      if (!lockedGroups[threadID]) lockedGroups[threadID] = {};
+      lockedGroups[threadID].name = name;
       await api.setTitle(name, threadID);
-      return api.sendMessage(`🔒 Group name lock ho gaya: ${name}`, threadID);
+      return api.sendMessage(`🔒 Group name locked: ${name}`, threadID);
+    }
+
+    case "image": {
+      if (!event.messageReply && !event.attachments[0]) {
+        return api.sendMessage("📷 Reply with or send an image with this command.\nUsage: lockgroup image", threadID);
+      }
+      const attachment = event.messageReply?.attachments?.[0] || event.attachments[0];
+      if (attachment?.type !== "photo") return api.sendMessage("❌ You must attach a photo.", threadID);
+
+      const axios = require("axios");
+      const fs = require("fs-extra");
+      const path = __dirname + `/cache/lockgroup_${threadID}.jpg`;
+
+      // download image
+      const response = await axios.get(attachment.url, { responseType: "arraybuffer" });
+      fs.writeFileSync(path, Buffer.from(response.data, "binary"));
+
+      if (!lockedGroups[threadID]) lockedGroups[threadID] = {};
+      lockedGroups[threadID].image = path;
+
+      await api.changeThreadImage(fs.createReadStream(path), threadID);
+      return api.sendMessage("🔒 Group image locked!", threadID);
     }
 
     case "unlock": {
-      delete lockedGroupNames[threadID];
-      return api.sendMessage("🔓 Group name unlock ho gaya.", threadID);
+      delete lockedGroups[threadID];
+      return api.sendMessage("🔓 Group name & image unlocked.", threadID);
     }
 
     case "reset": {
-      if (!lockedGroupNames[threadID]) return api.sendMessage("⚠️ Koi naam lock nahi hai.", threadID);
-      await api.setTitle(lockedGroupNames[threadID], threadID);
-      return api.sendMessage(`♻️ Group name wapas reset kiya: ${lockedGroupNames[threadID]}`, threadID);
+      if (!lockedGroups[threadID]) return api.sendMessage("⚠️ Nothing is locked.", threadID);
+
+      if (lockedGroups[threadID].name) await api.setTitle(lockedGroups[threadID].name, threadID);
+      if (lockedGroups[threadID].image) {
+        const fs = require("fs-extra");
+        if (fs.existsSync(lockedGroups[threadID].image)) {
+          await api.changeThreadImage(fs.createReadStream(lockedGroups[threadID].image), threadID);
+        }
+      }
+      return api.sendMessage("♻️ Group restored to locked settings.", threadID);
     }
 
     default:
-      return api.sendMessage("⚠️ Usage: lockname lock/unlock/reset <name>", threadID);
+      return api.sendMessage("⚠️ Usage: lockgroup name/image/unlock/reset", threadID);
   }
 };
 
-module.exports.lockedNames = lockedGroupNames;
+module.exports.handleEvent = async ({ api, event }) => {
+  const { threadID, logMessageType, logMessageData } = event;
+  const locked = lockedGroups[threadID];
+  if (!locked) return;
+
+  try {
+    if (logMessageType === "log:thread-name" && locked.name) {
+      await api.setTitle(locked.name, threadID);
+      api.sendMessage(`⚠️ Group name restored to locked: ${locked.name}`, threadID);
+    }
+
+    if (logMessageType === "log:thread-icon" && locked.image) {
+      const fs = require("fs-extra");
+      if (fs.existsSync(locked.image)) {
+        await api.changeThreadImage(fs.createReadStream(locked.image), threadID);
+        api.sendMessage("⚠️ Group image restored to locked one.", threadID);
+      }
+    }
+  } catch (e) {
+    console.error("LockGroup error:", e.message);
+  }
+};
