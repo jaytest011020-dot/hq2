@@ -4,7 +4,7 @@ module.exports.config = {
 	hasPermssion: 0, 
 	credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭",
 	description: "Manage bot admin",
-	commandCategory: "config",
+	commandCategory: "admin",
 	usages: "[list/add/remove] [userID]",
     cooldowns: 5,
     dependencies: {
