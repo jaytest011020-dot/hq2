@@ -4,7 +4,7 @@ module.exports.config = {
   hasPermssion: 0,
   credits: "ChatGPT (fix from Priyansh Rajput)",
   description: "Create and manage giveaways",
-  commandCategory: "other",
+  commandCategory: "group",
   usages: "[create/details/join/roll/end] [IDGiveAway]",
   cooldowns: 5
 };
