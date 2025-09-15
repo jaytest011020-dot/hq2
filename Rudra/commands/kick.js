@@ -5,7 +5,7 @@ module.exports.config = {
     credits: "Jaylord La Peña",
     description: "Kick mentioned user(s) from the group",
     usePrefix: true,
-    commandCategory: "group",
+    commandCategory: "admin",
     usages: "/kick @user",
     cooldowns: 5
 };
