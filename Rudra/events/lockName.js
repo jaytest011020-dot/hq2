@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { lockedSettings } = require("./lockgroup.js");
+const { lockedSettings } = require("../commands/lockgroup.js");
 
 module.exports.config = {
   name: "lockgroupEvent",
