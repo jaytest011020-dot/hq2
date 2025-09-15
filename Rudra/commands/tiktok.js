@@ -2,9 +2,9 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "tiktok",
-  version: "1.0.2",
+  version: "1.0.3",
   hasPermission: 0,
-  credits: "ChatGPT + Jaylord",
+  credits: "ChatGPT + NN",
   description: "Stalk TikTok profile by username",
   commandCategory: "Tools",
   usages: "/tiktok <username>",
@@ -18,12 +18,12 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage(
       "❌ Usage: /tiktok <username>\n\nExample: /tiktok jaylordlapena or /tiktok @jaylordlapena",
       threadID,
-      { messageID }
+      messageID
     );
   }
 
-  // ✅ Gamitin mismo yung input, huwag galawin
-  let username = args[0];
+  // ✅ Gamitin mismo yung input, huwag galawin (pwede may @ o wala)
+  const username = args[0];
 
   try {
     const res = await axios.get(
@@ -32,18 +32,19 @@ module.exports.run = async function ({ api, event, args }) {
     );
 
     const data = res.data;
-    if (!data || !data.username) {
+    if (!data || !data.id) {
       return api.sendMessage(
         `⚠️ No TikTok profile found for "${username}".`,
         threadID,
-        { messageID }
+        messageID
       );
     }
 
     let msg = `📱 TikTok Stalk 📱\n\n` +
-              `👤 Name: ${data.username}\n` +
+              `👤 Username: ${data.username}\n` +
               `🔖 Nickname: ${data.nickname}\n` +
               `🆔 ID: ${data.id}\n` +
+              `🔑 SecUID: ${data.secUid}\n` +
               `📌 Bio: ${data.signature || "N/A"}\n\n` +
               `📹 Videos: ${data.videoCount}\n` +
               `👥 Following: ${data.followingCount}\n` +
@@ -58,7 +59,7 @@ module.exports.run = async function ({ api, event, args }) {
         attachment: await global.utils.getStreamFromURL(data.avatarLarger),
       },
       threadID,
-      { messageID }
+      messageID
     );
 
   } catch (err) {
@@ -66,7 +67,7 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage(
       "❌ Error fetching TikTok profile. Try again later.",
       threadID,
-      { messageID }
+      messageID
     );
   }
 };
