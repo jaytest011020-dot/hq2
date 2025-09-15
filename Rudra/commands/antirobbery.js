@@ -5,7 +5,7 @@ module.exports.config = {
  hasPermssion: 1,
  description: "Prevent changing group administrators",
  usages: "",
- commandCategory: "admin",
+ commandCategory: "group",
  cooldowns: 0
 };
 
