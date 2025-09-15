@@ -21,7 +21,7 @@ function saveData(data) {
 
 module.exports.config = {
   name: "lockname",
-  version: "1.1.0",
+  version: "1.2.0",
   role: 1,
   author: "ChatGPT",
   cooldowns: 5,
@@ -37,7 +37,7 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage("❗ Usage: /lockname <group name> | remove", threadID, messageID);
   }
 
-  if (args[0] === "remove") {
+  if (args[0].toLowerCase() === "remove") {
     delete data[threadID];
     saveData(data);
     return api.sendMessage("🔓 Group name lock removed.", threadID, messageID);
@@ -53,23 +53,28 @@ module.exports.run = async function ({ api, event, args }) {
 
 // === Auto enforce lock ===
 module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, logMessageType, logMessageData, author } = event;
-  if (logMessageType !== "log:thread-name") return; // only detect name change
+  try {
+    const { threadID, logMessageType, logMessageData, author } = event;
+    if (logMessageType !== "log:thread-name") return; // detect name change only
 
-  const data = loadData();
-  const record = data[threadID];
-  if (!record || !record.name) return;
+    const data = loadData();
+    const record = data[threadID];
+    if (!record || !record.name) return;
 
-  const info = await api.getThreadInfo(threadID);
-  const newName = logMessageData?.name || info.threadName;
+    const newName = logMessageData?.name;
+    if (!newName || newName === record.name) return;
 
-  if (newName !== record.name) {
-    // Get changer's name
+    // Fetch thread info para makuha pangalan ng nag-change
     let changerName = author;
     try {
-      changerName = info.userInfo.find(u => String(u.id) === String(author))?.name || author;
-    } catch {}
+      const info = await api.getThreadInfo(threadID);
+      const found = info.userInfo.find(u => String(u.id) === String(author));
+      if (found) changerName = found.name;
+    } catch (err) {
+      console.error("⚠️ Could not fetch changer name:", err.message);
+    }
 
+    // Revert back to locked name
     try {
       await api.setTitle(record.name, threadID);
       api.sendMessage(
@@ -77,8 +82,10 @@ module.exports.handleEvent = async function ({ api, event }) {
         `🔒 Reverted back to locked name: "${record.name}"`,
         threadID
       );
-    } catch (e) {
-      console.error("LockName error:", e);
+    } catch (err) {
+      console.error("❌ LockName revert error:", err.message);
     }
+  } catch (err) {
+    console.error("❌ LockName handleEvent fatal:", err);
   }
 };
