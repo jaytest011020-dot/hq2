@@ -1,66 +1,50 @@
 const fs = require("fs");
-const path = require("path");
-
-const DATA_FILE = path.join(__dirname, "lockname.json");
-
-function loadData() {
-    if (!fs.existsSync(DATA_FILE)) return {};
-    try {
-        return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    } catch {
-        return {};
-    }
-}
-
-function saveData(data) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
+let lockedSettings = {};
 
 module.exports.config = {
-    name: "lockname",
-    version: "1.0.0",
-    hasPermssion: 0,
-    credits: "ChatGPT",
-    cooldowns: 5,
-    description: "Lock the group name and auto-revert if someone changes it",
-    usages: "/lockname <group name> | /lockname remove",
-    commandCategory: "group"
+  name: "lockgroup",
+  version: "1.0.0",
+  hasPermssion: 0,
+  credits: "ChatGPT",
+  description: "Lock/unlock group name & photo",
+  commandCategory: "group",
+  usages: "lockgroup name/photo/reset",
+  cooldowns: 5,
 };
 
-module.exports.run = async function ({ api, event, args, permssion }) {
-    const { threadID, messageID, senderID } = event;
+module.exports.run = async ({ api, event, args }) => {
+  const { threadID, messageID } = event;
+  const sub = args[0];
 
-    // Check if user is bot owner or group admin
-    const botAdmins = global.config.ADMINBOT || [];
-    const isBotOwner = botAdmins.includes(senderID);
+  if (!sub) return api.sendMessage(
+    "⚙ Usage:\nlockgroup name <groupName>\nlockgroup photo\nlockgroup reset",
+    threadID, messageID
+  );
 
-    let isGroupAdmin = false;
-    try {
-        const info = await api.getThreadInfo(threadID);
-        isGroupAdmin = info.adminIDs.some(e => e.id == senderID);
-    } catch (err) {
-        console.error("⚠️ Error fetching group info:", err.message);
+  if (sub === "name") {
+    const name = args.slice(1).join(" ");
+    if (!name) return api.sendMessage("❗ Provide a group name!", threadID, messageID);
+    lockedSettings[threadID] = { ...lockedSettings[threadID], name };
+    await api.setTitle(name, threadID);
+    return api.sendMessage(`🔒 Group name locked: ${name}`, threadID, messageID);
+  }
+
+  if (sub === "photo") {
+    const path = __dirname + `/cache/${threadID}.png`;
+    if (event.messageReply && event.messageReply.attachments.length > 0) {
+      const url = event.messageReply.attachments[0].url;
+      const stream = (await require("axios").get(url, { responseType: "arraybuffer" })).data;
+      fs.writeFileSync(path, Buffer.from(stream));
+      lockedSettings[threadID] = { ...lockedSettings[threadID], image: path };
+      return api.sendMessage("🔒 Group photo locked.", threadID, messageID);
     }
+    return api.sendMessage("❗ Reply to an image to lock it as group photo.", threadID, messageID);
+  }
 
-    if (!isBotOwner && !isGroupAdmin) {
-        return api.sendMessage("⚠️ You do not have permission to use this command.", threadID, messageID);
-    }
-
-    const data = loadData();
-
-    if (!args[0]) {
-        return api.sendMessage("❗ Usage: /lockname <group name> | /lockname remove", threadID, messageID);
-    }
-
-    if (args[0].toLowerCase() === "remove") {
-        delete data[threadID];
-        saveData(data);
-        return api.sendMessage("🔓 Group name lock removed.", threadID, messageID);
-    }
-
-    const newName = args.join(" ");
-    data[threadID] = { name: newName };
-    saveData(data);
-
-    return api.sendMessage(`🔒 Group name is now locked to: "${newName}"`, threadID, messageID);
+  if (sub === "reset") {
+    delete lockedSettings[threadID];
+    return api.sendMessage("🔓 Lock removed.", threadID, messageID);
+  }
 };
+
+module.exports.lockedSettings = lockedSettings;
