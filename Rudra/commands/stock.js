@@ -28,7 +28,7 @@ module.exports.config = {
   credits: "Jaylord La Peña + ChatGPT",
   description: "Check Grow a Garden stock & auto notify when restocked (per GC toggle)",
   usePrefix: true,
-  commandCategory: "game",
+  commandCategory: "gag tools",
   usages: "/stock on|off|check",
   cooldowns: 10,
 };
