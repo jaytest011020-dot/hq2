@@ -1,6 +1,6 @@
 module.exports.config = {
   name: "petcalc",
-  version: "2.3.2",
+  version: "2.3.3",
   hasPermission: 0,
   credits: "ChatGPT",
   description: "Calculate pet weights (Age 1 → Age 100, linear growth up to 10× Age 1)",
@@ -15,7 +15,7 @@ function usageExample(api, threadID, messageID) {
   return api.sendMessage(
     "❌ Wrong usage!\n\n📌 Correct Usage:\n/petcalc <ageLevel> <weightKgAtThatAge>\n\n💡 Example:\n/petcalc 5 2.7",
     threadID,
-    messageID
+    { messageID }
   );
 }
 
@@ -28,11 +28,19 @@ module.exports.run = async function ({ api, event, args }) {
   let givenWeight = parseFloat(args[1]);
 
   if (isNaN(givenAge) || givenAge < 1 || givenAge > 100) {
-    return api.sendMessage("⚠️ Age level must be between 1 and 100.", threadID, messageID);
+    return api.sendMessage(
+      "⚠️ Age level must be between 1 and 100.",
+      threadID,
+      { messageID }
+    );
   }
 
   if (isNaN(givenWeight) || givenWeight <= 0) {
-    return api.sendMessage("⚠️ Please provide a valid weight (kg).", threadID, messageID);
+    return api.sendMessage(
+      "⚠️ Please provide a valid weight (kg).",
+      threadID,
+      { messageID }
+    );
   }
 
   // Scale factor at the given age (1.0 at Age 1 → 10.0 at Age 100)
@@ -47,7 +55,7 @@ module.exports.run = async function ({ api, event, args }) {
   // Linear growth step per age
   const growthPerAge = (maxWeight - baseWeight) / 99;
 
-  // ✅ New size category ranges
+  // ✅ Size categories
   let sizeCategory = "Unknown";
   if (baseWeight >= 0.1 && baseWeight <= 0.9) sizeCategory = "🟢 Small";
   else if (baseWeight >= 1.0 && baseWeight <= 2.9) sizeCategory = "🔵 Normal";
@@ -57,12 +65,13 @@ module.exports.run = async function ({ api, event, args }) {
   else if (baseWeight >= 10.0 && baseWeight <= 100) sizeCategory = "🟣 Godly";
 
   // Build results
-  let result = `🐾 Pet Calculator 🐾\n\n` +
-               `Input: ${givenWeight} kg (Age ${givenAge})\n` +
-               `Calculated Base Weight (Age 1): ${baseWeight.toFixed(2)} kg\n` +
-               `Size Category (at Age 1): ${sizeCategory}\n\nEstimated weights:\n`;
+  let result =
+    `🐾 Pet Calculator 🐾\n\n` +
+    `Input: ${givenWeight} kg (Age ${givenAge})\n` +
+    `Calculated Base Weight (Age 1): ${baseWeight.toFixed(2)} kg\n` +
+    `Size Category (at Age 1): ${sizeCategory}\n\nEstimated weights:\n`;
 
-  // Show only key ages (1, 10, 20, …, 100)
+  // Show only key ages (1, 10, 20, …, 100 + requested age)
   for (let i = 1; i <= 100; i++) {
     if (i === 1 || i % 10 === 0 || i === givenAge || i === 100) {
       let est = baseWeight + growthPerAge * (i - 1);
@@ -77,6 +86,6 @@ module.exports.run = async function ({ api, event, args }) {
   // Split into chunks if too long
   const chunks = result.match(/[\s\S]{1,1800}/g);
   for (const chunk of chunks) {
-    await api.sendMessage(chunk, threadID, messageID);
+    await api.sendMessage(chunk, threadID, { messageID });
   }
 };
