@@ -26,19 +26,35 @@ function saveLockedNicknames(data) {
 
 module.exports.config = {
     name: "nicknamelock",
-    version: "1.0",
+    version: "1.0.1",
     credits: "Rudra x ChatGPT",
     description: "Lock or unlock nicknames in a group",
-    hasPermssion: 1, // only admins
+    hasPermssion: 1,
     commandCategory: "group",
     usages: "[lock/unlock/reset]",
     cooldowns: 3
 };
 
-module.exports.run = async function({ api, event, args }) {
-    const { threadID } = event;
+module.exports.run = async function ({ api, event, args }) {
+    const { threadID, senderID, messageID } = event;
     const action = args[0];
     let lockedNicknames = loadLockedNicknames();
+
+    // ✅ check bot admin
+    const isBotAdmin = global.config.ADMINBOT.includes(senderID);
+
+    // ✅ check group admin
+    const threadInfo = await api.getThreadInfo(threadID);
+    const isGroupAdmin = threadInfo.adminIDs.some(item => item.id == senderID);
+
+    // ❌ reject if not allowed
+    if (!isBotAdmin && !isGroupAdmin) {
+        return api.sendMessage(
+            "[ NicknameLock ] ❌ Only group admins or bot admins can use this command.",
+            threadID,
+            messageID
+        );
+    }
 
     if (!action) {
         return api.sendMessage(
@@ -46,17 +62,16 @@ module.exports.run = async function({ api, event, args }) {
             "• /nicknamelock lock → Lock current nicknames\n" +
             "• /nicknamelock unlock → Disable nickname lock\n" +
             "• /nicknamelock reset → Clear stored nicknames",
-            threadID
+            threadID,
+            messageID
         );
     }
 
     switch (action.toLowerCase()) {
         case "lock": {
             try {
-                const threadInfo = await api.getThreadInfo(threadID);
                 const nickData = {};
 
-                // Save every user's current nickname (or blank if none)
                 for (const user of threadInfo.participantIDs) {
                     const userNick = threadInfo.nicknames[user] || "";
                     nickData[user] = userNick;
@@ -65,10 +80,10 @@ module.exports.run = async function({ api, event, args }) {
                 lockedNicknames[threadID] = nickData;
                 saveLockedNicknames(lockedNicknames);
 
-                api.sendMessage("✅ All nicknames in this group are now locked.", threadID);
+                api.sendMessage("✅ All nicknames in this group are now locked.", threadID, messageID);
             } catch (error) {
                 console.error(error);
-                api.sendMessage("❌ Failed to lock nicknames.", threadID);
+                api.sendMessage("❌ Failed to lock nicknames.", threadID, messageID);
             }
             break;
         }
@@ -77,9 +92,9 @@ module.exports.run = async function({ api, event, args }) {
             if (lockedNicknames[threadID]) {
                 delete lockedNicknames[threadID];
                 saveLockedNicknames(lockedNicknames);
-                api.sendMessage("🔓 Nickname lock disabled for this group.", threadID);
+                api.sendMessage("🔓 Nickname lock disabled for this group.", threadID, messageID);
             } else {
-                api.sendMessage("⚠️ No nickname lock is currently active in this group.", threadID);
+                api.sendMessage("⚠️ No nickname lock is currently active in this group.", threadID, messageID);
             }
             break;
         }
@@ -88,15 +103,15 @@ module.exports.run = async function({ api, event, args }) {
             if (lockedNicknames[threadID]) {
                 delete lockedNicknames[threadID];
                 saveLockedNicknames(lockedNicknames);
-                api.sendMessage("♻️ Nickname lock data cleared for this group.", threadID);
+                api.sendMessage("♻️ Nickname lock data cleared for this group.", threadID, messageID);
             } else {
-                api.sendMessage("⚠️ Nothing to reset. No nickname lock active.", threadID);
+                api.sendMessage("⚠️ Nothing to reset. No nickname lock active.", threadID, messageID);
             }
             break;
         }
 
         default:
-            api.sendMessage("❓ Invalid option. Use: lock | unlock | reset", threadID);
+            api.sendMessage("❓ Invalid option. Use: lock | unlock | reset", threadID, messageID);
             break;
     }
 };
