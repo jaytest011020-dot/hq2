@@ -1,61 +1,90 @@
 module.exports.config = {
-  name: "autogreet",
-  version: "1.1.5",
+  name: "autobible",
+  version: "2.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Automatically greets groups depending on the time of day",
+  description: "Automatically sends Bible verses at specific Philippine times",
   commandCategory: "system",
-  usages: "This runs automatically (no command needed)",
+  usages: "/autobible",
   cooldowns: 0
 };
 
-const greetings = [
-  { hour: 6, msg: "🌅 Good morning everyone!" },
-  { hour: 12, msg: "☀️ Good afternoon, stay productive!" },
-  { hour: 18, msg: "🌇 Good evening, hope you had a great day!" },
-  { hour: 22, msg: "🌙 Good night, rest well!" }
-];
-
-let autoGreetInterval = null;
+const axios = require("axios");
+let autoBibleInterval = null;
 let lastSentKey = null;
 
 function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
 
-function getTimeInKolkata() {
+// ⏰ Get PH Time (UTC+8)
+function getPhilTime() {
   const now = new Date();
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const istOffset = 5.5 * 60 * 60000;
-  const istDate = new Date(utc + istOffset);
-  return { hour: istDate.getHours(), minute: istDate.getMinutes() };
+  const offset = 8 * 60 * 60000; // UTC+8 Philippines
+  return new Date(utc + offset);
 }
 
-// 🔹 Run command (optional, won’t error if you type /autogreet)
-module.exports.run = async function ({ api, event }) {
-  return api.sendMessage(
-    "✅ Auto-greet is active. Greetings will be sent at 6AM, 12PM, 6PM, and 10PM IST.",
-    event.threadID
-  );
+// 📌 Schedule (oras + dagdag na mensahe)
+const verseSchedule = {
+  "4:0": "🌅 Good morning! Start your day with God’s word.",
+  "8:0": "☀️ Start your day with faith and strength!",
+  "12:0": "🍽 Lunch time blessings! May God fill you with peace.",
+  "15:0": "⛅ Keep going, God is with you.",
+  "19:0": "🌇 Good evening! Stay blessed in His grace.",
+  "22:0": "🌙 Good night, rest in His peace."
 };
 
-// 🔹 Safe autostart
+// 🔹 Manual Command (/autobible)
+module.exports.run = async function ({ api, event }) {
+  const msg = 
+`📖 AutoBible is automatic. Verses will be posted at:
+
+⏰ 4:00 AM
+⏰ 8:00 AM
+⏰ 12:00 PM
+⏰ 3:00 PM
+⏰ 7:00 PM
+⏰ 10:00 PM
+
+(Timezone: Philippines UTC+8)`;
+
+  return api.sendMessage(msg, event.threadID, event.messageID);
+};
+
+// 🔹 Autostart loop
 module.exports.onLoad = function ({ api }) {
-  console.log("✅ Auto-greet loaded.");
+  console.log("✅ AutoBible loaded.");
 
-  if (autoGreetInterval) return; // don’t start twice
+  if (autoBibleInterval) return; // avoid double start
 
-  autoGreetInterval = setInterval(async () => {
+  autoBibleInterval = setInterval(async () => {
     try {
-      const { hour, minute } = getTimeInKolkata();
-      if (minute !== 0) return;
+      const now = getPhilTime();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      const key = `${hour}:${minute}`;
 
-      const greet = greetings.find(g => g.hour === hour);
-      if (!greet) return;
+      if (!verseSchedule[key]) return; // only on schedule
+      if (lastSentKey === key) return; // avoid duplicate within same minute
+      lastSentKey = key;
 
-      const currentKey = `${hour}:${minute}`;
-      if (lastSentKey === currentKey) return;
+      // 📖 Fetch random verse
+      let verseText = "";
+      try {
+        const res = await axios.get("https://labs.bible.org/api/?passage=random&type=json");
+        if (res.data && res.data[0]) {
+          verseText = `${res.data[0].bookname} ${res.data[0].chapter}:${res.data[0].verse} - ${res.data[0].text}`;
+        } else {
+          verseText = "📖 Bible verse could not be fetched.";
+        }
+      } catch (e) {
+        verseText = "⚠️ Failed to fetch verse.";
+      }
 
+      const finalMsg = `📖 ${verseText}\n\n${verseSchedule[key]}`;
+
+      // 📤 Send to all groups
       let threads = [];
       try {
         threads = await api.getThreadList(50, null, ["INBOX"]);
@@ -65,24 +94,23 @@ module.exports.onLoad = function ({ api }) {
 
       const groups = threads.filter(t => t.isGroup);
       for (const g of groups) {
-        api.sendMessage(greet.msg, g.threadID, (err) => {
-          if (err) console.error(`❌ Failed to greet ${g.threadID}:`, err.message);
+        api.sendMessage(finalMsg, g.threadID, (err) => {
+          if (err) console.error(`❌ Failed to send verse to ${g.threadID}:`, err.message);
         });
         await sleep(500);
       }
 
-      lastSentKey = currentKey;
-      console.log(`✅ Sent greeting: "${greet.msg}"`);
+      console.log(`✅ Sent AutoBible verse at ${key}`);
     } catch (err) {
-      console.error("❌ Auto-greet crash prevented:", err.message);
+      console.error("❌ AutoBible error:", err.message);
     }
-  }, 30 * 1000);
+  }, 30 * 1000); // check every 30s
 };
 
 module.exports.onUnload = function () {
-  if (autoGreetInterval) {
-    clearInterval(autoGreetInterval);
-    autoGreetInterval = null;
+  if (autoBibleInterval) {
+    clearInterval(autoBibleInterval);
+    autoBibleInterval = null;
   }
-  console.log("✅ Auto-greet stopped.");
+  console.log("🛑 AutoBible stopped.");
 };
