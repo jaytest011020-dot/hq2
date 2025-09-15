@@ -1,5 +1,4 @@
 module.exports = function ({ api, models, Users, Threads, Currencies }) {
-    const stringSimilarity = require('string-similarity');
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const logger = require("../../utils/log.js");
     const moment = require("moment-timezone");
@@ -64,28 +63,8 @@ module.exports = function ({ api, models, Users, Threads, Currencies }) {
 
         let command = commands.get(commandName);
 
-        // Handle command not found
-        if (!command) {
-            let allCommandName = [];
-            const commandValues = commands.keys();
-            for (const cmd of commandValues) allCommandName.push(cmd);
-
-            const checker = stringSimilarity.findBestMatch(commandName, allCommandName);
-
-            if (checker.bestMatch.rating >= 0.5) {
-                // Suggest a similar command
-                return api.sendMessage(
-                    `❌ Command "${commandName}" does not exist.\n👉 Did you mean "/${checker.bestMatch.target}"?\n💡 Use /help to see all available commands.`,
-                    threadID
-                );
-            } else {
-                // No close match
-                return api.sendMessage(
-                    `❌ Command "${commandName}" does not exist.\n💡 Use /help to see all available commands.`,
-                    threadID
-                );
-            }
-        }
+        // ❌ Totally ignore if command not found
+        if (!command) return;
 
         // Handle banned commands
         if (commandBanned.get(threadID) || commandBanned.get(senderID)) {
