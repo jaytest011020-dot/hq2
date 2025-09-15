@@ -1,25 +1,28 @@
 module.exports.config = {
-  name: "petcal",
-  version: "2.3.0",
+  name: "petcalc",
+  version: "2.3.2",
   hasPermission: 0,
   credits: "ChatGPT",
   description: "Calculate pet weights (Age 1 → Age 100, linear growth up to 10× Age 1)",
   usePrefix: true,
-  commandCategory: "game",
+  commandCategory: "gag tools",
   usages: "/petcalc <ageLevel> <weightKgAtThatAge>",
   cooldowns: 5
 };
 
+// 📌 Helper: Usage Example
+function usageExample(api, threadID, messageID) {
+  return api.sendMessage(
+    "❌ Wrong usage!\n\n📌 Correct Usage:\n/petcalc <ageLevel> <weightKgAtThatAge>\n\n💡 Example:\n/petcalc 5 2.7",
+    threadID,
+    messageID
+  );
+}
+
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  if (args.length < 2) {
-    return api.sendMessage(
-      "Usage: /petcalc <ageLevel> <weightKgAtThatAge>\n\nExample:\n/petcalc 5 2.7",
-      threadID,
-      messageID
-    );
-  }
+  if (args.length < 2) return usageExample(api, threadID, messageID);
 
   let givenAge = parseInt(args[0]);
   let givenWeight = parseFloat(args[1]);
@@ -44,13 +47,14 @@ module.exports.run = async function ({ api, event, args }) {
   // Linear growth step per age
   const growthPerAge = (maxWeight - baseWeight) / 99;
 
-  // Size category at Age 1
+  // ✅ New size category ranges
   let sizeCategory = "Unknown";
   if (baseWeight >= 0.1 && baseWeight <= 0.9) sizeCategory = "🟢 Small";
-  else if (baseWeight >= 1 && baseWeight <= 4.9) sizeCategory = "🔵 Normal";
-  else if (baseWeight >= 5 && baseWeight <= 9.9) sizeCategory = "🟡 Huge";
-  else if (baseWeight >= 10 && baseWeight <= 19.9) sizeCategory = "🔴 Titanic";
-  else if (baseWeight >= 20 && baseWeight <= 100) sizeCategory = "🟣 Godly";
+  else if (baseWeight >= 1.0 && baseWeight <= 2.9) sizeCategory = "🔵 Normal";
+  else if (baseWeight >= 3.0 && baseWeight <= 4.9) sizeCategory = "🟡 Good Size";
+  else if (baseWeight >= 5.0 && baseWeight <= 6.9) sizeCategory = "🟠 Huge";
+  else if (baseWeight >= 7.0 && baseWeight <= 9.9) sizeCategory = "🔴 Titanic";
+  else if (baseWeight >= 10.0 && baseWeight <= 100) sizeCategory = "🟣 Godly";
 
   // Build results
   let result = `🐾 Pet Calculator 🐾\n\n` +
