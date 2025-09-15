@@ -2,11 +2,11 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "tiktok",
-  version: "1.0.3",
+  version: "1.0.1",
   hasPermission: 0,
-  credits: "ChatGPT + NN",
-  description: "Stalk TikTok profile by username",
-  commandCategory: "Tools",
+  credits: "ChatGPT",
+  description: "Fetch TikTok profile info",
+  commandCategory: "utility",
   usages: "/tiktok <username>",
   cooldowns: 5,
 };
@@ -14,60 +14,46 @@ module.exports.config = {
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  if (!args[0]) {
-    return api.sendMessage(
-      "❌ Usage: /tiktok <username>\n\nExample: /tiktok jaylordlapena or /tiktok @jaylordlapena",
-      threadID,
-      messageID
-    );
+  if (args.length < 1) {
+    return api.sendMessage("❗ Usage: /tiktok <username>", threadID, messageID);
   }
 
-  // ✅ Gamitin mismo yung input, huwag galawin (pwede may @ o wala)
-  const username = args[0];
+  // wag gagalawin username (pwede may @ o wala)
+  const username = args[0].trim();
+
+  const API_URL = `https://betadash-api-swordslush-production.up.railway.app/tikstalk?username=${encodeURIComponent(username)}`;
 
   try {
-    const res = await axios.get(
-      `https://betadash-api-swordslush-production.up.railway.app/tikstalk`,
-      { params: { username }, timeout: 20000 }
-    );
+    const res = await axios.get(API_URL, { timeout: 20000 });
 
-    const data = res.data;
-    if (!data || !data.id) {
-      return api.sendMessage(
-        `⚠️ No TikTok profile found for "${username}".`,
-        threadID,
-        messageID
-      );
+    if (!res.data || !res.data.username) {
+      return api.sendMessage("⚠️ TikTok profile not found.", threadID, messageID);
     }
 
-    let msg = `📱 TikTok Stalk 📱\n\n` +
-              `👤 Username: ${data.username}\n` +
-              `🔖 Nickname: ${data.nickname}\n` +
-              `🆔 ID: ${data.id}\n` +
-              `🔑 SecUID: ${data.secUid}\n` +
-              `📌 Bio: ${data.signature || "N/A"}\n\n` +
-              `📹 Videos: ${data.videoCount}\n` +
-              `👥 Following: ${data.followingCount}\n` +
-              `👤 Followers: ${data.followerCount}\n` +
-              `❤️ Likes: ${data.heartCount}\n` +
-              `👍 Diggs: ${data.diggCount}\n\n` +
-              `🔗 Profile: https://www.tiktok.com/${username}`;
+    const info = res.data;
+    const msg = 
+`📱 TikTok Profile
+━━━━━━━━━━━━━━━
+👤 Nickname: ${info.nickname}
+🔗 Username: ${info.username}
+🆔 ID: ${info.id}
+📝 Bio: ${info.signature || "N/A"}
+
+📊 Stats:
+🎥 Videos: ${info.videoCount}
+👥 Following: ${info.followingCount}
+👤 Followers: ${info.followerCount}
+❤️ Hearts: ${info.heartCount}
+👍 Likes: ${info.diggCount}`;
 
     return api.sendMessage(
-      {
-        body: msg,
-        attachment: await global.utils.getStreamFromURL(data.avatarLarger),
-      },
+      { body: msg, attachment: await global.utils.getStreamFromURL(info.avatarLarger) },
       threadID,
       messageID
     );
 
   } catch (err) {
-    console.error("TikTok Stalk error:", err.message);
-    return api.sendMessage(
-      "❌ Error fetching TikTok profile. Try again later.",
-      threadID,
-      messageID
-    );
+    console.error("TikTok error:", err.message);
+    return api.sendMessage("❌ Error fetching TikTok profile. Try again later.", threadID, messageID);
   }
 };
