@@ -24,8 +24,8 @@ function saveBans() {
 
 module.exports.config = {
   name: "ban",
-  version: "3.0.1",
-  hasPermssion: 0,
+  version: "3.1.0",
+  hasPermssion: 1, // only admins
   credits: "ChatGPT",
   description: "Ban/unban users (persistent per group)",
   commandCategory: "group",
@@ -43,17 +43,14 @@ module.exports.handleEvent = async function ({ api, event }) {
     saveBans();
   }
 
-  // Kapag may bagong sumali, check kung banned
+  // If someone joins, check if banned
   if (event.logMessageType === "log:subscribe") {
     const addedIDs = event.logMessageData.addedParticipants.map(p => p.userFbId);
     for (const uid of addedIDs) {
       if (bans[threadID].banned.includes(uid)) {
         try {
           const name = (await api.getUserInfo(uid))[uid]?.name || uid;
-          api.sendMessage(
-            `⛔ ${name} is banned and cannot rejoin this group.`,
-            threadID
-          );
+          api.sendMessage(`⛔ ${name} is banned and cannot rejoin this group.`, threadID);
           await api.removeUserFromGroup(uid, threadID);
         } catch (e) {
           console.error("Ban enforce error:", e);
@@ -72,6 +69,15 @@ module.exports.run = async function ({ api, event, args }) {
     saveBans();
   }
 
+  // ✅ Check permissions (group admin or bot admin only)
+  const isBotAdmin = global.config.ADMINBOT.includes(senderID);
+  const threadInfo = await api.getThreadInfo(threadID);
+  const isGroupAdmin = threadInfo.adminIDs.some(item => item.id == senderID);
+
+  if (!isBotAdmin && !isGroupAdmin) {
+    return api.sendMessage("❌ Only group admins or bot admins can use the ban command.", threadID, messageID);
+  }
+
   // listban
   if (args[0] === "listban") {
     const list = bans[threadID].banned;
@@ -81,7 +87,7 @@ module.exports.run = async function ({ api, event, args }) {
     let msg = "⛔ Banned users:\n";
     for (const uid of list) {
       const name = (await api.getUserInfo(uid))[uid]?.name || uid;
-      msg += `• ${name}\n`;
+      msg += `• ${name} (${uid})\n`;
     }
     return api.sendMessage(msg, threadID, messageID);
   }
@@ -127,11 +133,7 @@ module.exports.run = async function ({ api, event, args }) {
 
     try {
       const name = (await api.getUserInfo(uid))[uid]?.name || uid;
-      // ✅ Announce reason bago i-kick
-      await api.sendMessage(
-        `⛔ ${name} has been banned.\n📌 Reason: ${reason}`,
-        threadID
-      );
+      await api.sendMessage(`⛔ ${name} has been banned.\n📌 Reason: ${reason}`, threadID);
       await api.removeUserFromGroup(uid, threadID);
     } catch (e) {
       console.error("Remove error:", e);
