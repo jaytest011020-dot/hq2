@@ -4,7 +4,7 @@ module.exports.config = {
 	hasPermssion: 0,
 	credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭",
 	description: "Gỡ tin nhắn của bot",
-	commandCategory: "system",
+	commandCategory: "group",
 	usages: "unsend",
 	cooldowns: 0
 };
