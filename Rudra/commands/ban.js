@@ -28,7 +28,7 @@ module.exports.config = {
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Ban/unban users (persistent per group)",
-  commandCategory: "admin",
+  commandCategory: "group",
   usages: "ban [@tag|reply] reason | listban | unban <uid> | reset",
   cooldowns: 5
 };
