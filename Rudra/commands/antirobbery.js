@@ -1,22 +1,44 @@
 module.exports.config = {
- name: "antirobbery",
- version: "1.0.0",
- credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭",
- hasPermssion: 1,
- description: "Prevent changing group administrators",
- usages: "",
- commandCategory: "admin",
- cooldowns: 0
+    name: "antirobbery",
+    version: "1.0.1",
+    credits: "Priyansh Rajput, ChatGPT",
+    hasPermssion: 1,
+    description: "Prevent changes to group administrators",
+    usages: "/antirobbery",
+    commandCategory: "admin",
+    cooldowns: 0
 };
 
-module.exports.run = async({ api, event, Threads}) => {
-    const info = await api.getThreadInfo(event.threadID);
-    if (!info.adminIDs.some(item => item.id == api.getCurrentUserID())) 
-      return api.sendMessage('Need group administrator permissions, please add and try again!', event.threadID, event.messageID);
-    const data = (await Threads.getData(event.threadID)).data || {};
-    if (typeof data["guard"] == "guard" || data["guard"] == false) data["guard"] = true;
-    else data["guard"] = false;
-    await Threads.setData(event.threadID, { data });
-      global.data.threadData.set(parseInt(event.threadID), data);
-    return api.sendMessage(`${(data["guard"] == true) ? "turn on" : "Turn off"} Successful Anti-Robbery Group`, event.threadID, event.messageID);
-}
+module.exports.run = async ({ api, event, Threads }) => {
+    const { threadID, messageID, senderID } = event;
+
+    // ✅ check if user is bot admin
+    const isBotAdmin = global.config.ADMINBOT.includes(senderID);
+
+    // ✅ check if user is group admin
+    const info = await api.getThreadInfo(threadID);
+    const isGroupAdmin = info.adminIDs.some(item => item.id == senderID);
+
+    // ❌ deny if not bot admin or group admin
+    if (!isBotAdmin && !isGroupAdmin) {
+        return api.sendMessage(
+            "[ AntiRobbery ] ❌ Only group admins or bot admins can use this command.",
+            threadID,
+            messageID
+        );
+    }
+
+    // ✅ toggle AntiRobbery
+    const data = (await Threads.getData(threadID)).data || {};
+    if (typeof data.guard === "undefined") data.guard = false;
+    data.guard = !data.guard;
+
+    await Threads.setData(threadID, { data });
+    global.data.threadData.set(parseInt(threadID), data);
+
+    return api.sendMessage(
+        `[ AntiRobbery ] AntiRobbery has been turned ${(data.guard ? "ON ✅" : "OFF ❌")}`,
+        threadID,
+        messageID
+    );
+};
