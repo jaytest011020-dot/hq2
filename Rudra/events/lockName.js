@@ -1,63 +1,55 @@
-// === events/adminupdate.js ===
-const fs = require("fs");
-const path = require("path");
+module.exports.config = {
+    name: "adminUpdate",
+    eventType: [
+        "log:thread-name", // detect thread name changes
+    ],
+    version: "1.0.2",
+    credits: "Edited by ChatGPT",
+    description: "Update team information when admin changes",
+    envConfig: {
+        sendNoti: true
+    }
+};
 
-const DATA_FILE = path.join(__dirname, "../modules/commands/lockname.json");
-
-// Load & save helpers
-function loadData() {
-  if (!fs.existsSync(DATA_FILE)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-  } catch {
-    return {};
-  }
-}
-
-function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
-
-module.exports = {
-  config: {
-    name: "lockName", // The name of the event
-    eventType: ["log:thread-name"], // This listens for thread name changes
-    version: "1.0.0",
-    credits: "ChatGPT",
-    description: "Auto-revert group name change to a locked name if someone tries to change it",
-  },
-
-  // Event handler to auto-revert name change
-  run: async function ({ api, event }) {
+module.exports.run = async function ({ api, event, Threads }) {
     const { threadID, logMessageType, logMessageData, author } = event;
 
-    // Only listen for thread name changes
+    // Check if the event is about a name change
     if (logMessageType !== "log:thread-name") return;
 
-    const data = loadData();
-    if (!data[threadID]) return; // No locked name data for this thread
+    const lockedNames = loadLockedNames();
+    const lockedName = lockedNames[threadID]?.name;
 
-    const lockedName = data[threadID].name;
-    const newName = logMessageData?.name || "";
-
-    if (newName !== lockedName) {
-      try {
-        // Revert the group name back to the locked name
-        await api.setTitle(lockedName, threadID);
-
-        // Get the name of the person who tried to change it
-        const userInfo = await api.getUserInfo(author);
-        const changerName = userInfo[author]?.name || author;
-
-        // Notify the group about the name change attempt and revert
-        api.sendMessage(
-          `⚠️ ${changerName} tried to change the group name to "${newName}".\n` +
-          `🔒 Reverted back to locked name: "${lockedName}"`,
-          threadID
-        );
-      } catch (err) {
-        console.error("❌ Error reverting group name:", err.message);
-      }
+    // If the group name was locked, compare and revert if necessary
+    if (lockedName && logMessageData?.name !== lockedName) {
+        try {
+            // Revert back to the locked name
+            await api.setTitle(lockedName, threadID);
+            
+            // Notify the group about the name change attempt
+            const changerName = await api.getUserInfo(author);
+            api.sendMessage(
+                `⚠️ ${changerName[author].name} tried to change the group name to: "${logMessageData?.name}"\n` +
+                `🔒 Reverted back to the locked name: "${lockedName}"`,
+                threadID
+            );
+        } catch (error) {
+            console.error("Error reverting group name:", error);
+        }
     }
-  }
 };
+
+// Load the locked names from the file
+function loadLockedNames() {
+    const fs = require("fs");
+    const path = require("path");
+    const locknameFile = path.join(__dirname, "lockname.json");
+
+    if (!fs.existsSync(locknameFile)) return {};
+    try {
+        return JSON.parse(fs.readFileSync(locknameFile, "utf8"));
+    } catch (error) {
+        console.error("Error loading locked names:", error);
+        return {};
+    }
+}
