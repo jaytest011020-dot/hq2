@@ -1,25 +1,37 @@
 const fs = require("fs");
+
 module.exports.config = {
-	name: "fyoutoo",
-    version: "1.0.1",
-	hasPermssion: 0,
-	credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭", 
-	description: "hihihihi",
-	commandCategory: "no prefix",
-	usages: "fuck",
-    cooldowns: 5, 
+  name: "fyoutoo",
+  version: "1.0.2",
+  hasPermission: 0,
+  credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭", 
+  description: "Auto reply when someone says bad words",
+  commandCategory: "no prefix",
+  usages: "fuck",
+  cooldowns: 5,
 };
 
-module.exports.handleEvent = function({ api, event, client, __GLOBAL }) {
-	var { threadID, messageID } = event;
-	if (event.body.indexOf("fuck")==0 || event.body.indexOf("Fuck")==0 || event.body.indexOf("fuck you")==0 || event.body.indexOf("Fuck you")==0 || event.body.indexOf("pakyu")==0 || event.body.indexOf("Pakyu")==0 || event.body.indexOf("pak you")==0 || event.body.indexOf("Pak you")==0 || event.body.indexOf("pak u")==0 || event.body.indexOf("Pak u")==0 || event.body.indexOf("pak yu")==0 || event.body.indexOf("Pak yu")==0) {
-		var msg = {
-				body: "F you too",
-				attachment: fs.createReadStream(__dirname + `/noprefix/fuck.gif`)
-			}
-			api.sendMessage(msg, threadID, messageID);
-		}
-	}
-	module.exports.run = function({ api, event, client, __GLOBAL }) {
+module.exports.handleEvent = function({ api, event }) {
+  const { threadID, messageID, body } = event;
+  if (!body) return;
 
+  const triggers = [
+    "fuck", "Fuck", "fuck you", "Fuck you",
+    "pakyu", "Pakyu", "pak you", "Pak you",
+    "pak u", "Pak u", "pak yu", "Pak yu"
+  ];
+
+  if (triggers.includes(body.trim())) {
+    const msg = {
+      body: "F you too",
+      attachment: fs.createReadStream(__dirname + "/noprefix/fuck.gif"),
+    };
+
+    // ✅ FIX: add callback param before messageID
+    api.sendMessage(msg, threadID, () => {}, messageID);
   }
+};
+
+module.exports.run = function() {
+  // no command, only event trigger
+};
