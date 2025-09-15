@@ -21,12 +21,12 @@ function saveData(data) {
 
 module.exports.config = {
   name: "lockname",
-  version: "1.2.1",
-  hasPermission: 1, // ✅ standardized (use this instead of "role")
+  version: "1.3.0",
+  hasPermssion: 1, // ✅ correct spelling
   credits: "ChatGPT",
   cooldowns: 5,
   description: "Lock the group name and auto-revert if someone changes it",
-  usages: "/lockname <group name> | /lockname remove",
+  usages: "/lockname [group name] | /lockname remove",
   commandCategory: "group"
 };
 
@@ -34,18 +34,26 @@ module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
   const data = loadData();
 
-  if (!args[0]) {
-    return api.sendMessage("❗ Usage: /lockname <group name> | /lockname remove", threadID, messageID);
-  }
-
-  if (args[0].toLowerCase() === "remove") {
+  // remove lock
+  if (args[0] && args[0].toLowerCase() === "remove") {
     delete data[threadID];
     saveData(data);
     return api.sendMessage("🔓 Group name lock removed.", threadID, messageID);
   }
 
-  // Join args into full name (handles spaces)
-  const newName = args.join(" ");
+  // get current group name kung walang args
+  let newName;
+  if (!args[0]) {
+    try {
+      const info = await api.getThreadInfo(threadID);
+      newName = info.threadName || "Unnamed Group";
+    } catch {
+      return api.sendMessage("⚠️ Failed to fetch current group name.", threadID, messageID);
+    }
+  } else {
+    newName = args.join(" ");
+  }
+
   data[threadID] = { name: newName };
   saveData(data);
 
@@ -55,9 +63,9 @@ module.exports.run = async function ({ api, event, args }) {
 // === Auto enforce lock ===
 module.exports.handleEvent = async function ({ api, event }) {
   try {
-    const { threadID, logMessageType, logMessageData, author } = event;
-    if (logMessageType !== "log:thread-name") return; // detect name change only
+    if (event.logMessageType !== "log:thread-name") return;
 
+    const { threadID, logMessageData, author } = event;
     const data = loadData();
     const record = data[threadID];
     if (!record || !record.name) return;
