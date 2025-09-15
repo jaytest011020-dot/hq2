@@ -1,84 +1,85 @@
 module.exports.config = {
-  name: "help", // Command is /help
-  version: "2.2.1",
+  name: "help",
+  version: "3.8.0",
   hasPermssion: 0,
-  credits: "Edited by ChatGPT",
-  description: "Custom Help Command (only selected commands shown)",
+  credits: "ChatGPT + Edited by Jaylord",
+  description: "Show all available commands grouped by category with styled brackets",
   commandCategory: "system",
-  usages: "/help",
+  usages: "/help [command]",
   cooldowns: 1
 };
 
-module.exports.run = function ({ api, event }) {
+module.exports.run = async function ({ api, event, args }) {
   const { threadID } = event;
+  const commands = global.client.commands;
 
-  // Unicode Bold Help Menu
-  const helpMenu = `
-📖 𝗕𝗢𝗧 𝗖𝗢𝗠𝗠𝗔𝗡𝗗 𝗚𝗨𝗜𝗗𝗘
+  // 📌 Case: /help <command>
+  if (args[0]) {
+    const cmdName = args[0].toLowerCase();
+    const command = commands.get(cmdName) || commands.get(global.client.aliases?.get(cmdName));
 
-💰 /𝗕𝗔𝗡𝗞  
-📌 Check your balance, deposit, or withdraw coins.  
-📝 Example: /bank
-📝 Example: /bank all
+    if (!command) {
+      return api.sendMessage(`❌ Command "/${cmdName}" not found.`, threadID);
+    }
 
-📦 /𝗦𝗛𝗢𝗣  
-📌 Add an item to auto-post in all GCs every 20 minutes (20 coins per post).  
-📝 Example: /shop add For Sale Raccoon
-📝 Example: /shop list  
-📝 Example: /shop remove  
+    const config = command.config;
+    let details = `📖 HELP → /${config.name}\n\n`;
+    details += `📝 Description: ${config.description || "No description"}\n`;
+    if (config.usages) details += `⚡ Usage: ${config.usages}\n`;
+    details += `🔑 Permission: ${config.hasPermssion || 0}\n`;
+    details += `⏳ Cooldown: ${config.cooldowns || 0}s`;
 
-🎯 /𝗕𝗜𝗗  
-📌 Create a bidding system for items.  
-📝 Example: /bid start raccoon 50  
-📝 Example: /bid end  
+    return api.sendMessage(details, threadID);
+  }
 
-📊 /𝗦𝗧𝗢𝗖𝗞  
-📌 View or manage item stock.  
-📝 Example: /stock
-📝 Example: /stock on
-📝 Example: /stock off 
+  // 📌 Category Icons
+  const categoryIcons = {
+    "system": "⚙️",
+    "moderation": "🛡️",
+    "education": "📚",
+    "music": "🎵",
+    "image": "🖼️",
+    "tools": "🛠️",
+    "gag tools": "😂",
+    "ai": "🤖",
+    "others": "📦"
+  };
 
-🔍 /𝗖𝗛𝗘𝗖𝗞  
-📌 Check a user's profile or info.
-📝 Example: /check
-📝 Example: /check @mention  
-📝 Example: /check all
+  // 📌 Group commands per category (case-insensitive)
+  let categorized = {};
+  commands.forEach(cmd => {
+    const cfg = cmd.config;
+    let category = (cfg.commandCategory || "others").toLowerCase();
 
-🐾 /𝗣𝗘𝗧𝗖𝗔𝗟𝗖  
-📌 Pet calculator for stats and growth.  
-📝 Example: /petcalc 1 3.7 
+    // 🔎 Auto-detect AI-related commands
+    if (
+      ["ai", "chatgpt", "gpt", "ask"].includes(cfg.name.toLowerCase()) || 
+      category.includes("ai")
+    ) {
+      category = "ai";
+    }
 
-🤖 /𝗕𝗢𝗧  
-📌 Chat with the bot.  
-📝 Example: bot hello  
+    if (!categorized[category]) categorized[category] = [];
+    categorized[category].push(cfg);
+  });
 
-🧠 /𝗚𝗣𝗧  
-📌 Chat with the AI assistant.  
-📝 Example: /gpt make me a poem  
+  // 📌 Build Help Menu (bracket style + slash)
+  let helpMenu = "📌 Available Commands:\n\n";
 
-🚨 /𝗦𝗖𝗔𝗠𝗠𝗘𝗥  
-📌 View or update the scammer list of the GC.  
-📝 Example: /scammer add @mention  
-📝 Example: /scammer list  
+  for (const [category, cmds] of Object.entries(categorized)) {
+    const icon = categoryIcons[category] || "📦";
+    helpMenu += `┌─ ${icon} | ${category.charAt(0).toUpperCase() + category.slice(1)}\n`;
 
-📜 /𝗥𝗨𝗟𝗘𝗦  
-📌 Show the GC and bot rules.  
-📝 Example: /rules  
+    cmds.forEach(cfg => {
+      helpMenu += `│ - /${cfg.name}\n`;
+    });
 
-🎰 /𝗦𝗟𝗢𝗧  
-📌 Try your luck with a slot game.  
-📝 Example: /slot 100  
+    helpMenu += `└───────────────\n\n`;
+  }
 
-👢 /𝗞𝗜𝗖𝗞  
-📌 Kick a member using mention.  
-📝 Example: /kick @mention  
-
-━━━━━━━━━━━━━━━  
-✨ Use /help <command> to see detailed usage.  
-
-👉 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗕𝘂𝘆 & 𝗦𝗲𝗹𝗹 𝗚𝗖:  
-**https://m.me/j/AbYBqABSq7cyHsBk/**
-`;
+  helpMenu += "👑 BOT OWNER\n";
+  helpMenu += "   Jaylord La Peña\n";
+  helpMenu += "   🌐 https://www.facebook.com/jaylordlapena2298";
 
   return api.sendMessage(helpMenu, threadID);
 };
