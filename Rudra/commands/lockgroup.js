@@ -2,74 +2,56 @@
 const fs = require("fs");
 const path = require("path");
 
-// JSON file path
-const filePath = path.join(__dirname, "lockgroups.json");
+// Path to JSON file
+const DATA_FILE = path.join(__dirname, "lockgroup.json");
 
-// Load saved data or create empty file kung wala pa
-function loadLocks() {
+// Load data
+function loadData() {
+  if (!fs.existsSync(DATA_FILE)) return {};
   try {
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, "utf8"));
-    } else {
-      fs.writeFileSync(filePath, JSON.stringify({}, null, 2), "utf8");
-      return {};
-    }
-  } catch (e) {
-    console.error("Failed to load lockgroups.json:", e);
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  } catch {
     return {};
   }
 }
 
-// Save data to file
-function saveLocks(data) {
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-  } catch (e) {
-    console.error("Failed to save lockgroups.json:", e);
-  }
+// Save data
+function saveData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
-
-// Global cache (once only)
-if (!global.lockGroups) global.lockGroups = loadLocks();
 
 module.exports.config = {
   name: "lockgroup",
-  version: "3.0.1",
+  version: "2.0.1",
   role: 1,
   author: "ChatGPT",
   cooldowns: 5,
-  description: "Lock group name (per GC, saved in JSON)",
+  description: "Lock group name (per GC)",
   usages: "/lockgroup name | /lockgroup remove"
 };
 
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
+  const data = loadData();
 
   if (!args[0]) {
     return api.sendMessage("❗ Usage: /lockgroup name | remove", threadID, messageID);
   }
 
-  if (args[0].toLowerCase() === "name") {
-    try {
-      const info = await api.getThreadInfo(threadID);
-      global.lockGroups[threadID] = info.threadName;
-      saveLocks(global.lockGroups);
-
-      return api.sendMessage(
-        `🔒 Group name is now locked to: "${info.threadName}"`,
-        threadID,
-        messageID
-      );
-    } catch (e) {
-      console.error("lockgroup name error:", e);
-      return api.sendMessage("⚠️ Failed to lock group name.", threadID, messageID);
-    }
+  if (args[0] === "name") {
+    const info = await api.getThreadInfo(threadID);
+    data[threadID] = { name: info.threadName };
+    saveData(data);
+    return api.sendMessage(
+      `🔒 Group name is now locked to: "${info.threadName}"`,
+      threadID,
+      messageID
+    );
   }
 
-  if (args[0].toLowerCase() === "remove") {
-    delete global.lockGroups[threadID];
-    saveLocks(global.lockGroups);
-
+  if (args[0] === "remove") {
+    delete data[threadID];
+    saveData(data);
     return api.sendMessage("🔓 Group name lock removed.", threadID, messageID);
   }
 
@@ -81,16 +63,17 @@ module.exports.handleEvent = async function ({ api, event }) {
   const { threadID } = event;
   if (!threadID) return;
 
-  const lockedName = global.lockGroups[threadID];
-  if (!lockedName) return;
+  const data = loadData();
+  const record = data[threadID];
+  if (!record || !record.name) return;
 
-  try {
-    const info = await api.getThreadInfo(threadID);
-    if (info.threadName !== lockedName) {
-      await api.setTitle(lockedName, threadID);
-      api.sendMessage(`⚠️ Group name is locked to: "${lockedName}"`, threadID);
+  const info = await api.getThreadInfo(threadID);
+  if (info.threadName !== record.name) {
+    try {
+      await api.setTitle(record.name, threadID);
+      api.sendMessage(`⚠️ Group name is locked to: "${record.name}"`, threadID);
+    } catch (e) {
+      console.error("LockGroup error:", e);
     }
-  } catch (e) {
-    console.error("LockGroup enforce error:", e);
   }
 };
