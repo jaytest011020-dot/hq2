@@ -2,7 +2,7 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "bot",
-  version: "2.2.0",
+  version: "2.2.1",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Auto Simsimi reply when 'bot' or 'jandel' is mentioned, or when replied to Simsimi's message",
@@ -20,7 +20,7 @@ module.exports.handleEvent = async function ({ api, event }) {
     const threadID = event.threadID;
     const botID = String(api.getCurrentUserID());
 
-    // Ignore sariling message ng bot
+    // ❌ Ignore sariling message ng bot
     if (sender === botID) return;
 
     let trigger = false;
@@ -39,11 +39,11 @@ module.exports.handleEvent = async function ({ api, event }) {
 
     if (!trigger) return;
 
-    // 🧹 Clean text
+    // 🧹 Clean text (tanggalin yung bot/jandel)
     let cleaned = body.replace(/\b(bot|jandel)\b/gi, "").trim();
     if (!cleaned) cleaned = "hello";
 
-    // Call Simsimi API
+    // 🔗 Call Simsimi API
     const API_URL = "https://daikyu-api.up.railway.app/api/sim-simi";
     let reply;
     try {
@@ -58,8 +58,8 @@ module.exports.handleEvent = async function ({ api, event }) {
 
     if (!reply) reply = "🤖 Hindi ako makareply ngayon, try ulit mamaya.";
 
-    // ✅ Reply directly
-    return api.sendMessage({ body: reply }, threadID, event.messageID);
+    // ✅ Reply directly to sender’s message
+    return api.sendMessage(reply, threadID, event.messageID);
   } catch (e) {
     console.error("bot.js fatal:", e);
   }
