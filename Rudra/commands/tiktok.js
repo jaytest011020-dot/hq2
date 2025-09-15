@@ -2,11 +2,11 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "tiktok",
-  version: "1.0.2",
-  hasPermission: 0,
+  version: "1.0.3",
+  hasPermssion: 0, // ✅ tama spelling
   credits: "ChatGPT",
   description: "Fetch TikTok profile info",
-  commandCategory: "utility",
+  commandCategory: "tools", // safe category name
   usages: "/tiktok <username>",
   cooldowns: 5,
 };
@@ -18,9 +18,7 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage("❗ Usage: /tiktok <username>", threadID, messageID);
   }
 
-  // wag gagalawin username (pwede may @ o wala)
   const username = args[0].trim();
-
   const API_URL = `https://betadash-api-swordslush-production.up.railway.app/tikstalk?username=${encodeURIComponent(username)}`;
 
   try {
@@ -31,7 +29,7 @@ module.exports.run = async function ({ api, event, args }) {
     }
 
     const info = res.data;
-    const msg = 
+    const msg =
 `📱 TikTok Profile
 ━━━━━━━━━━━━━━━
 👤 Nickname: ${info.nickname}
