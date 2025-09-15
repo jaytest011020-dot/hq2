@@ -4,7 +4,7 @@ module.exports.config = {
 	hasPermssion: 0,
 	credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭",
 	description: "Customize the law for each group",
-	commandCategory: "Box Chat",
+	commandCategory: "group",
 	usages: "[add/remove/all] [content/ID]",
 	cooldowns: 5,
 	dependencies: {
