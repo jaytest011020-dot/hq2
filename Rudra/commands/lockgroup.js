@@ -21,12 +21,13 @@ function saveData(data) {
 
 module.exports.config = {
   name: "lockname",
-  version: "1.2.0",
-  role: 1,
-  author: "ChatGPT",
+  version: "1.2.1",
+  hasPermission: 1, // ✅ standardized (use this instead of "role")
+  credits: "ChatGPT",
   cooldowns: 5,
   description: "Lock the group name and auto-revert if someone changes it",
-  usages: "/lockname <group name> | /lockname remove"
+  usages: "/lockname <group name> | /lockname remove",
+  commandCategory: "group"
 };
 
 module.exports.run = async function ({ api, event, args }) {
@@ -34,7 +35,7 @@ module.exports.run = async function ({ api, event, args }) {
   const data = loadData();
 
   if (!args[0]) {
-    return api.sendMessage("❗ Usage: /lockname <group name> | remove", threadID, messageID);
+    return api.sendMessage("❗ Usage: /lockname <group name> | /lockname remove", threadID, messageID);
   }
 
   if (args[0].toLowerCase() === "remove") {
