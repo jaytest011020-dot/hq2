@@ -2,12 +2,13 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "bot",
-  version: "1.0.2",
+  version: "2.2.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Talk to the bot",
+  description: "Auto Simsimi reply when 'bot' or 'jandel' is mentioned, or when replied to Simsimi's message",
   commandCategory: "AI",
-  usages: "Just mention bot"
+  usages: "Just type 'bot' or 'jandel', or reply to Simsimi",
+  cooldowns: 0,
 };
 
 module.exports.handleEvent = async function ({ api, event }) {
@@ -17,53 +18,53 @@ module.exports.handleEvent = async function ({ api, event }) {
 
     const sender = String(event.senderID);
     const threadID = event.threadID;
+    const botID = String(api.getCurrentUserID());
 
-    // ignore commands (/ or !)
-    if (/^\s*[\/!]/.test(body)) return;
-
-    // detect bot's own ID safely
-    let botID;
-    try {
-      botID = typeof api.getCurrentUserID === "function"
-        ? String(api.getCurrentUserID())
-        : String(api.getCurrentUserID || "");
-    } catch {
-      botID = "";
-    }
+    // Ignore sariling message ng bot
     if (sender === botID) return;
 
-    // trigger word "bot"
-    if (!/\bbot\b/i.test(body)) return;
+    let trigger = false;
 
-    // remove the word "bot" from message
-    let cleaned = body.replace(/\bbot\b/gi, "").trim();
+    // ✅ Trigger if contains "bot" or "jandel"
+    if (/\b(bot|jandel)\b/i.test(body)) trigger = true;
+
+    // ✅ Trigger if reply to Simsimi’s own message (not other modules)
+    if (
+      event.type === "message_reply" &&
+      event.messageReply?.senderID === botID &&
+      /🤖|Simsimi|Daikyu/i.test(event.messageReply?.body || "")
+    ) {
+      trigger = true;
+    }
+
+    if (!trigger) return;
+
+    // 🧹 Clean text
+    let cleaned = body.replace(/\b(bot|jandel)\b/gi, "").trim();
     if (!cleaned) cleaned = "hello";
 
-    // call external API
+    // Call Simsimi API
     const API_URL = "https://daikyu-api.up.railway.app/api/sim-simi";
     let reply;
     try {
       const res = await axios.get(API_URL, {
         params: { talk: cleaned },
-        timeout: 20_000
+        timeout: 20_000,
       });
       reply = res.data?.response || null;
     } catch (err) {
-      console.error("⚠️ Bot API error:", err?.message || err);
+      console.error("Sim API error:", err.message);
     }
 
-    // fallback message if API fails
-    if (!reply) {
-      reply = "🤖 Hindi ako makareply ngayon, try ulit mamaya.";
-    }
+    if (!reply) reply = "🤖 Hindi ako makareply ngayon, try ulit mamaya.";
 
-    // ✅ reply directly to user’s message
-    return api.sendMessage(
-      reply,
-      threadID,
-      event.messageID
-    );
+    // ✅ Reply directly
+    return api.sendMessage({ body: reply }, threadID, event.messageID);
   } catch (e) {
-    console.error("❌ Bot Fatal Error:", e);
+    console.error("bot.js fatal:", e);
   }
+};
+
+module.exports.run = async function () {
+  // Walang manual command, auto-reply lang sya
 };
