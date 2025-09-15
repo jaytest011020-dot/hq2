@@ -1,6 +1,6 @@
 module.exports.config = {
   name: "autobible",
-  version: "2.1.0",
+  version: "2.1.1",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Automatically sends Bible verses at specific Philippine times",
@@ -25,19 +25,19 @@ function getPhilTime() {
   return new Date(utc + offset);
 }
 
-// 📌 Schedule (oras + dagdag na mensahe)
+// 📌 Schedule (oras + dagdag na mensahe) — gamit H:MM format
 const verseSchedule = {
-  "4:0": "🌅 Good morning! Start your day with God’s word.",
-  "8:0": "☀️ Start your day with faith and strength!",
-  "12:0": "🍽 Lunch time blessings! May God fill you with peace.",
-  "15:0": "⛅ Keep going, God is with you.",
-  "19:0": "🌇 Good evening! Stay blessed in His grace.",
-  "22:0": "🌙 Good night, rest in His peace."
+  "4:00": "🌅 Good morning! Start your day with God’s word.",
+  "8:00": "☀️ Start your day with faith and strength!",
+  "12:00": "🍽 Lunch time blessings! May God fill you with peace.",
+  "15:00": "⛅ Keep going, God is with you.",
+  "19:00": "🌇 Good evening! Stay blessed in His grace.",
+  "22:00": "🌙 Good night, rest in His peace."
 };
 
 // 🔹 Manual Command (/autobible)
 module.exports.run = async function ({ api, event }) {
-  const msg = 
+  const msg =
 `📖 AutoBible is automatic. Verses will be posted at:
 
 ⏰ 4:00 AM
@@ -63,7 +63,9 @@ module.exports.onLoad = function ({ api }) {
       const now = getPhilTime();
       const hour = now.getHours();
       const minute = now.getMinutes();
-      const key = `${hour}:${minute}`;
+      const key = `${hour}:${minute.toString().padStart(2, "0")}`; // ✅ Fixed H:MM format
+
+      console.log("⏰ Checking time:", key);
 
       if (!verseSchedule[key]) return; // only on schedule
       if (lastSentKey === key) return; // avoid duplicate within same minute
