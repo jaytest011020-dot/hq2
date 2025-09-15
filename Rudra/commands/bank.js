@@ -19,14 +19,14 @@ if (fs.existsSync(bankFile)) {
   fs.writeFileSync(bankFile, JSON.stringify(bankData, null, 2));
 }
 
-// Save function (hindi tatawagin kung walang changes)
+// Save function
 function saveBank() {
   fs.writeFileSync(bankFile, JSON.stringify(bankData, null, 2));
 }
 
 module.exports.config = {
   name: "bank",
-  version: "3.2.0",
+  version: "3.2.1",
   hasPermssion: 0,
   credits: "ChatGPT + Jaylord",
   description: "Bank system with file persistence (JSON)",
@@ -58,23 +58,28 @@ module.exports.handleEvent = async function ({ event }) {
 // 🔹 Run command
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
-  const command = args[0]?.toLowerCase();
+
+  // FIX: Default to "" kapag walang args
+  const command = args[0] ? args[0].toLowerCase() : "";
 
   const validArgs = ["", "all", "add"];
   if (!validArgs.includes(command)) {
     return api.sendMessage(
       "❌ Invalid usage.\n\n" +
-      "📌 Correct Usage:\n" +
-      "• /bank → check your balance\n" +
-      "• /bank all → show all balances\n" +
-      "• /bank add <uid> <amount> → add coins (admin only)",
+        "📌 Correct Usage:\n" +
+        "• /bank → check your balance\n" +
+        "• /bank all → show all balances\n" +
+        "• /bank add <uid> <amount> → add coins (admin only)",
       threadID
     );
   }
 
   // 📋 Show all accounts
   if (command === "all") {
-    const accounts = Object.entries(bankData).map(([uid, balance]) => ({ uid, balance }));
+    const accounts = Object.entries(bankData).map(([uid, balance]) => ({
+      uid,
+      balance,
+    }));
 
     accounts.sort((a, b) => b.balance - a.balance);
 
@@ -123,7 +128,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
   }
 
   // 📌 Default → show own balance
-  if (!bankData[senderID]) bankData[senderID] = 0;
+  if (!bankData[senderID]) bankData[senderID] = 0; // Auto-create account
   saveBank();
 
   let name;
