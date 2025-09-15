@@ -24,9 +24,9 @@ function saveBans() {
 
 module.exports.config = {
   name: "ban",
-  version: "3.0.0",
+  version: "3.0.1",
   hasPermssion: 0,
-  credits: "ChatGPT (refactored)",
+  credits: "ChatGPT",
   description: "Ban/unban users (persistent per group)",
   commandCategory: "group",
   usages: "ban [@tag|reply] reason | listban | unban <uid> | reset",
@@ -38,7 +38,6 @@ module.exports.handleEvent = async function ({ api, event }) {
   const { threadID } = event;
   if (!threadID) return;
 
-  // Initialize group record kung wala pa
   if (!bans[threadID]) {
     bans[threadID] = { warns: {}, banned: [] };
     saveBans();
@@ -50,11 +49,12 @@ module.exports.handleEvent = async function ({ api, event }) {
     for (const uid of addedIDs) {
       if (bans[threadID].banned.includes(uid)) {
         try {
-          await api.removeUserFromGroup(uid, threadID);
+          const name = (await api.getUserInfo(uid))[uid]?.name || uid;
           api.sendMessage(
-            `⛔ User ${uid} is banned and cannot rejoin this group.`,
+            `⛔ ${name} is banned and cannot rejoin this group.`,
             threadID
           );
+          await api.removeUserFromGroup(uid, threadID);
         } catch (e) {
           console.error("Ban enforce error:", e);
         }
@@ -80,7 +80,8 @@ module.exports.run = async function ({ api, event, args }) {
     }
     let msg = "⛔ Banned users:\n";
     for (const uid of list) {
-      msg += `• ${uid}\n`;
+      const name = (await api.getUserInfo(uid))[uid]?.name || uid;
+      msg += `• ${name}\n`;
     }
     return api.sendMessage(msg, threadID, messageID);
   }
@@ -94,7 +95,8 @@ module.exports.run = async function ({ api, event, args }) {
     }
     bans[threadID].banned = bans[threadID].banned.filter(id => id !== uid);
     saveBans();
-    return api.sendMessage(`✅ User ${uid} unbanned.`, threadID, messageID);
+    const name = (await api.getUserInfo(uid))[uid]?.name || uid;
+    return api.sendMessage(`✅ ${name} has been unbanned.`, threadID, messageID);
   }
 
   // reset
@@ -115,6 +117,7 @@ module.exports.run = async function ({ api, event, args }) {
   }
 
   const reason = args.slice(1).join(" ") || "No reason provided";
+
   for (const uid of targetIDs) {
     if (!bans[threadID].banned.includes(uid)) {
       bans[threadID].banned.push(uid);
@@ -123,6 +126,12 @@ module.exports.run = async function ({ api, event, args }) {
     bans[threadID].warns[uid].push(reason);
 
     try {
+      const name = (await api.getUserInfo(uid))[uid]?.name || uid;
+      // ✅ Announce reason bago i-kick
+      await api.sendMessage(
+        `⛔ ${name} has been banned.\n📌 Reason: ${reason}`,
+        threadID
+      );
       await api.removeUserFromGroup(uid, threadID);
     } catch (e) {
       console.error("Remove error:", e);
@@ -130,9 +139,4 @@ module.exports.run = async function ({ api, event, args }) {
   }
 
   saveBans();
-  return api.sendMessage(
-    `⛔ User(s) banned: ${targetIDs.join(", ")}\nReason: ${reason}`,
-    threadID,
-    messageID
-  );
 };
