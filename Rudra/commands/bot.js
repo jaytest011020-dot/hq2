@@ -2,66 +2,68 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "bot",
-  version: "2.3.2",
+  version: "1.0.2",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Chat with Simsimi AI (stable, no history)",
-  commandCategory: "ai",
-  usePrefix: true,
-  usages: "bot <message>",
-  cooldowns: 5,
+  description: "Talk to the bot",
+  commandCategory: "AI",
+  usages: "Just mention bot"
 };
 
-// 🔹 Command with prefix
-module.exports.run = async function ({ api, event, args }) {
-  let userMessage = args.join(" ").trim();
-  if (!userMessage) {
-    return api.sendMessage("❌ Please type a message.", event.threadID, event.messageID);
-  }
-  return simsimiReply(api, event, userMessage);
-};
-
-// 🔹 Auto-detect kapag may "jandel" o "bot"
 module.exports.handleEvent = async function ({ api, event }) {
-  const rawMessage = event.body?.trim();
-  if (!rawMessage) return;
+  try {
+    const body = (event.body || "").trim();
+    if (!body) return;
 
-  // Case: message contains "jandel" or "bot"
-  if (/\bjandel\b/i.test(rawMessage) || /\bbot\b/i.test(rawMessage)) {
-    let cleaned = rawMessage.replace(/\bjandel\b/gi, "").replace(/\bbot\b/gi, "").trim();
-    if (!cleaned) cleaned = "hello there";
-    return simsimiReply(api, event, cleaned);
+    const sender = String(event.senderID);
+    const threadID = event.threadID;
+
+    // ignore commands (/ or !)
+    if (/^\s*[\/!]/.test(body)) return;
+
+    // detect bot's own ID safely
+    let botID;
+    try {
+      botID = typeof api.getCurrentUserID === "function"
+        ? String(api.getCurrentUserID())
+        : String(api.getCurrentUserID || "");
+    } catch {
+      botID = "";
+    }
+    if (sender === botID) return;
+
+    // trigger word "bot"
+    if (!/\bbot\b/i.test(body)) return;
+
+    // remove the word "bot" from message
+    let cleaned = body.replace(/\bbot\b/gi, "").trim();
+    if (!cleaned) cleaned = "hello";
+
+    // call external API
+    const API_URL = "https://daikyu-api.up.railway.app/api/sim-simi";
+    let reply;
+    try {
+      const res = await axios.get(API_URL, {
+        params: { talk: cleaned },
+        timeout: 20_000
+      });
+      reply = res.data?.response || null;
+    } catch (err) {
+      console.error("⚠️ Bot API error:", err?.message || err);
+    }
+
+    // fallback message if API fails
+    if (!reply) {
+      reply = "🤖 Hindi ako makareply ngayon, try ulit mamaya.";
+    }
+
+    // ✅ reply directly to user’s message
+    return api.sendMessage(
+      reply,
+      threadID,
+      event.messageID
+    );
+  } catch (e) {
+    console.error("❌ Bot Fatal Error:", e);
   }
 };
-
-// 🔹 Simsimi handler (no history)
-async function simsimiReply(api, event, userMessage) {
-  api.setMessageReaction("🤖", event.messageID, () => {}, true);
-
-  let reply = null;
-
-  try {
-    let res = await axios.get("https://simsimi.ooguy.com/sim", {
-      params: { query: userMessage, apikey: "937e288d38e944108cc7c3de462fc35f6ce5a865" },
-      timeout: 8000
-    });
-
-    reply = res.data?.respond;
-  } catch (e) {
-    console.error("❌ Simsimi API Error:", e.message);
-  }
-
-  // 🔹 Fallback if no reply
-  if (!reply || reply.length < 2) {
-    const fallbacks = [
-      "😅 I can’t connect to Simsimi right now.",
-      "🤖 Sorry, the Simsimi server seems down.",
-      "😕 I don’t understand, can you repeat?",
-      "⚠️ Simsimi error, but I’m still here."
-    ];
-    reply = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-  }
-
-  api.setMessageReaction("✅", event.messageID, () => {}, true);
-  return api.sendMessage(reply, event.threadID, event.messageID);
-}
