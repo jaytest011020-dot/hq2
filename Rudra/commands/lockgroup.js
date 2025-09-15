@@ -22,7 +22,7 @@ function saveData(data) {
 
 module.exports.config = {
   name: "lockgroup",
-  version: "2.0.1",
+  version: "2.0.2",
   role: 1,
   author: "ChatGPT",
   cooldowns: 5,
@@ -35,7 +35,11 @@ module.exports.run = async function ({ api, event, args }) {
   const data = loadData();
 
   if (!args[0]) {
-    return api.sendMessage("❗ Usage: /lockgroup name | remove", threadID, messageID);
+    return api.sendMessage(
+      "❗ Usage: /lockgroup name | remove",
+      threadID,
+      { messageID }
+    );
   }
 
   if (args[0] === "name") {
@@ -45,17 +49,25 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage(
       `🔒 Group name is now locked to: "${info.threadName}"`,
       threadID,
-      messageID
+      { messageID }
     );
   }
 
   if (args[0] === "remove") {
     delete data[threadID];
     saveData(data);
-    return api.sendMessage("🔓 Group name lock removed.", threadID, messageID);
+    return api.sendMessage(
+      "🔓 Group name lock removed.",
+      threadID,
+      { messageID }
+    );
   }
 
-  return api.sendMessage("❌ Invalid option. Use: name | remove", threadID, messageID);
+  return api.sendMessage(
+    "❌ Invalid option. Use: name | remove",
+    threadID,
+    { messageID }
+  );
 };
 
 // === Auto enforce lock ===
