@@ -1,14 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 
-// Paths
+// Path ng data file
 const dataFile = path.join(__dirname, "check.json");
-const backupDir = path.join(__dirname, "check_backups");
-
-// Ensure backup folder exists
-if (!fs.existsSync(backupDir)) {
-  fs.mkdirSync(backupDir);
-}
 
 // Global in-memory data
 let data = {};
@@ -23,16 +17,17 @@ if (fs.existsSync(dataFile)) {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// Save data (persistent)
+// Save data to file (real-time)
 function saveData() {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// Add message count
+// Add message count (per GC, per user)
 function addMessage(threadID, userID) {
   if (!data[threadID]) data[threadID] = {};
   if (!data[threadID][userID]) data[threadID][userID] = 0;
   data[threadID][userID]++;
+  saveData(); // 🔹 auto save agad after update
 }
 
 // Get all message counts for a thread
@@ -44,28 +39,13 @@ function getThreadData(threadID) {
   }));
 }
 
-// 🔹 Auto-save every 1 minute
-setInterval(saveData, 60 * 1000);
-
-// 🔹 Auto-backup every 5 minutes
-setInterval(() => {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupFile = path.join(backupDir, `check_backup_${timestamp}.json`);
-  try {
-    fs.copyFileSync(dataFile, backupFile);
-    console.log(`[Backup] Saved to ${backupFile}`);
-  } catch (e) {
-    console.error("[Backup Error]", e);
-  }
-}, 5 * 60 * 1000);
-
 // === Command Config ===
 module.exports.config = {
   name: "check",
-  version: "2.1.0",
+  version: "2.2.0",
   hasPermssion: 0,
   credits: "ChatGPT + Priyansh Rajput",
-  description: "Interactive message check (persistent + backup)",
+  description: "Interactive message check (persistent per GC)",
   commandCategory: "Utilities",
   usages: "check / check all / check rank",
   cooldowns: 5,
@@ -104,7 +84,7 @@ const getRankName = (count) => {
 module.exports.handleEvent = function ({ event }) {
   const { threadID, senderID } = event;
   if (!threadID || !senderID) return;
-  addMessage(threadID, senderID);
+  addMessage(threadID, senderID); // save agad
 };
 
 // 🔹 Run check command
