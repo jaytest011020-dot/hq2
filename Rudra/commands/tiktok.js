@@ -2,7 +2,7 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "tiktok",
-  version: "1.0.1",
+  version: "1.0.2",
   hasPermission: 0,
   credits: "ChatGPT",
   description: "Fetch TikTok profile info",
@@ -46,11 +46,7 @@ module.exports.run = async function ({ api, event, args }) {
 ❤️ Hearts: ${info.heartCount}
 👍 Likes: ${info.diggCount}`;
 
-    return api.sendMessage(
-      { body: msg, attachment: await global.utils.getStreamFromURL(info.avatarLarger) },
-      threadID,
-      messageID
-    );
+    return api.sendMessage(msg, threadID, messageID);
 
   } catch (err) {
     console.error("TikTok error:", err.message);
