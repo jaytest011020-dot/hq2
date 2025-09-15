@@ -13,6 +13,7 @@ function loadData() {
     return {};
   }
 }
+
 function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
@@ -20,7 +21,7 @@ function saveData(data) {
 module.exports.config = {
   name: "lockname",
   version: "1.3.0",
-  hasPermssion: 0, // anyone can call, but we check inside
+  hasPermssion: 0, // Anyone can call the command, but we check inside
   credits: "ChatGPT",
   cooldowns: 5,
   description: "Lock the group name and auto-revert if someone changes it",
@@ -64,31 +65,4 @@ module.exports.run = async function ({ api, event, args }) {
   saveData(data);
 
   return api.sendMessage(`🔒 Group name is now locked to: "${newName}"`, threadID, messageID);
-};
-
-// === Event Listener ===
-module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, author, logMessageType, logMessageData } = event;
-  if (logMessageType !== "log:thread-name") return;
-
-  const data = loadData();
-  if (!data[threadID]) return;
-
-  const lockedName = data[threadID].name;
-  const newName = logMessageData?.name || "";
-
-  if (newName !== lockedName) {
-    try {
-      await api.setTitle(lockedName, threadID);
-      const userInfo = await api.getUserInfo(author);
-      const changerName = userInfo[author]?.name || author;
-      api.sendMessage(
-        `⚠️ ${changerName} tried to change the group name to "${newName}".\n` +
-        `🔒 Reverted back to locked name: "${lockedName}"`,
-        threadID
-      );
-    } catch (err) {
-      console.error("❌ Error reverting group name:", err.message);
-    }
-  }
 };
