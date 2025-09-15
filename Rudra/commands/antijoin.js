@@ -5,7 +5,7 @@ module.exports.config = {
     hasPermssion: 1,
     description: "Turn off antijoin",
     usages: "antijoin on/off",
-    commandCategory: "system",
+    commandCategory: "admin",
     cooldowns: 0
 };
 
