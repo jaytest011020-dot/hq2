@@ -9,7 +9,7 @@ module.exports.config = {
   credits: "Thọ & Mod By DuyVuong + ChatGPT",
   description: "Resends Messages with sender name",
   usePrefix: true,
-  commandCategory: "general",
+  commandCategory: "system",
   usages: "resend",
   cooldowns: 0,
   hide: true,
