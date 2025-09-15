@@ -1,5 +1,5 @@
 module.exports.config = {
-  name: "petcalc",
+  name: "petcal",
   version: "2.3.3",
   hasPermission: 0,
   credits: "ChatGPT",
