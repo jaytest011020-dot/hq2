@@ -1,11 +1,12 @@
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.1.0",
-  credits: "Kim Joseph DG Bien (fixed by ChatGPT)",
-  description: "Join Notification with proper member count and names",
+  version: "1.2.0",
+  credits: "Kim Joseph DG Bien (fixed & updated by ChatGPT)",
+  description: "Join Notification with API-generated welcome photo",
   dependencies: {
-    "fs-extra": ""
+    "fs-extra": "",
+    "request": ""
   }
 };
 
@@ -18,7 +19,11 @@ module.exports.run = async function({ api, event }) {
 
   // If bot was added
   if (addedParticipants.some(i => i.userFbId == api.getCurrentUserID())) {
-    api.changeNickname(`𝗕𝗢𝗧 ${global.config.BOTNAME} 【 ${global.config.PREFIX} 】`, threadID, api.getCurrentUserID());
+    api.changeNickname(
+      `𝗕𝗢𝗧 ${global.config.BOTNAME} 【 ${global.config.PREFIX} 】`,
+      threadID,
+      api.getCurrentUserID()
+    );
     return api.sendMessage(
       `BOT CONNECTED!!\n\nThank you for using my BOT\nUse ${global.config.PREFIX}help to see other commands\n\nIf you notice an error in the bot, just report it using: ${global.config.PREFIX}callad or request a command!`,
       threadID
@@ -26,13 +31,10 @@ module.exports.run = async function({ api, event }) {
   }
 
   try {
-    // Get thread info to know total members
+    // Get thread info
     const threadInfo = await api.getThreadInfo(threadID);
     const threadName = threadInfo.threadName || "this group";
     const totalMembers = threadInfo.participantIDs.length;
-
-    let nameArray = [];
-    let mentions = [];
 
     for (let newParticipant of addedParticipants) {
       const userID = newParticipant.userFbId;
@@ -40,42 +42,27 @@ module.exports.run = async function({ api, event }) {
       const userName = Object.values(userInfo)[0]?.name || "Friend";
 
       if (userID !== api.getCurrentUserID()) {
-        nameArray.push(userName);
-        mentions.push({ tag: userName, id: userID, fromIndex: 0 });
+        const msg = `Hello ${userName}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group, please enjoy!`;
+
+        // Build API URL
+        const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
+
+        const filePath = __dirname + `/cache/welcome_${userID}.png`;
+
+        const callback = () => {
+          api.sendMessage({
+            body: msg,
+            attachment: fs.createReadStream(filePath),
+            mentions: [{ tag: userName, id: userID }]
+          }, threadID, () => fs.unlinkSync(filePath));
+        };
+
+        // Download image from API
+        request(apiUrl)
+          .pipe(fs.createWriteStream(filePath))
+          .on("close", callback);
       }
     }
-
-    // Format names nicely: "Alice", "Alice and Bob", "Alice, Bob and Charlie"
-    let formattedNames = "";
-    if (nameArray.length === 1) formattedNames = nameArray[0];
-    else if (nameArray.length === 2) formattedNames = `${nameArray[0]} and ${nameArray[1]}`;
-    else if (nameArray.length > 2) {
-      formattedNames = `${nameArray.slice(0, -1).join(", ")} and ${nameArray.slice(-1)}`;
-    }
-
-    const msg = `Hello ${formattedNames}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group, please enjoy!`;
-
-    // Random GIF for welcome
-    const links = [
-      "https://i.imgur.com/S2OBX1Q.gif",
-      "https://i.imgur.com/QBToMbX.gif",
-      "https://i.imgur.com/Yh5HVnI.gif",
-      "https://i.imgur.com/6xTTMU7.gif"
-    ];
-    const randomLink = links[Math.floor(Math.random() * links.length)];
-
-    const callback = () => {
-      api.sendMessage({
-        body: msg,
-        attachment: fs.createReadStream(__dirname + "/cache/welcome.gif"),
-        mentions
-      }, threadID, () => fs.unlinkSync(__dirname + "/cache/welcome.gif"));
-    };
-
-    request(encodeURI(randomLink))
-      .pipe(fs.createWriteStream(__dirname + "/cache/welcome.gif"))
-      .on("close", callback);
-
   } catch (err) {
     console.error("ERROR in joinNoti module:", err);
   }
