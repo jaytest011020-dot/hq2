@@ -1,35 +1,11 @@
-// === JSON-based Bank System (Safe Auto-Create) ===
-const fs = require("fs");
-const path = require("path");
-
-// File kung saan i-save ang data
-const bankFile = path.join(__dirname, "bank.json");
-
-// Load data kung meron, kung wala auto-create {}
-let bankData;
-if (fs.existsSync(bankFile)) {
-  try {
-    const raw = fs.readFileSync(bankFile, "utf8");
-    bankData = raw ? JSON.parse(raw) : {};
-  } catch {
-    bankData = {};
-  }
-} else {
-  bankData = {};
-  fs.writeFileSync(bankFile, JSON.stringify(bankData, null, 2));
-}
-
-// Save function
-function saveBank() {
-  fs.writeFileSync(bankFile, JSON.stringify(bankData, null, 2));
-}
+const { setData, getData } = require("./database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "3.2.1",
+  version: "4.0.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaylord",
-  description: "Bank system with file persistence (JSON)",
+  description: "Bank system with Firebase persistence",
   commandCategory: "Economy",
   usages: "/bank, /bank all, /bank add <uid> <amount>",
   cooldowns: 3,
@@ -47,19 +23,17 @@ function formatBalance(user, balance) {
 module.exports.handleEvent = async function ({ event }) {
   const { senderID, body } = event;
   if (!senderID || !body) return;
-
   if (body.trim().startsWith("/")) return;
 
-  if (!bankData[senderID]) bankData[senderID] = 0;
-  bankData[senderID] += 5;
-  saveBank();
+  let cash = (await getData(`bank/${senderID}`)) || 0;
+  cash += 5;
+  await setData(`bank/${senderID}`, cash);
 };
 
 // 🔹 Run command
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
 
-  // FIX: Default to "" kapag walang args
   const command = args[0] ? args[0].toLowerCase() : "";
 
   const validArgs = ["", "all", "add"];
@@ -76,7 +50,8 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
   // 📋 Show all accounts
   if (command === "all") {
-    const accounts = Object.entries(bankData).map(([uid, balance]) => ({
+    const data = (await getData("bank")) || {};
+    const accounts = Object.entries(data).map(([uid, balance]) => ({
       uid,
       balance,
     }));
@@ -110,9 +85,9 @@ module.exports.run = async function ({ api, event, args, Users }) {
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID);
     }
 
-    if (!bankData[targetUID]) bankData[targetUID] = 0;
-    bankData[targetUID] += amount;
-    saveBank();
+    let cash = (await getData(`bank/${targetUID}`)) || 0;
+    cash += amount;
+    await setData(`bank/${targetUID}`, cash);
 
     let name;
     try {
@@ -128,8 +103,8 @@ module.exports.run = async function ({ api, event, args, Users }) {
   }
 
   // 📌 Default → show own balance
-  if (!bankData[senderID]) bankData[senderID] = 0; // Auto-create account
-  saveBank();
+  let balance = (await getData(`bank/${senderID}`)) || 0;
+  await setData(`bank/${senderID}`, balance);
 
   let name;
   try {
@@ -138,5 +113,5 @@ module.exports.run = async function ({ api, event, args, Users }) {
     name = senderID;
   }
 
-  return api.sendMessage(formatBalance(name, bankData[senderID]), threadID);
+  return api.sendMessage(formatBalance(name, balance), threadID);
 };
