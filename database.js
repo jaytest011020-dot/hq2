@@ -1,26 +1,17 @@
 // database.js
-const { initializeApp } = require("firebase/app");
-const { getDatabase, ref, set, get, child } = require("firebase/database");
+const admin = require("firebase-admin");
+const serviceAccount = require("./serviceAccountKey.json"); // yung JSON na na-download mo
 
-// Firebase config (galing sa google-services.json mo)
-const firebaseConfig = {
-  apiKey: "AIzaSyCOGNYc3D7VSWlp3uTC9HCizoUTmaFpuqM",
-  authDomain: "mybot-d79df.firebaseapp.com",
-  databaseURL: "https://mybot-d79df-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "mybot-d79df",
-  storageBucket: "mybot-d79df.appspot.com",
-  messagingSenderId: "215753443154",
-  appId: "1:215753443154:web:b25322ec0b359c5fa15c8b"
-};
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://mybot-d79df-default-rtdb.asia-southeast1.firebasedatabase.app"
+});
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const db = admin.database();
 
-// Function to set data
 async function setData(path, value) {
   try {
-    await set(ref(db, path), value);
+    await db.ref(path).set(value);
     return true;
   } catch (err) {
     console.error("Error setting data:", err);
@@ -28,15 +19,10 @@ async function setData(path, value) {
   }
 }
 
-// Function to get data
 async function getData(path) {
   try {
-    const snapshot = await get(child(ref(db), path));
-    if (snapshot.exists()) {
-      return snapshot.val();
-    } else {
-      return null;
-    }
+    const snapshot = await db.ref(path).once("value");
+    return snapshot.exists() ? snapshot.val() : null;
   } catch (err) {
     console.error("Error getting data:", err);
     return null;
