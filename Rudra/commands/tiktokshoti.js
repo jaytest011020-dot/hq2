@@ -3,13 +3,13 @@ const fs = require("fs-extra");
 const path = require("path");
 
 module.exports.config = {
-  name: "tiktok",
+  name: "tiktokshoti",
   version: "1.0.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Get random TikTok video from API",
   commandCategory: "fun",
-  usages: "/tiktok",
+  usages: "/tiktokshoti",
   cooldowns: 5,
 };
 
