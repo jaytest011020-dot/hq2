@@ -1,13 +1,13 @@
 const axios = require("axios");
 
 module.exports.config = {
-  name: "tiktok",
+  name: "tiktokstalk",
   version: "1.0.3",
   hasPermssion: 0, // ✅ tama spelling
   credits: "ChatGPT",
   description: "Fetch TikTok profile info",
   commandCategory: "tools", // safe category name
-  usages: "/tiktok <username>",
+  usages: "/tiktokstalk <username>",
   cooldowns: 5,
 };
 
