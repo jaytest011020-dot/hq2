@@ -1,11 +1,12 @@
 const fs = global.nodemodule["fs-extra"];
 const axios = global.nodemodule["axios"];
+const path = require("path");
 
 module.exports.config = {
   name: "resend",
-  version: "2.1.1",
+  version: "2.2.0",
   hasPermssion: 1,
-  credits: "Thọ & Mod By DuyVuong + ChatGPT (fixed)",
+  credits: "Thọ & Mod By DuyVuong + ChatGPT (fixed)",
   description: "Resends Messages with sender name",
   usePrefix: true,
   commandCategory: "system",
@@ -69,19 +70,33 @@ module.exports.handleEvent = async function ({ event, api, Users }) {
         try {
           num += 1;
 
+          // ✅ Skip kung walang URL
+          if (!i || !i.url) continue;
+
           // Get extension from URL
           const url = i.url;
           const ext = url.split(".").pop().split("?")[0] || "jpg";
-          const pathFile = __dirname + `/cache/${num}.${ext}`;
+
+          // ✅ Save sa commands/cache/
+          const cacheDir = path.join(__dirname, "cache");
+          if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+
+          const pathFile = path.join(cacheDir, `resend_${Date.now()}_${num}.${ext}`);
 
           // Download file
           const data = (await axios.get(url, { responseType: "arraybuffer" })).data;
-          fs.writeFileSync(pathFile, Buffer.from(data, "utf-8"));
+          fs.writeFileSync(pathFile, Buffer.from(data, "binary"));
           msg.attachment.push(fs.createReadStream(pathFile));
+
+          // ✅ Auto delete file after send
+          msg.attachment[msg.attachment.length - 1].on("close", () => {
+            if (fs.existsSync(pathFile)) fs.unlinkSync(pathFile);
+          });
         } catch (e) {
           console.error("Error downloading attachment:", e);
         }
       }
+
       api.sendMessage(msg, threadID);
     }
   }
