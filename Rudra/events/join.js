@@ -1,7 +1,7 @@
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.2.0",
+  version: "1.2.1",
   credits: "Kim Joseph DG Bien (fixed & updated by ChatGPT)",
   description: "Join Notification with API-generated welcome photo",
   dependencies: {
@@ -39,7 +39,7 @@ module.exports.run = async function({ api, event }) {
     for (let newParticipant of addedParticipants) {
       const userID = newParticipant.userFbId;
       const userInfo = await api.getUserInfo(userID);
-      const userName = Object.values(userInfo)[0]?.name || "Friend";
+      const userName = userInfo[userID]?.name || "Friend";
 
       if (userID !== api.getCurrentUserID()) {
         const msg = `Hello ${userName}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group, please enjoy!`;
@@ -57,13 +57,16 @@ module.exports.run = async function({ api, event }) {
           }, threadID, () => fs.unlinkSync(filePath));
         };
 
+        console.log(`📥 Generating welcome for ${userName} (${userID})`); // debug log
+
         // Download image from API
         request(apiUrl)
           .pipe(fs.createWriteStream(filePath))
-          .on("close", callback);
+          .on("close", callback)
+          .on("error", (err) => console.error("❌ Error downloading image:", err));
       }
     }
   } catch (err) {
-    console.error("ERROR in joinNoti module:", err);
+    console.error("❌ ERROR in joinNoti module:", err);
   }
 };
