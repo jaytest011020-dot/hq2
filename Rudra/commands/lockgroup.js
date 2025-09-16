@@ -1,9 +1,12 @@
 const fs = require("fs");
-let lockedSettings = {};
+
+// Gumamit ng global para shared sa lahat ng file
+if (!global.lockedSettings) global.lockedSettings = {};
+let lockedSettings = global.lockedSettings;
 
 module.exports.config = {
   name: "lockgroup",
-  version: "1.0.0",
+  version: "1.0.1",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Lock/unlock group name & photo",
@@ -46,5 +49,3 @@ module.exports.run = async ({ api, event, args }) => {
     return api.sendMessage("🔓 Lock removed.", threadID, messageID);
   }
 };
-
-module.exports.lockedSettings = lockedSettings;
