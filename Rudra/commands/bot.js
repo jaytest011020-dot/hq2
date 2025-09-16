@@ -2,7 +2,7 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "bot",
-  version: "2.3.3",
+  version: "2.3.4",
   hasPermission: 0,
   credits: "ChatGPT",
   description: "Auto Simsimi reply when 'bot' or 'jandel' is mentioned, or when replying to Simsimi's message",
@@ -46,22 +46,22 @@ module.exports.handleEvent = async function ({ api, event }) {
     let cleaned = body.replace(/\b(bot|jandel)\b/gi, "").trim();
     if (!cleaned) cleaned = "hello";
 
-    // 🔗 Call Simsimi API
-    const API_URL = "https://daikyu-api.up.railway.app/api/sim-simi";
+    // 🔗 Call new Simsimi API
+    const API_URL = "https://urangkapolka.vercel.app/api/simsimi";
     let reply;
     try {
       const res = await axios.get(API_URL, {
-        params: { talk: cleaned },
+        params: { query: cleaned },
         timeout: 20000,
       });
-      reply = res.data?.response || null;
+      reply = res.data?.result?.reply || null;
     } catch (err) {
       console.error("SimSimi API error:", err.message);
     }
 
     if (!reply) reply = "Hindi ako makareply ngayon, try ulit mamaya.";
 
-    // ✅ FIX: add callback placeholder para hindi mag-error
+    // ✅ Send reply
     return api.sendMessage(`${reply} 🤖`, threadID, () => {}, event.messageID);
   } catch (e) {
     console.error("bot.js fatal:", e);
