@@ -1,8 +1,8 @@
 module.exports.config = {
   name: "leave",
   eventType: ["log:unsubscribe"],
-  version: "1.3.1",
-  credits: "Mirai Team / ChatGPT (fixed)",
+  version: "1.3.2",
+  credits: "Mirai Team / ChatGPT (updated)",
   description: "Notify when someone leaves or is kicked, with funny reasons, current member count, and mentions",
   dependencies: {
     "fs-extra": "",
@@ -15,15 +15,17 @@ module.exports.run = async function ({ api, event, Threads }) {
 
   const fs = global.nodemodule["fs-extra"];
   const request = global.nodemodule["request"];
+  const path = require("path");
+
   const { threadID } = event;
   const leftID = event.logMessageData.leftParticipantFbId;
 
   try {
-    // ✅ Get user info safely
+    // Get user info safely
     const userInfo = await api.getUserInfo(leftID);
     const name = userInfo[leftID]?.name || "Friend";
 
-    // ✅ Determine reason
+    // Reason
     let type = "";
     if (event.author == leftID) {
       const funnyReasons = [
@@ -45,14 +47,14 @@ module.exports.run = async function ({ api, event, Threads }) {
       type = `\n\nReason: ${funnyKickReasons[Math.floor(Math.random() * funnyKickReasons.length)]}\nKicked by Administrator`;
     }
 
-    // ✅ Get current member count
+    // Member count
     const threadInfo = await api.getThreadInfo(threadID);
     const memberCount = threadInfo.participantIDs.length;
 
-    // ✅ Mentions
+    // Mentions
     const mentions = [{ tag: name, id: leftID, fromIndex: 0 }];
 
-    // ✅ Check custom leave message (fallback if none)
+    // Custom leave msg
     let data;
     try {
       data = global.data.threadData.get(parseInt(threadID)) || (await Threads.getData(threadID)).data;
@@ -67,28 +69,33 @@ module.exports.run = async function ({ api, event, Threads }) {
           .replace(/\{type}/g, type)
           .replace(/\{count}/g, memberCount);
 
-    // ✅ Pick random image
-    const link = [
+    // Random image
+    const links = [
       "https://i.imgur.com/U2Uqx9J.jpg",
       "https://i.imgur.com/vtg9SY8.jpg",
       "https://i.imgur.com/FTM9eHt.jpg",
       "https://i.imgur.com/VGb89J8.jpg"
     ];
-    const imgPath = __dirname + "/cache/leave_image.jpg";
-    const callback = () =>
-      api.sendMessage(
-        { body: msg, attachment: fs.createReadStream(imgPath), mentions },
-        threadID,
-        () => fs.unlinkSync(imgPath)
-      );
 
-    // ✅ Download image and send
-    request(encodeURI(link[Math.floor(Math.random() * link.length)]))
-      .pipe(fs.createWriteStream(imgPath))
+    // ✅ Save into commands/cache
+    const filePath = path.join(__dirname, "..", "commands", "cache", `leave_${leftID}.jpg`);
+
+    if (!fs.existsSync(path.dirname(filePath))) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    }
+
+    const callback = () => {
+      api.sendMessage(
+        { body: msg, attachment: fs.createReadStream(filePath), mentions },
+        threadID,
+        () => fs.unlinkSync(filePath)
+      );
+    };
+
+    request(encodeURI(links[Math.floor(Math.random() * links.length)]))
+      .pipe(fs.createWriteStream(filePath))
       .on("close", callback)
       .on("error", (err) => console.error("❌ Error downloading leave image:", err));
-
-    console.log(`📤 Leave message sent for ${name} (${leftID})`);
 
   } catch (err) {
     console.error("❌ ERROR in leave module:", err);
