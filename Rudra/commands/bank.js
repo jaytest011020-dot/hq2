@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "4.2.0",
+  version: "4.3.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaylord",
   description: "Bank system with Firebase persistence",
@@ -27,15 +27,15 @@ module.exports.handleEvent = async function ({ event, Users }) {
 
   let userData = await getData(`bank/${senderID}`);
 
+  let name;
+  try {
+    name = await Users.getNameUser(senderID);
+  } catch {
+    name = senderID;
+  }
+
   // Kung wala pang account → gumawa
   if (!userData) {
-    let name;
-    try {
-      name = await Users.getNameUser(senderID);
-    } catch {
-      name = senderID;
-    }
-
     await setData(`bank/${senderID}`, {
       balance: 5,
       name
@@ -47,7 +47,10 @@ module.exports.handleEvent = async function ({ event, Users }) {
   let balance = userData.balance || 0;
   balance += 5;
 
-  await setData(`bank/${senderID}/balance`, balance);
+  await setData(`bank/${senderID}`, {
+    balance,
+    name // ✅ auto-update name lagi
+  });
 };
 
 // 🔹 Run command
@@ -70,12 +73,29 @@ module.exports.run = async function ({ api, event, args, Users }) {
   // 📋 Show all accounts
   if (command === "all") {
     const data = (await getData("bank")) || {};
-    const accounts = Object.entries(data).map(([uid, info]) => ({
-      uid,
-      balance: info.balance || 0,
-      name: info.name || uid
-    }));
+    const accounts = [];
 
+    for (const [uid, info] of Object.entries(data)) {
+      let name;
+      try {
+        name = await Users.getNameUser(uid);
+      } catch {
+        name = uid;
+      }
+
+      // auto-update name sa DB kung nag-iba
+      if (info.name !== name) {
+        await setData(`bank/${uid}/name`, name);
+      }
+
+      accounts.push({
+        uid,
+        balance: info.balance || 0,
+        name
+      });
+    }
+
+    // sort by balance (desc)
     accounts.sort((a, b) => b.balance - a.balance);
 
     let msg = `📋 All Bank Accounts (Total: ${accounts.length}) 📋\n`;
@@ -101,14 +121,14 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
     let userData = await getData(`bank/${targetUID}`);
 
-    if (!userData) {
-      let name;
-      try {
-        name = await Users.getNameUser(targetUID);
-      } catch {
-        name = targetUID;
-      }
+    let name;
+    try {
+      name = await Users.getNameUser(targetUID);
+    } catch {
+      name = targetUID;
+    }
 
+    if (!userData) {
       await setData(`bank/${targetUID}`, {
         balance: amount,
         name
@@ -122,10 +142,13 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
     // update balance lang
     let balance = (userData.balance || 0) + amount;
-    await setData(`bank/${targetUID}/balance`, balance);
+    await setData(`bank/${targetUID}`, {
+      balance,
+      name // ✅ update name para hindi mag-stay sa "Facebook user"
+    });
 
     return api.sendMessage(
-      `✅ Added 💰 ${amount.toLocaleString()} coins to ${userData.name}'s account.`,
+      `✅ Added 💰 ${amount.toLocaleString()} coins to ${name}'s account.`,
       threadID
     );
   }
@@ -133,14 +156,14 @@ module.exports.run = async function ({ api, event, args, Users }) {
   // 📌 Default → show own balance
   let userData = await getData(`bank/${senderID}`);
 
-  if (!userData) {
-    let name;
-    try {
-      name = await Users.getNameUser(senderID);
-    } catch {
-      name = senderID;
-    }
+  let name;
+  try {
+    name = await Users.getNameUser(senderID);
+  } catch {
+    name = senderID;
+  }
 
+  if (!userData) {
     await setData(`bank/${senderID}`, {
       balance: 0,
       name
@@ -149,5 +172,10 @@ module.exports.run = async function ({ api, event, args, Users }) {
     return api.sendMessage(formatBalance(name, 0), threadID);
   }
 
-  return api.sendMessage(formatBalance(userData.name, userData.balance || 0), threadID);
+  // ✅ Update name kung nag-iba
+  if (userData.name !== name) {
+    await setData(`bank/${senderID}/name`, name);
+  }
+
+  return api.sendMessage(formatBalance(name, userData.balance || 0), threadID);
 };
