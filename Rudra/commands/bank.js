@@ -9,23 +9,23 @@ module.exports.config = {
   description: "Bank system with UID checker (auto-update name on /bank)",
   usages: "/bank, /bank all, /bank add <uid> <amount>",
   commandCategory: "economy",
-  cooldowns: 3
+  cooldowns: 3,
 };
 
 // 🔑 Bot admins
 const BOT_ADMINS = ["61559999326713"];
 
-// helper para makuha name by UID
+// Helper function to fetch username by UID
 async function getUserName(uid, Users) {
   try {
     const name = await Users.getNameUser(uid);
-    return name || uid;
+    return name || uid; // Default to UID if no name found
   } catch {
-    return uid;
+    return uid; // Fallback if an error occurs
   }
 }
 
-// format balance message
+// Format balance message
 function formatBalance(user, balance) {
   return `🏦 Bank Account 🏦\n\n👤 ${user}\n💰 Balance: ${balance.toLocaleString()} coins`;
 }
@@ -34,18 +34,19 @@ module.exports.run = async ({ api, event, args, Users }) => {
   const { threadID, senderID, messageID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // ✅ kapag /bank all
+  // ✅ when the command is /bank all
   if (command === "all") {
     let allData = (await getData(`bank`)) || {};
     let results = [];
 
     for (let uid in allData) {
+      // Fetch username first
       let name = await getUserName(uid, Users);
 
-      // auto-update sa DB kung iba na name
+      // Auto-update name in DB if it differs
       if (allData[uid].name !== name) {
         allData[uid].name = name;
-        await setData(`bank/${uid}`, allData[uid]);
+        await setData(`bank/${uid}`, allData[uid]); // Save updated name
       }
 
       results.push({
@@ -59,7 +60,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
       return api.sendMessage("🏦 No accounts found in the bank.", threadID, messageID);
     }
 
-    // sort by balance
+    // Sort by balance (descending order)
     results.sort((a, b) => b.balance - a.balance);
 
     let msg = `📋 Bank Accounts (Total: ${results.length}) 📋\n`;
@@ -70,7 +71,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
     return api.sendMessage(msg, threadID, messageID);
   }
 
-  // ✅ kapag /bank add <uid> <amount>
+  // ✅ when the command is /bank add <uid> <amount>
   if (command === "add") {
     if (!BOT_ADMINS.includes(senderID)) {
       return api.sendMessage("❌ Only bot admins can add coins.", threadID, messageID);
@@ -83,13 +84,22 @@ module.exports.run = async ({ api, event, args, Users }) => {
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID, messageID);
     }
 
+    // Fetch username and current balance from DB
     let userData = (await getData(`bank/${targetUID}`)) || {
       uid: targetUID,
       name: await getUserName(targetUID, Users),
       balance: 0
     };
 
+    // Update balance
     userData.balance += amount;
+
+    // Update username if necessary
+    let freshName = await getUserName(targetUID, Users);
+    if (userData.name !== freshName) {
+      userData.name = freshName;
+    }
+
     await setData(`bank/${targetUID}`, userData);
 
     return api.sendMessage(
@@ -99,18 +109,18 @@ module.exports.run = async ({ api, event, args, Users }) => {
     );
   }
 
-  // ✅ kapag /bank (check own balance)
+  // ✅ when the command is just /bank (check own balance)
   let userData = (await getData(`bank/${senderID}`)) || {
     uid: senderID,
     name: await getUserName(senderID, Users),
     balance: 0
   };
 
-  // refresh name kung nagbago
+  // Fetch latest username if changed
   let freshName = await getUserName(senderID, Users);
   if (userData.name !== freshName) {
     userData.name = freshName;
-    await setData(`bank/${senderID}`, userData);
+    await setData(`bank/${senderID}`, userData); // Save updated name
   }
 
   return api.sendMessage(
