@@ -1,4 +1,4 @@
-const { setData, getData } = require("./database.js");
+const { setData, getData } = require("../database.js");
 
 module.exports.config = {
   name: "bank",
