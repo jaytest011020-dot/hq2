@@ -3,18 +3,15 @@ const moment = require("moment-timezone");
 
 module.exports.config = {
     name: "teach",
-    version: "1.0.0",
+    version: "1.0.2",
     hasPermssion: 0,
-    credits: "Priyansh Rajput + ChatGPT",
+    credits: "ChatGPT",
     description: "Teach SimSimi new responses",
     commandCategory: "Sim",
     usages: "",
     cooldowns: 2,
     dependencies: { "axios": "" }
 };
-
-// 🔑 Your API key
-const API_KEY = "937e288d38e944108cc7c3de462fc35f6ce5a865";
 
 module.exports.run = ({ api, event }) => {
     const { threadID, messageID, senderID } = event;
@@ -67,21 +64,22 @@ module.exports.handleReply = async ({ api, event, Users, handleReply }) => {
             api.unsendMessage(handleReply.messageID);
 
             try {
-                const res = await axios.get("https://simsimi.ooguy.com/teach", {
+                const res = await axios.get("https://urangkapolka.vercel.app/api/simsimi-teach", {
                     params: {
                         ask: content.ask,
-                        ans: content.ans,
-                        apikey: API_KEY
+                        answer: content.ans
                     }
                 });
 
-                if (res.data.status !== 200) {
-                    return send(`❌ Error teaching SimSimi:\n${JSON.stringify(res.data, null, 2)}`);
+                if (!res.data?.status) {
+                    return send("❌ Failed to teach SimSimi. Please try again.");
                 }
 
-                const timeZ = moment.tz("Asia/Kolkata").format("HH:mm:ss | DD/MM/YYYY");
+                const timeZ = moment.tz("Asia/Manila").format("HH:mm:ss | DD/MM/YYYY");
 
-                send(`[🤖 SIM] ✅ Successfully taught SimSimi!\n\n📝 Data:\n"${content.ask}" → "${content.ans}"\n👤 Teacher: ${by_name}\n⏱ Time: ${timeZ}`);
+                send(
+                    `[🤖 SIM] ✅ Successfully taught SimSimi!\n\n📝 "${content.ask}" → "${content.ans}"\n👤 Teacher: ${by_name}\n⏱ Time: ${timeZ}`
+                );
 
             } catch (err) {
                 send(`❌ API Error: ${err.response?.data?.message || err.message}`);
