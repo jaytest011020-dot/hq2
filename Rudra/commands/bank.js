@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "4.0.0",
+  version: "4.1.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaylord",
   description: "Bank system with Firebase persistence",
@@ -20,20 +20,32 @@ function formatBalance(user, balance) {
 }
 
 // 🔹 Auto add coins per normal message
-module.exports.handleEvent = async function ({ event }) {
+module.exports.handleEvent = async function ({ event, Users }) {
   const { senderID, body } = event;
   if (!senderID || !body) return;
   if (body.trim().startsWith("/")) return;
 
-  let cash = (await getData(`bank/${senderID}`)) || 0;
-  cash += 5;
-  await setData(`bank/${senderID}`, cash);
+  let userData = (await getData(`bank/${senderID}`)) || {};
+  let balance = userData.balance || 0;
+
+  balance += 5;
+
+  let name;
+  try {
+    name = await Users.getNameUser(senderID);
+  } catch {
+    name = senderID;
+  }
+
+  await setData(`bank/${senderID}`, {
+    balance,
+    name
+  });
 };
 
 // 🔹 Run command
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
-
   const command = args[0] ? args[0].toLowerCase() : "";
 
   const validArgs = ["", "all", "add"];
@@ -51,22 +63,17 @@ module.exports.run = async function ({ api, event, args, Users }) {
   // 📋 Show all accounts
   if (command === "all") {
     const data = (await getData("bank")) || {};
-    const accounts = Object.entries(data).map(([uid, balance]) => ({
+    const accounts = Object.entries(data).map(([uid, info]) => ({
       uid,
-      balance,
+      balance: info.balance || 0,
+      name: info.name || uid
     }));
 
     accounts.sort((a, b) => b.balance - a.balance);
 
     let msg = `📋 All Bank Accounts (Total: ${accounts.length}) 📋\n`;
     for (let i = 0; i < accounts.length; i++) {
-      let name;
-      try {
-        name = await Users.getNameUser(accounts[i].uid);
-      } catch {
-        name = accounts[i].uid;
-      }
-      msg += `\n${i + 1}. ${name} - 💰 ${accounts[i].balance.toLocaleString()} coins`;
+      msg += `\n${i + 1}. ${accounts[i].name} - 💰 ${accounts[i].balance.toLocaleString()} coins`;
     }
 
     return api.sendMessage(msg, threadID);
@@ -85,9 +92,9 @@ module.exports.run = async function ({ api, event, args, Users }) {
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID);
     }
 
-    let cash = (await getData(`bank/${targetUID}`)) || 0;
-    cash += amount;
-    await setData(`bank/${targetUID}`, cash);
+    let userData = (await getData(`bank/${targetUID}`)) || {};
+    let balance = userData.balance || 0;
+    balance += amount;
 
     let name;
     try {
@@ -96,6 +103,11 @@ module.exports.run = async function ({ api, event, args, Users }) {
       name = targetUID;
     }
 
+    await setData(`bank/${targetUID}`, {
+      balance,
+      name
+    });
+
     return api.sendMessage(
       `✅ Added 💰 ${amount.toLocaleString()} coins to ${name}'s account.`,
       threadID
@@ -103,8 +115,8 @@ module.exports.run = async function ({ api, event, args, Users }) {
   }
 
   // 📌 Default → show own balance
-  let balance = (await getData(`bank/${senderID}`)) || 0;
-  await setData(`bank/${senderID}`, balance);
+  let userData = (await getData(`bank/${senderID}`)) || {};
+  let balance = userData.balance || 0;
 
   let name;
   try {
@@ -112,6 +124,11 @@ module.exports.run = async function ({ api, event, args, Users }) {
   } catch {
     name = senderID;
   }
+
+  await setData(`bank/${senderID}`, {
+    balance,
+    name
+  });
 
   return api.sendMessage(formatBalance(name, balance), threadID);
 };
