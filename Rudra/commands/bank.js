@@ -6,7 +6,7 @@ module.exports.config = {
   version: "4.4.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaylord",
-  description: "Bank system with Firebase persistence (always fresh names)",
+  description: "Bank system with Firebase persistence",
   commandCategory: "Economy",
   usages: "/bank, /bank all, /bank add <uid> <amount>",
   cooldowns: 3,
@@ -21,16 +21,38 @@ function formatBalance(user, balance) {
 }
 
 // 🔹 Auto add coins per normal message
-module.exports.handleEvent = async function ({ event }) {
+module.exports.handleEvent = async function ({ event, Users }) {
   const { senderID, body } = event;
   if (!senderID || !body) return;
   if (body.trim().startsWith("/")) return;
 
   let userData = await getData(`bank/${senderID}`);
-  let balance = userData?.balance || 0;
-  balance += 5;
 
-  await setData(`bank/${senderID}`, { balance });
+  // ✅ Always fetch latest name
+  let name;
+  try {
+    name = await Users.getNameUser(senderID);
+  } catch {
+    name = senderID;
+  }
+
+  if (!userData) {
+    // wala pang account → create
+    await setData(`bank/${senderID}`, {
+      uid: senderID,
+      name,
+      balance: 5
+    });
+    return;
+  }
+
+  // meron na → dagdagan
+  let balance = (userData.balance || 0) + 5;
+  await setData(`bank/${senderID}`, {
+    uid: senderID,
+    name,
+    balance
+  });
 };
 
 // 🔹 Run command
@@ -60,15 +82,26 @@ module.exports.run = async function ({ api, event, args, Users }) {
       try {
         name = await Users.getNameUser(uid);
       } catch {
-        name = uid;
+        name = info.name || uid;
       }
+
+      // update name kung nag-iba
+      if (info.name !== name) {
+        await setData(`bank/${uid}`, {
+          uid,
+          name,
+          balance: info.balance || 0
+        });
+      }
+
       accounts.push({
         uid,
         balance: info.balance || 0,
-        name,
+        name
       });
     }
 
+    // sort by balance (desc)
     accounts.sort((a, b) => b.balance - a.balance);
 
     let msg = `📋 All Bank Accounts (Total: ${accounts.length}) 📋\n`;
@@ -93,9 +126,6 @@ module.exports.run = async function ({ api, event, args, Users }) {
     }
 
     let userData = await getData(`bank/${targetUID}`);
-    let balance = (userData?.balance || 0) + amount;
-
-    await setData(`bank/${targetUID}`, { balance });
 
     let name;
     try {
@@ -103,6 +133,27 @@ module.exports.run = async function ({ api, event, args, Users }) {
     } catch {
       name = targetUID;
     }
+
+    if (!userData) {
+      await setData(`bank/${targetUID}`, {
+        uid: targetUID,
+        name,
+        balance: amount
+      });
+
+      return api.sendMessage(
+        `✅ Created new account for ${name} with 💰 ${amount.toLocaleString()} coins.`,
+        threadID
+      );
+    }
+
+    // update balance
+    let balance = (userData.balance || 0) + amount;
+    await setData(`bank/${targetUID}`, {
+      uid: targetUID,
+      name,
+      balance
+    });
 
     return api.sendMessage(
       `✅ Added 💰 ${amount.toLocaleString()} coins to ${name}'s account.`,
@@ -112,7 +163,6 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
   // 📌 Default → show own balance
   let userData = await getData(`bank/${senderID}`);
-  let balance = userData?.balance || 0;
 
   let name;
   try {
@@ -121,5 +171,24 @@ module.exports.run = async function ({ api, event, args, Users }) {
     name = senderID;
   }
 
-  return api.sendMessage(formatBalance(name, balance), threadID);
+  if (!userData) {
+    await setData(`bank/${senderID}`, {
+      uid: senderID,
+      name,
+      balance: 0
+    });
+
+    return api.sendMessage(formatBalance(name, 0), threadID);
+  }
+
+  // update name kung nag-iba
+  if (userData.name !== name) {
+    await setData(`bank/${senderID}`, {
+      uid: senderID,
+      name,
+      balance: userData.balance || 0
+    });
+  }
+
+  return api.sendMessage(formatBalance(name, userData.balance || 0), threadID);
 };
