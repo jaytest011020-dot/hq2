@@ -1,8 +1,8 @@
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.2.1",
-  credits: "Kim Joseph DG Bien (fixed & updated by ChatGPT)",
+  version: "1.2.2",
+  credits: "Kim Joseph DG Bien (updated by ChatGPT)",
   description: "Join Notification with API-generated welcome photo",
   dependencies: {
     "fs-extra": "",
@@ -13,6 +13,7 @@ module.exports.config = {
 module.exports.run = async function({ api, event }) {
   const request = require("request");
   const fs = global.nodemodule["fs-extra"];
+  const path = require("path");
 
   const { threadID, logMessageData } = event;
   const addedParticipants = logMessageData.addedParticipants;
@@ -47,7 +48,13 @@ module.exports.run = async function({ api, event }) {
         // Build API URL
         const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
 
-        const filePath = __dirname + `/cache/welcome_${userID}.png`;
+        // ✅ Save into commands/cache
+        const filePath = path.join(__dirname, "..", "commands", "cache", `welcome_${userID}.png`);
+
+        // auto-create cache folder if not exists
+        if (!fs.existsSync(path.dirname(filePath))) {
+          fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        }
 
         const callback = () => {
           api.sendMessage({
@@ -57,13 +64,12 @@ module.exports.run = async function({ api, event }) {
           }, threadID, () => fs.unlinkSync(filePath));
         };
 
-        console.log(`📥 Generating welcome for ${userName} (${userID})`); // debug log
+        console.log(`📥 Generating welcome for ${userName} (${userID})`);
 
-        // Download image from API
         request(apiUrl)
           .pipe(fs.createWriteStream(filePath))
           .on("close", callback)
-          .on("error", (err) => console.error("❌ Error downloading image:", err));
+          .on("error", (err) => console.error("❌ Error downloading welcome image:", err));
       }
     }
   } catch (err) {
