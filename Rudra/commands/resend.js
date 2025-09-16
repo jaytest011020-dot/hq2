@@ -1,19 +1,18 @@
 const fs = global.nodemodule["fs-extra"];
 const axios = global.nodemodule["axios"];
-const request = global.nodemodule["request"];
 
 module.exports.config = {
   name: "resend",
-  version: "2.1.0",
+  version: "2.1.1",
   hasPermssion: 1,
-  credits: "Thọ & Mod By DuyVuong + ChatGPT",
+  credits: "Thọ & Mod By DuyVuong + ChatGPT (fixed)",
   description: "Resends Messages with sender name",
   usePrefix: true,
   commandCategory: "system",
   usages: "resend",
   cooldowns: 0,
   hide: true,
-  dependencies: { request: "", "fs-extra": "", axios: "" },
+  dependencies: { "fs-extra": "", axios: "" },
 };
 
 module.exports.handleEvent = async function ({ event, api, Users }) {
@@ -39,6 +38,7 @@ module.exports.handleEvent = async function ({ event, api, Users }) {
       msgBody: content,
       attachment: event.attachments || [],
       senderName: name,
+      senderID: senderID,
     });
   }
 
@@ -48,12 +48,12 @@ module.exports.handleEvent = async function ({ event, api, Users }) {
     if (!getMsg) return;
 
     const senderName = getMsg.senderName || "Friend";
+    const senderID = getMsg.senderID;
 
     if (!getMsg.attachment || getMsg.attachment.length === 0) {
       return api.sendMessage(
-        `${senderName} unsent a message.\n\nContent: ${getMsg.msgBody}`,
-        threadID,
-        null
+        `${senderName} unsent a message.\n\nContent: ${getMsg.msgBody || "No text"}`,
+        threadID
       );
     } else {
       let num = 0;
@@ -66,14 +66,21 @@ module.exports.handleEvent = async function ({ event, api, Users }) {
       };
 
       for (let i of getMsg.attachment) {
-        num += 1;
-        const getURL = await request.get(i.url);
-        const pathname = getURL.uri.pathname;
-        const ext = pathname.substring(pathname.lastIndexOf(".") + 1);
-        const pathFile = __dirname + `/cache/${num}.${ext}`;
-        const data = (await axios.get(i.url, { responseType: "arraybuffer" })).data;
-        fs.writeFileSync(pathFile, Buffer.from(data, "utf-8"));
-        msg.attachment.push(fs.createReadStream(pathFile));
+        try {
+          num += 1;
+
+          // Get extension from URL
+          const url = i.url;
+          const ext = url.split(".").pop().split("?")[0] || "jpg";
+          const pathFile = __dirname + `/cache/${num}.${ext}`;
+
+          // Download file
+          const data = (await axios.get(url, { responseType: "arraybuffer" })).data;
+          fs.writeFileSync(pathFile, Buffer.from(data, "utf-8"));
+          msg.attachment.push(fs.createReadStream(pathFile));
+        } catch (e) {
+          console.error("Error downloading attachment:", e);
+        }
       }
       api.sendMessage(msg, threadID);
     }
