@@ -1,6 +1,8 @@
+const { setData, getData } = require("../../database.js");
+
 module.exports.config = {
     name: "antirobbery",
-    version: "1.0.1",
+    version: "1.1.0",
     credits: "Priyansh Rajput, ChatGPT",
     hasPermssion: 1,
     description: "Prevent changes to group administrators",
@@ -9,7 +11,7 @@ module.exports.config = {
     cooldowns: 0
 };
 
-module.exports.run = async ({ api, event, Threads }) => {
+module.exports.run = async ({ api, event }) => {
     const { threadID, messageID, senderID } = event;
 
     // ✅ check if user is bot admin
@@ -28,16 +30,17 @@ module.exports.run = async ({ api, event, Threads }) => {
         );
     }
 
-    // ✅ toggle AntiRobbery
-    const data = (await Threads.getData(threadID)).data || {};
-    if (typeof data.guard === "undefined") data.guard = false;
-    data.guard = !data.guard;
+    // ✅ get saved data from Firebase
+    let threadData = (await getData(`antirobbery/${threadID}`)) || { enabled: false };
 
-    await Threads.setData(threadID, { data });
-    global.data.threadData.set(parseInt(threadID), data);
+    // toggle ON/OFF
+    threadData.enabled = !threadData.enabled;
+
+    // ✅ save to Firebase
+    await setData(`antirobbery/${threadID}`, threadData);
 
     return api.sendMessage(
-        `[ AntiRobbery ] AntiRobbery has been turned ${(data.guard ? "ON ✅" : "OFF ❌")}`,
+        `[ AntiRobbery ] AntiRobbery has been turned ${(threadData.enabled ? "ON ✅" : "OFF ❌")}`,
         threadID,
         messageID
     );
