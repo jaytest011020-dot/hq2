@@ -1,11 +1,12 @@
+// === modules/commands/bank.js ===
 const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "4.3.0",
+  version: "4.4.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaylord",
-  description: "Bank system with Firebase persistence",
+  description: "Bank system with Firebase persistence (always fresh names)",
   commandCategory: "Economy",
   usages: "/bank, /bank all, /bank add <uid> <amount>",
   cooldowns: 3,
@@ -20,37 +21,16 @@ function formatBalance(user, balance) {
 }
 
 // 🔹 Auto add coins per normal message
-module.exports.handleEvent = async function ({ event, Users }) {
+module.exports.handleEvent = async function ({ event }) {
   const { senderID, body } = event;
   if (!senderID || !body) return;
   if (body.trim().startsWith("/")) return;
 
   let userData = await getData(`bank/${senderID}`);
-
-  let name;
-  try {
-    name = await Users.getNameUser(senderID);
-  } catch {
-    name = senderID;
-  }
-
-  // Kung wala pang account → gumawa
-  if (!userData) {
-    await setData(`bank/${senderID}`, {
-      balance: 5,
-      name
-    });
-    return;
-  }
-
-  // Kung meron → dagdagan lang balance
-  let balance = userData.balance || 0;
+  let balance = userData?.balance || 0;
   balance += 5;
 
-  await setData(`bank/${senderID}`, {
-    balance,
-    name // ✅ auto-update name lagi
-  });
+  await setData(`bank/${senderID}`, { balance });
 };
 
 // 🔹 Run command
@@ -82,20 +62,13 @@ module.exports.run = async function ({ api, event, args, Users }) {
       } catch {
         name = uid;
       }
-
-      // auto-update name sa DB kung nag-iba
-      if (info.name !== name) {
-        await setData(`bank/${uid}/name`, name);
-      }
-
       accounts.push({
         uid,
         balance: info.balance || 0,
-        name
+        name,
       });
     }
 
-    // sort by balance (desc)
     accounts.sort((a, b) => b.balance - a.balance);
 
     let msg = `📋 All Bank Accounts (Total: ${accounts.length}) 📋\n`;
@@ -120,6 +93,9 @@ module.exports.run = async function ({ api, event, args, Users }) {
     }
 
     let userData = await getData(`bank/${targetUID}`);
+    let balance = (userData?.balance || 0) + amount;
+
+    await setData(`bank/${targetUID}`, { balance });
 
     let name;
     try {
@@ -127,25 +103,6 @@ module.exports.run = async function ({ api, event, args, Users }) {
     } catch {
       name = targetUID;
     }
-
-    if (!userData) {
-      await setData(`bank/${targetUID}`, {
-        balance: amount,
-        name
-      });
-
-      return api.sendMessage(
-        `✅ Created new account for ${name} with 💰 ${amount.toLocaleString()} coins.`,
-        threadID
-      );
-    }
-
-    // update balance lang
-    let balance = (userData.balance || 0) + amount;
-    await setData(`bank/${targetUID}`, {
-      balance,
-      name // ✅ update name para hindi mag-stay sa "Facebook user"
-    });
 
     return api.sendMessage(
       `✅ Added 💰 ${amount.toLocaleString()} coins to ${name}'s account.`,
@@ -155,6 +112,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
   // 📌 Default → show own balance
   let userData = await getData(`bank/${senderID}`);
+  let balance = userData?.balance || 0;
 
   let name;
   try {
@@ -163,19 +121,5 @@ module.exports.run = async function ({ api, event, args, Users }) {
     name = senderID;
   }
 
-  if (!userData) {
-    await setData(`bank/${senderID}`, {
-      balance: 0,
-      name
-    });
-
-    return api.sendMessage(formatBalance(name, 0), threadID);
-  }
-
-  // ✅ Update name kung nag-iba
-  if (userData.name !== name) {
-    await setData(`bank/${senderID}/name`, name);
-  }
-
-  return api.sendMessage(formatBalance(name, userData.balance || 0), threadID);
+  return api.sendMessage(formatBalance(name, balance), threadID);
 };
