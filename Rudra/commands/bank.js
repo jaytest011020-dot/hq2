@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "4.1.0",
+  version: "4.2.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaylord",
   description: "Bank system with Firebase persistence",
@@ -25,22 +25,29 @@ module.exports.handleEvent = async function ({ event, Users }) {
   if (!senderID || !body) return;
   if (body.trim().startsWith("/")) return;
 
-  let userData = (await getData(`bank/${senderID}`)) || {};
-  let balance = userData.balance || 0;
+  let userData = await getData(`bank/${senderID}`);
 
-  balance += 5;
+  // Kung wala pang account → gumawa
+  if (!userData) {
+    let name;
+    try {
+      name = await Users.getNameUser(senderID);
+    } catch {
+      name = senderID;
+    }
 
-  let name;
-  try {
-    name = await Users.getNameUser(senderID);
-  } catch {
-    name = senderID;
+    await setData(`bank/${senderID}`, {
+      balance: 5,
+      name
+    });
+    return;
   }
 
-  await setData(`bank/${senderID}`, {
-    balance,
-    name
-  });
+  // Kung meron → dagdagan lang balance
+  let balance = userData.balance || 0;
+  balance += 5;
+
+  await setData(`bank/${senderID}/balance`, balance);
 };
 
 // 🔹 Run command
@@ -92,43 +99,55 @@ module.exports.run = async function ({ api, event, args, Users }) {
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID);
     }
 
-    let userData = (await getData(`bank/${targetUID}`)) || {};
-    let balance = userData.balance || 0;
-    balance += amount;
+    let userData = await getData(`bank/${targetUID}`);
 
-    let name;
-    try {
-      name = await Users.getNameUser(targetUID);
-    } catch {
-      name = targetUID;
+    if (!userData) {
+      let name;
+      try {
+        name = await Users.getNameUser(targetUID);
+      } catch {
+        name = targetUID;
+      }
+
+      await setData(`bank/${targetUID}`, {
+        balance: amount,
+        name
+      });
+
+      return api.sendMessage(
+        `✅ Created new account for ${name} with 💰 ${amount.toLocaleString()} coins.`,
+        threadID
+      );
     }
 
-    await setData(`bank/${targetUID}`, {
-      balance,
-      name
-    });
+    // update balance lang
+    let balance = (userData.balance || 0) + amount;
+    await setData(`bank/${targetUID}/balance`, balance);
 
     return api.sendMessage(
-      `✅ Added 💰 ${amount.toLocaleString()} coins to ${name}'s account.`,
+      `✅ Added 💰 ${amount.toLocaleString()} coins to ${userData.name}'s account.`,
       threadID
     );
   }
 
   // 📌 Default → show own balance
-  let userData = (await getData(`bank/${senderID}`)) || {};
-  let balance = userData.balance || 0;
+  let userData = await getData(`bank/${senderID}`);
 
-  let name;
-  try {
-    name = await Users.getNameUser(senderID);
-  } catch {
-    name = senderID;
+  if (!userData) {
+    let name;
+    try {
+      name = await Users.getNameUser(senderID);
+    } catch {
+      name = senderID;
+    }
+
+    await setData(`bank/${senderID}`, {
+      balance: 0,
+      name
+    });
+
+    return api.sendMessage(formatBalance(name, 0), threadID);
   }
 
-  await setData(`bank/${senderID}`, {
-    balance,
-    name
-  });
-
-  return api.sendMessage(formatBalance(name, balance), threadID);
+  return api.sendMessage(formatBalance(userData.name, userData.balance || 0), threadID);
 };
