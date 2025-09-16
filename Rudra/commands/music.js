@@ -6,7 +6,7 @@ const cooldowns = new Map();
 
 module.exports.config = {
   name: "music",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Search Apple Music & auto-play first result",
@@ -37,30 +37,41 @@ module.exports.run = async ({ api, event, args }) => {
   }
 
   try {
-    const apiURL = `https://kaiz-apis.gleeze.com/api/apple-music?search=${encodeURIComponent(query)}&apikey=71ee3719-dd7d-4a98-8484-eb0bb3081e0f`;
-    const res = await axios.get(apiURL);
+    // 🔹 Send loading message
+    api.sendMessage("⏳ Searching & loading your music...", threadID, async (err, info) => {
+      try {
+        const apiURL = `https://kaiz-apis.gleeze.com/api/apple-music?search=${encodeURIComponent(query)}&apikey=71ee3719-dd7d-4a98-8484-eb0bb3081e0f`;
+        const res = await axios.get(apiURL);
 
-    if (!res.data || !res.data.response || res.data.response.length === 0) {
-      return api.sendMessage("❌ No results found.", threadID, messageID);
-    }
+        if (!res.data || !res.data.response || res.data.response.length === 0) {
+          return api.sendMessage("❌ No results found.", threadID, messageID);
+        }
 
-    const song = res.data.response[0]; // 🔹 First result only
-    const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.m4a`);
+        const song = res.data.response[0]; // 🔹 First result only
+        const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.m4a`);
 
-    // 🔹 Download preview audio
-    const audioBuffer = (await axios.get(song.previewMp3, { responseType: "arraybuffer" })).data;
-    fs.writeFileSync(tmpPath, Buffer.from(audioBuffer, "binary"));
+        // 🔹 Download preview audio
+        const audioBuffer = (await axios.get(song.previewMp3, { responseType: "arraybuffer" })).data;
+        fs.writeFileSync(tmpPath, Buffer.from(audioBuffer, "binary"));
 
-    // 🔹 Send music info + auto-play preview
-    api.sendMessage(
-      {
-        body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${song.title}\n👤 Artist: ${song.artist}\n💿 Album: ${song.album}\n📅 Release: ${song.releaseDate}\n⏱ Duration: ${song.duration}\n🔗 [Apple Music Link](${song.url})`,
-        attachment: fs.createReadStream(tmpPath),
-      },
-      threadID,
-      () => fs.unlinkSync(tmpPath),
-      messageID
-    );
+        // 🔹 Delete loading message bago mag-send ng result
+        api.unsendMessage(info.messageID);
+
+        // 🔹 Send music info + auto-play preview
+        api.sendMessage(
+          {
+            body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${song.title}\n👤 Artist: ${song.artist}\n💿 Album: ${song.album}\n📅 Release: ${song.releaseDate}\n⏱ Duration: ${song.duration}\n🔗 [Apple Music Link](${song.url})`,
+            attachment: fs.createReadStream(tmpPath),
+          },
+          threadID,
+          () => fs.unlinkSync(tmpPath),
+          messageID
+        );
+      } catch (err) {
+        console.error("❌ Music Command Error:", err);
+        api.sendMessage("⚠️ Error fetching music.", threadID, messageID);
+      }
+    });
   } catch (err) {
     console.error("❌ Music Command Error:", err);
     api.sendMessage("⚠️ Error fetching music.", threadID, messageID);
