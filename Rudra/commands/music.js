@@ -1,55 +1,68 @@
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+
+const cooldowns = new Map();
+
 module.exports.config = {
   name: "music",
   version: "1.0.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Play or download music via API",
-  commandCategory: "media",
+  description: "Search Apple Music & auto-play first result",
+  commandCategory: "music",
   usages: "/music <song name>",
-  cooldowns: 3
+  cooldowns: 5,
 };
 
-const axios = require("axios");
-const fs = require("fs-extra");
-const path = require("path");
+module.exports.run = async ({ api, event, args }) => {
+  const { threadID, messageID, senderID } = event;
 
-module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID } = event;
+  // 🔹 Cooldown check (20s per user)
+  const now = Date.now();
+  const userCooldown = cooldowns.get(senderID) || 0;
+  const remaining = Math.ceil((userCooldown - now) / 1000);
+  if (remaining > 0) {
+    return api.sendMessage(
+      `⏳ Please wait ${remaining}s before using this command again.`,
+      threadID,
+      messageID
+    );
+  }
+  cooldowns.set(senderID, now + 20 * 1000);
 
-  if (!args[0]) {
-    return api.sendMessage("❌ Please provide a song name.\n\nExample: /music Ikaw by Yeng", threadID, messageID);
+  const query = args.join(" ");
+  if (!query) {
+    return api.sendMessage("❗ Please provide a song name.", threadID, messageID);
   }
 
-  const query = encodeURIComponent(args.join(" "));
-  const url = `https://betadash-api-swordslush-production.up.railway.app/sc?search=${query}`;
-
-  const filePath = path.join(__dirname, "cache", `music_${Date.now()}.mp3`);
-
   try {
-    api.sendMessage(`🔎 Searching for: "${args.join(" ")}"...\n⏳ Please wait...`, threadID, messageID);
+    const apiURL = `https://kaiz-apis.gleeze.com/api/apple-music?search=${encodeURIComponent(query)}&apikey=71ee3719-dd7d-4a98-8484-eb0bb3081e0f`;
+    const res = await axios.get(apiURL);
 
-    const response = await axios({
-      url,
-      method: "GET",
-      responseType: "stream"
-    });
+    if (!res.data || !res.data.response || res.data.response.length === 0) {
+      return api.sendMessage("❌ No results found.", threadID, messageID);
+    }
 
-    const writer = fs.createWriteStream(filePath);
-    response.data.pipe(writer);
+    const song = res.data.response[0]; // 🔹 First result only
+    const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.m4a`);
 
-    writer.on("finish", () => {
-      api.sendMessage({
-        body: `🎶 Here's your music:\n${args.join(" ")}`,
-        attachment: fs.createReadStream(filePath)
-      }, threadID, () => fs.unlinkSync(filePath));
-    });
+    // 🔹 Download preview audio
+    const audioBuffer = (await axios.get(song.previewMp3, { responseType: "arraybuffer" })).data;
+    fs.writeFileSync(tmpPath, Buffer.from(audioBuffer, "binary"));
 
-    writer.on("error", () => {
-      api.sendMessage("⚠️ Failed to download the music. Please try again.", threadID, messageID);
-    });
-
+    // 🔹 Send music info + auto-play preview
+    api.sendMessage(
+      {
+        body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${song.title}\n👤 Artist: ${song.artist}\n💿 Album: ${song.album}\n📅 Release: ${song.releaseDate}\n⏱ Duration: ${song.duration}\n🔗 [Apple Music Link](${song.url})`,
+        attachment: fs.createReadStream(tmpPath),
+      },
+      threadID,
+      () => fs.unlinkSync(tmpPath),
+      messageID
+    );
   } catch (err) {
-    console.error(err);
-    return api.sendMessage("❌ Error fetching the music. Try another keyword.", threadID, messageID);
+    console.error("❌ Music Command Error:", err);
+    api.sendMessage("⚠️ Error fetching music.", threadID, messageID);
   }
 };
