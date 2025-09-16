@@ -1,6 +1,11 @@
-// database.js
 const admin = require("firebase-admin");
-const serviceAccount = require("./serviceAccountKey.json"); // yung JSON na na-download mo
+
+let serviceAccount;
+if (process.env.FIREBASE_KEY) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
+} else {
+  serviceAccount = require("./serviceAccountKey.json"); // local dev
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
