@@ -62,3 +62,38 @@ module.exports.run = async ({ api, event }) => {
         messageID
     );
 };
+
+// Event to monitor admin changes in the group
+module.exports.handleEvent = async function ({ api, event }) {
+    const { threadID, addedParticipants, removedParticipants } = event;
+
+    // Check if AntiRobbery is enabled for the group
+    let threadData = global.data.antirobbery.get(threadID) || await getData(`antirobbery/${threadID}`);
+    if (!threadData || !threadData.enabled) return;
+
+    // If someone is removed from admin
+    if (removedParticipants && removedParticipants.length > 0) {
+        for (let removedUser of removedParticipants) {
+            // If the removed user is an admin
+            if (removedUser.userFbId) {
+                // Restore admin status to any removed admin (except the bot)
+                try {
+                    await api.addUserToGroup(removedUser.userFbId, threadID);
+                    api.sendMessage(`✅ Restored admin status for ${removedUser.userFbId}.`, threadID);
+                } catch (error) {
+                    console.error("Failed to restore admin status:", error);
+                }
+            }
+        }
+    }
+
+    // If someone is added as an admin (monitoring purposes)
+    if (addedParticipants && addedParticipants.length > 0) {
+        for (let addedUser of addedParticipants) {
+            // Check if the added user is not the bot
+            if (addedUser.userFbId !== global.config.ADMINBOT[0]) {
+                // Optionally handle logic for when new admins are added
+            }
+        }
+    }
+};
