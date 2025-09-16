@@ -2,78 +2,77 @@ const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
 
-const cooldowns = new Map();
+let cooldowns = {}; // 🔹 cooldown storage (per user)
 
 module.exports.config = {
-  name: "music",
-  version: "1.1.0",
+  name: "tiktokshoti",
+  version: "1.1.2",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Search Apple Music & auto-play first result",
-  commandCategory: "music",
-  usages: "/music <song name>",
-  cooldowns: 5,
+  description: "Get random TikTok video from API",
+  commandCategory: "fun",
+  usages: "/tiktokshoti",
+  cooldowns: 0, // handled manually
 };
 
-module.exports.run = async ({ api, event, args }) => {
+module.exports.run = async ({ api, event }) => {
   const { threadID, messageID, senderID } = event;
+  const tmpPath = path.join(__dirname, "cache", `tiktok_${Date.now()}.mp4`);
+  const cooldownTime = 20 * 1000; // 20 seconds
 
-  // 🔹 Cooldown check (20s per user)
-  const now = Date.now();
-  const userCooldown = cooldowns.get(senderID) || 0;
-  const remaining = Math.ceil((userCooldown - now) / 1000);
-  if (remaining > 0) {
+  // 🔹 Check cooldown
+  if (cooldowns[senderID] && Date.now() - cooldowns[senderID] < cooldownTime) {
+    const remaining = Math.ceil((cooldowns[senderID] + cooldownTime - Date.now()) / 1000);
     return api.sendMessage(
       `⏳ Please wait ${remaining}s before using this command again.`,
       threadID,
       messageID
     );
   }
-  cooldowns.set(senderID, now + 20 * 1000);
 
-  const query = args.join(" ");
-  if (!query) {
-    return api.sendMessage("❗ Please provide a song name.", threadID, messageID);
-  }
+  cooldowns[senderID] = Date.now(); // set cooldown
 
   try {
     // 🔹 Send loading message
-    api.sendMessage("⏳ Searching & loading your music...", threadID, async (err, info) => {
+    api.sendMessage("⏳ Fetching a TikTok video for you...", threadID, async (err, info) => {
       try {
-        const apiURL = `https://kaiz-apis.gleeze.com/api/apple-music?search=${encodeURIComponent(query)}&apikey=71ee3719-dd7d-4a98-8484-eb0bb3081e0f`;
-        const res = await axios.get(apiURL);
+        // 🔹 Fetch video data from API
+        const res = await axios.get("https://kaiz-apis.gleeze.com/api/shoti?apikey=71ee3719-dd7d-4a98-8484-eb0bb3081e0f");
+        const data = res.data;
 
-        if (!res.data || !res.data.response || res.data.response.length === 0) {
-          return api.sendMessage("❌ No results found.", threadID, messageID);
+        if (!data || data.status !== "success") {
+          api.unsendMessage(info.messageID);
+          return api.sendMessage("⚠️ Failed to fetch TikTok video.", threadID, messageID);
         }
 
-        const song = res.data.response[0]; // 🔹 First result only
-        const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.m4a`);
+        const videoUrl = data.shoti.videoUrl;
+        const title = data.shoti.title || "No title";
+        const username = data.shoti.username ? `@${data.shoti.username}` : "";
+        const duration = data.shoti.duration ? `${data.shoti.duration}s` : "N/A";
 
-        // 🔹 Download preview audio
-        const audioBuffer = (await axios.get(song.previewMp3, { responseType: "arraybuffer" })).data;
-        fs.writeFileSync(tmpPath, Buffer.from(audioBuffer, "binary"));
+        // 🔹 Download video
+        const videoBuffer = (await axios.get(videoUrl, { responseType: "arraybuffer" })).data;
+        fs.writeFileSync(tmpPath, Buffer.from(videoBuffer, "binary"));
 
-        // 🔹 Delete loading message bago mag-send ng result
+        // 🔹 Remove loading message then send video
         api.unsendMessage(info.messageID);
-
-        // 🔹 Send music info + auto-play preview
         api.sendMessage(
           {
-            body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${song.title}\n👤 Artist: ${song.artist}\n💿 Album: ${song.album}\n📅 Release: ${song.releaseDate}\n⏱ Duration: ${song.duration}\n🔗 [Apple Music Link](${song.url})`,
+            body: `🎥 𝗧𝗶𝗸𝗧𝗼𝗸 𝗩𝗶𝗱𝗲𝗼\n\n📛 Username: ${username}\n📝 Title: ${title}\n⏱ Duration: ${duration}`,
             attachment: fs.createReadStream(tmpPath),
           },
           threadID,
-          () => fs.unlinkSync(tmpPath),
+          () => fs.unlinkSync(tmpPath), // auto-delete temp file
           messageID
         );
       } catch (err) {
-        console.error("❌ Music Command Error:", err);
-        api.sendMessage("⚠️ Error fetching music.", threadID, messageID);
+        console.error("❌ TikTok Command Error:", err);
+        api.unsendMessage(info.messageID);
+        api.sendMessage("⚠️ Error fetching or sending TikTok video.", threadID, messageID);
       }
     });
   } catch (err) {
-    console.error("❌ Music Command Error:", err);
-    api.sendMessage("⚠️ Error fetching music.", threadID, messageID);
+    console.error("❌ TikTok Command Error:", err);
+    api.sendMessage("⚠️ Error fetching or sending TikTok video.", threadID, messageID);
   }
 };
