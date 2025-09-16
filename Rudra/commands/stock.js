@@ -23,10 +23,10 @@ function saveGCs() {
 
 module.exports.config = {
   name: "stock",
-  version: "3.1.0",
+  version: "4.0.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Check Grow a Garden stock & auto notify when restocked (per GC toggle)",
+  description: "Check Grow a Garden stock & auto notify when restocked (per GC toggle). Also detects special stock.",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
@@ -65,6 +65,31 @@ async function fetchGardenData() {
 function formatSection(title, items) {
   if (!items || items.length === 0) return `❌ No ${title}`;
   return items.map((i) => `• ${i.emoji || ""} ${i.name} (${i.quantity})`).join("\n");
+}
+
+// 🔍 Mga special items (lowercase lahat para easy compare)
+const specialItems = [
+  "grandmaster sprinkler",
+  "master sprinkler",
+  "level-up lollipop",
+  "levelup lollipop",
+  "medium treat",
+  "medium toy"
+];
+
+// 🔎 Function para i-check kung special
+function detectSpecialStock(data) {
+  let detected = [];
+  ["egg", "seed", "gear"].forEach((cat) => {
+    const items = data[cat]?.items || [];
+    for (const item of items) {
+      const name = item.name.toLowerCase();
+      if (specialItems.includes(name)) {
+        detected.push(`${item.emoji || ""} ${item.name} (${item.quantity})`);
+      }
+    }
+  });
+  return detected;
 }
 
 let started = false;
@@ -123,6 +148,8 @@ ${gear}
     // ✅ Start auto notifier only once
     if (!started) {
       started = true;
+
+      // 🔁 Every 5 minutes = auto restock for ON groups
       setInterval(async () => {
         const data = await fetchGardenData();
         if (!data) return;
@@ -154,7 +181,26 @@ ${gear}
         Object.keys(autoStockStatus).forEach((tid) => {
           if (autoStockStatus[tid]) api.sendMessage(autoMessage.trim(), tid);
         });
-      }, 5 * 60 * 1000); // every 5 minutes
+      }, 5 * 60 * 1000);
+
+      // 🔁 Every 5 minutes = special item detection (ALL GCs)
+      setInterval(async () => {
+        const data = await fetchGardenData();
+        if (!data) return;
+
+        const detected = detectSpecialStock(data);
+        if (detected.length > 0) {
+          const notifyMessage = `
+🌟 New Special Stock Detected 🌟
+──────────────────────
+${detected.join("\n")}
+──────────────────────
+          `;
+          Object.keys(autoStockStatus).forEach((tid) => {
+            api.sendMessage(notifyMessage.trim(), tid);
+          });
+        }
+      }, 5 * 60 * 1000);
     }
   } catch (err) {
     console.error(err);
