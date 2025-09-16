@@ -6,8 +6,8 @@ const path = require("path");
 if (!global.logMessage) global.logMessage = new Map();
 
 module.exports.config = {
-  name: "antiunsend",
-  version: "1.0.0",
+  name: "resend",
+  version: "1.0.1",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Resend message when user unsends",
@@ -17,19 +17,23 @@ module.exports.config = {
 };
 
 module.exports.handleEvent = async ({ api, event }) => {
-  const { threadID, messageID, type, messageReply, body, attachments, senderID } = event;
+  const { threadID, messageID, type, body, attachments, senderID } = event;
 
   // 🔹 Log every message (text or with attachment)
   if (type === "message") {
-    const senderInfo = await api.getUserInfo(senderID);
-    const senderName = senderInfo[senderID]?.name || "Unknown";
+    try {
+      const senderInfo = await api.getUserInfo(senderID);
+      const senderName = senderInfo[senderID]?.name || "Unknown";
 
-    global.logMessage.set(messageID, {
-      senderID,
-      senderName,
-      msgBody: body,
-      attachment: attachments || [],
-    });
+      global.logMessage.set(messageID, {
+        senderID,
+        senderName,
+        msgBody: body,
+        attachments: attachments || [],
+      });
+    } catch (e) {
+      console.error("❌ Error getting user info:", e);
+    }
   }
 
   // 🔹 Handle unsend
@@ -38,10 +42,10 @@ module.exports.handleEvent = async ({ api, event }) => {
     if (!getMsg) return;
 
     const senderName = getMsg.senderName || "Friend";
-    const senderID = getMsg.senderID;
-    const attachments = Array.isArray(getMsg.attachment) ? getMsg.attachment : [];
+    const senderUID = getMsg.senderID;
+    const oldAttachments = Array.isArray(getMsg.attachments) ? getMsg.attachments : [];
 
-    if (attachments.length === 0) {
+    if (oldAttachments.length === 0) {
       return api.sendMessage(
         `${senderName} unsent a message.\n\nContent: ${getMsg.msgBody || "No text"}`,
         threadID
@@ -49,17 +53,17 @@ module.exports.handleEvent = async ({ api, event }) => {
     } else {
       let num = 0;
       let msg = {
-        body: `${senderName} unsent a message.\n${attachments.length} Attachment(s)${
+        body: `${senderName} unsent a message.\n${oldAttachments.length} Attachment(s)${
           getMsg.msgBody ? `\n\nContent: ${getMsg.msgBody}` : ""
         }`,
         attachment: [],
-        mentions: [{ tag: senderName, id: senderID, fromIndex: 0 }],
+        mentions: [{ tag: senderName, id: senderUID, fromIndex: 0 }],
       };
 
-      for (let i of attachments) {
+      for (let i of oldAttachments) {
         try {
           num += 1;
-          if (!i || !i.url) continue; // skip kung walang URL
+          if (!i || !i.url) continue;
 
           const url = i.url;
           const ext = url.split(".").pop().split("?")[0] || "jpg";
