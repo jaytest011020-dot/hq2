@@ -6,7 +6,7 @@ let cooldowns = {}; // 🔹 cooldown storage (per user)
 
 module.exports.config = {
   name: "tiktokshoti",
-  version: "1.1.2",
+  version: "1.1.3",
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Get random TikTok video from API",
@@ -45,7 +45,12 @@ module.exports.run = async ({ api, event }) => {
           return api.sendMessage("⚠️ Failed to fetch TikTok video.", threadID, messageID);
         }
 
-        const videoUrl = data.shoti.videoUrl;
+        // 🔹 Fix videoUrl (prepend domain if missing)
+        let videoUrl = data.shoti.videoUrl;
+        if (videoUrl.startsWith("/")) {
+          videoUrl = "https://www.tikwm.com" + videoUrl;
+        }
+
         const title = data.shoti.title || "No title";
         const username = data.shoti.username ? `@${data.shoti.username}` : "";
         const duration = data.shoti.duration ? `${data.shoti.duration}s` : "N/A";
