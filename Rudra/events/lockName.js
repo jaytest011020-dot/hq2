@@ -1,9 +1,12 @@
 const fs = require("fs");
-const { lockedSettings } = require("../commands/lockgroup.js");
+
+// Same global reference
+if (!global.lockedSettings) global.lockedSettings = {};
+let lockedSettings = global.lockedSettings;
 
 module.exports.config = {
   name: "lockgroupEvent",
-  eventType: ["log:thread-name", "log:thread-image"], // ✅ use thread-image for photo
+  eventType: ["log:thread-name", "log:thread-image"],
   version: "1.0.1",
   credits: "ChatGPT"
 };
