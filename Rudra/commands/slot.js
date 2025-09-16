@@ -6,7 +6,7 @@ const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎"];
 
 module.exports.config = {
   name: "slot",
-  version: "1.0.1",
+  version: "1.0.2",
   hasPermssion: 0,
   credits: "ChatGPT + Firebase refactor",
   description: "Play slot machine with coins",
@@ -55,10 +55,13 @@ module.exports.run = async function ({ api, event, args, Users }) {
     resultMsg += `❌ You lost your bet of ${bet.toLocaleString()} coins.`;
   }
 
-  // ✅ Save updated balance to DB
-  await setData(`/bank/${senderID}`, userBank);
-
+  // ✅ Save updated balance + name to DB
   const name = await Users.getNameUser(senderID);
+  await setData(`/bank/${senderID}`, {
+    balance: userBank.balance,
+    name
+  });
+
   resultMsg += `\n\n👤 ${name}\n💳 Balance: ${userBank.balance.toLocaleString()} coins`;
 
   return api.sendMessage(resultMsg, threadID);
