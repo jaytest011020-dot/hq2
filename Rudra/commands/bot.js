@@ -2,7 +2,7 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "bot",
-  version: "2.3.4",
+  version: "2.3.5",
   hasPermission: 0,
   credits: "ChatGPT",
   description: "Auto Simsimi reply when 'bot' or 'jandel' is mentioned, or when replying to Simsimi's message",
@@ -61,8 +61,9 @@ module.exports.handleEvent = async function ({ api, event }) {
 
     if (!reply) reply = "Hindi ako makareply ngayon, try ulit mamaya.";
 
-    // ✅ Send reply
-    return api.sendMessage(`${reply} 🤖`, threadID, () => {}, event.messageID);
+    // ✅ Send reply (no dummy callback)
+    return api.sendMessage(`${reply} 🤖`, threadID, event.messageID);
+
   } catch (e) {
     console.error("bot.js fatal:", e);
   }
