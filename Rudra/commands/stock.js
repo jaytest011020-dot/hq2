@@ -23,21 +23,21 @@ function saveGCs() {
 
 module.exports.config = {
   name: "stock",
-  version: "4.0.0",
+  version: "3.2.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Check Grow a Garden stock & auto notify when restocked (per GC toggle). Also detects special stock.",
+  description: "Check Grow a Garden stock & auto notify when restocked (per GC toggle)",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
   cooldowns: 10,
 };
 
-// 🔹 Next restock calculation (PH time, rounded to nearest 5 minutes)
+// 🔹 Next restock calculation (PH time, aligned to 5 minutes)
 function getNextRestockPH(interval = 5) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
-  let nextMinutes = Math.ceil((minutes + 0.001) / interval) * interval;
+  let nextMinutes = Math.ceil(minutes / interval) * interval;
   let next = new Date(now);
   next.setMinutes(nextMinutes);
   next.setSeconds(0, 0);
@@ -46,8 +46,8 @@ function getNextRestockPH(interval = 5) {
     next.setMinutes(0);
   }
   return {
-    current: now.toLocaleTimeString("en-PH", { hour12: false }),
-    next: next.toLocaleTimeString("en-PH", { hour12: false })
+    current: now,
+    next
   };
 }
 
@@ -67,30 +67,15 @@ function formatSection(title, items) {
   return items.map((i) => `• ${i.emoji || ""} ${i.name} (${i.quantity})`).join("\n");
 }
 
-// 🔍 Mga special items (lowercase lahat para easy compare)
-const specialItems = [
-  "grandmaster sprinkler",
-  "master sprinkler",
-  "level-up lollipop",
-  "levelup lollipop",
-  "medium treat",
-  "medium toy"
+// 🔹 Special items na idi-detect (case-insensitive)
+const SPECIAL_ITEMS = [
+  "Grandmaster Sprinkler",
+  "Master Sprinkler",
+  "Level-up Lollipop",
+  "Levelup Lollipop",
+  "Medium Treat",
+  "Medium Toy"
 ];
-
-// 🔎 Function para i-check kung special
-function detectSpecialStock(data) {
-  let detected = [];
-  ["egg", "seed", "gear"].forEach((cat) => {
-    const items = data[cat]?.items || [];
-    for (const item of items) {
-      const name = item.name.toLowerCase();
-      if (specialItems.includes(name)) {
-        detected.push(`${item.emoji || ""} ${item.name} (${item.quantity})`);
-      }
-    }
-  });
-  return detected;
-}
 
 let started = false;
 
@@ -119,7 +104,8 @@ module.exports.run = async function ({ api, event, args }) {
     const resData = await fetchGardenData();
     if (!resData) return api.sendMessage("⚠️ Failed to fetch data.", threadID);
 
-    const { current, next } = getNextRestockPH();
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const { next } = getNextRestockPH();
 
     const eggs = formatSection("eggs", resData.egg?.items);
     const seeds = formatSection("seeds", resData.seed?.items);
@@ -128,8 +114,8 @@ module.exports.run = async function ({ api, event, args }) {
     const message = `
 🌱 𝗚𝗿𝗼𝘄 𝗮 𝗚𝗮𝗿𝗱𝗲𝗻 𝗦𝘁𝗼𝗰𝗸 🌱
 ──────────────────────
-🕒 Current PH Time: ${current}
-🔄 Next Restock: ${next}
+🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
 ──────────────────────
 
 🥚 𝗘𝗴𝗴𝘀
@@ -145,25 +131,72 @@ ${gear}
 
     api.sendMessage(message.trim(), threadID, event.messageID);
 
-    // ✅ Start auto notifier only once
+    // ✅ Start auto scanner only once
     if (!started) {
       started = true;
 
-      // 🔁 Every 5 minutes = auto restock for ON groups
-      setInterval(async () => {
-        const data = await fetchGardenData();
-        if (!data) return;
+      const { next } = getNextRestockPH();
+      const delay = next.getTime() - Date.now();
 
-        const { current, next } = getNextRestockPH();
-        const eggs = formatSection("eggs", data.egg?.items);
-        const seeds = formatSection("seeds", data.seed?.items);
-        const gear = formatSection("gear", data.gear?.items);
+      setTimeout(() => {
+        scanAndNotify(api); // unang scan (aligned)
+        setInterval(() => scanAndNotify(api), 5 * 60 * 1000); // every 5 minutes aligned
+      }, delay);
+    }
+  } catch (err) {
+    console.error(err);
+    api.sendMessage("⚠️ Error fetching Grow a Garden stock.", event.threadID);
+  }
+};
 
-        const autoMessage = `
+// 🔹 Function: Scan and send notifications
+async function scanAndNotify(api) {
+  const data = await fetchGardenData();
+  if (!data) return;
+
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const { next } = getNextRestockPH();
+
+  const eggs = formatSection("eggs", data.egg?.items);
+  const seeds = formatSection("seeds", data.seed?.items);
+  const gear = formatSection("gear", data.gear?.items);
+
+  // 🔎 Check for special items
+  const allItems = [
+    ...(data.egg?.items || []),
+    ...(data.seed?.items || []),
+    ...(data.gear?.items || [])
+  ];
+
+  const foundSpecial = allItems.filter(item =>
+    SPECIAL_ITEMS.some(si => item.name.toLowerCase().includes(si.toLowerCase()))
+  );
+
+  if (foundSpecial.length > 0) {
+    const specialList = foundSpecial.map(i => `✨ ${i.name} (${i.quantity})`).join("\n");
+
+    const notif = `
+🚨 𝗡𝗲𝘄 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 𝗗𝗲𝘁𝗲𝗰𝘁𝗲𝗱 🚨
+──────────────────────
+🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
+──────────────────────
+${specialList}
+──────────────────────
+    `;
+
+    // 🔹 Send to ALL GCs (kahit off ang auto-stock)
+    Object.keys(autoStockStatus).forEach((tid) => {
+      api.sendMessage(notif.trim(), tid);
+    });
+  }
+
+  // 🔹 Normal auto-stock (enabled GCs only)
+  const autoMessage = `
 🌱 𝗔𝘂𝘁𝗼 𝗥𝗲𝘀𝘁𝗼𝗰𝗸 𝗔𝗹𝗲𝗿𝘁 🌱
 ──────────────────────
-🕒 Current PH Time: ${current}
-🔄 Next Restock: ${next}
+🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
 ──────────────────────
 
 🥚 𝗘𝗴𝗴𝘀
@@ -175,35 +208,9 @@ ${seeds}
 🛠️ 𝗚𝗲𝗮𝗿
 ${gear}
 ──────────────────────
-        `;
+  `;
 
-        // 🔹 Send only to GCs with auto-stock ON
-        Object.keys(autoStockStatus).forEach((tid) => {
-          if (autoStockStatus[tid]) api.sendMessage(autoMessage.trim(), tid);
-        });
-      }, 5 * 60 * 1000);
-
-      // 🔁 Every 5 minutes = special item detection (ALL GCs)
-      setInterval(async () => {
-        const data = await fetchGardenData();
-        if (!data) return;
-
-        const detected = detectSpecialStock(data);
-        if (detected.length > 0) {
-          const notifyMessage = `
-🌟 New Special Stock Detected 🌟
-──────────────────────
-${detected.join("\n")}
-──────────────────────
-          `;
-          Object.keys(autoStockStatus).forEach((tid) => {
-            api.sendMessage(notifyMessage.trim(), tid);
-          });
-        }
-      }, 5 * 60 * 1000);
-    }
-  } catch (err) {
-    console.error(err);
-    api.sendMessage("⚠️ Error fetching Grow a Garden stock.", event.threadID);
+  Object.keys(autoStockStatus).forEach((tid) => {
+    if (autoStockStatus[tid]) api.sendMessage(autoMessage.trim(), tid);
+  });
   }
-};
