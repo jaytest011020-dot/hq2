@@ -1,53 +1,127 @@
-const { setData, getData } = require("../../database.js");
+// === modules/commands/bank.js ===
+const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
-    name: "bank",
-    version: "1.2.0",
-    credits: "ChatGPT",
-    description: "Check your bank account balance",
-    usages: "/bank",
-    commandCategory: "economy",
-    cooldowns: 3
+  name: "bank",
+  version: "3.3.0",
+  hasPermssion: 0,
+  credits: "ChatGPT + Jaylord",
+  description: "Bank system with Firebase DB",
+  commandCategory: "Economy",
+  usages: "/bank, /bank all, /bank add <uid> <amount>",
+  cooldowns: 3,
 };
 
-module.exports.run = async ({ api, event, Users }) => {
-    const { senderID, threadID, messageID } = event;
-    const uid = senderID;
+// 🔑 Bot admins
+const BOT_ADMINS = ["61559999326713"];
 
-    // 🔹 Get old data from DB
-    let userData = (await getData(`bank/${uid}`)) || null;
+// Format balance
+function formatBalance(user, balance) {
+  return `🏦 Bank Account 🏦\n\n👤 ${user}\n💰 Balance: ${balance.toLocaleString()} coins`;
+}
 
-    // 🔹 Try to fetch fresh name
-    let freshName;
+// 🔹 Auto add coins per normal message
+module.exports.handleEvent = async function ({ event, Users }) {
+  const { senderID, body } = event;
+  if (!senderID || !body) return;
+  if (body.trim().startsWith("/")) return;
+
+  // Load user data
+  let userData = await getData(`/bank/${senderID}`);
+
+  if (!userData) {
+    let name;
     try {
-        freshName = await Users.getNameUser(uid);
-        if (!freshName || freshName === "Facebook users") {
-            freshName = userData?.name || `User_${uid}`;
-        }
-    } catch (err) {
-        freshName = userData?.name || `User_${uid}`;
+      name = await Users.getNameUser(senderID);
+    } catch {
+      name = "Facebook User";
     }
 
-    // 🔹 If new user, create record
-    if (!userData) {
-        userData = {
-            uid,
-            name: freshName,
-            coins: 0
-        };
-        await setData(`bank/${uid}`, userData);
-    } else {
-        // 🔹 Update name if changed
-        if (userData.name !== freshName) {
-            userData.name = freshName;
-            await setData(`bank/${uid}`, userData);
-        }
-    }
+    userData = { uid: senderID, name, balance: 0 };
+  }
 
-    // 🔹 Show bank info
+  userData.balance += 5; // Add coins per message
+  await setData(`/bank/${senderID}`, userData);
+};
+
+// 🔹 Run command
+module.exports.run = async function ({ api, event, args, Users }) {
+  const { threadID, senderID } = event;
+  const command = args[0] ? args[0].toLowerCase() : "";
+
+  const validArgs = ["", "all", "add"];
+  if (!validArgs.includes(command)) {
     return api.sendMessage(
-        `🏦 Bank Account 🏦\n👤 ${userData.name}\n💰 Balance: ${userData.coins} coins`,
-        threadID,
-        messageID
+      "❌ Invalid usage.\n\n" +
+        "📌 Correct Usage:\n" +
+        "• /bank → check your balance\n" +
+        "• /bank all → show all balances\n" +
+        "• /bank add <uid> <amount> → add coins (admin only)",
+      threadID
     );
+  }
+
+  // 📋 Show all accounts
+  if (command === "all") {
+    const accounts = (await getData("/bank")) || {};
+    const arr = Object.values(accounts);
+
+    arr.sort((a, b) => b.balance - a.balance);
+
+    let msg = `📋 All Bank Accounts (Total: ${arr.length}) 📋\n`;
+    arr.forEach((acc, i) => {
+      msg += `\n${i + 1}. ${acc.name} - 💰 ${acc.balance.toLocaleString()} coins`;
+    });
+
+    return api.sendMessage(msg, threadID);
+  }
+
+  // 🔑 Admin add coins
+  if (command === "add") {
+    if (!BOT_ADMINS.includes(senderID)) {
+      return api.sendMessage("❌ Only bot admins can add coins.", threadID);
+    }
+
+    const targetUID = args[1];
+    const amount = parseInt(args[2]);
+
+    if (!targetUID || isNaN(amount) || amount <= 0) {
+      return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID);
+    }
+
+    let targetData = await getData(`/bank/${targetUID}`);
+    if (!targetData) {
+      let name;
+      try {
+        name = await Users.getNameUser(targetUID);
+      } catch {
+        name = "Facebook User";
+      }
+      targetData = { uid: targetUID, name, balance: 0 };
+    }
+
+    targetData.balance += amount;
+    await setData(`/bank/${targetUID}`, targetData);
+
+    return api.sendMessage(
+      `✅ Added 💰 ${amount.toLocaleString()} coins to ${targetData.name}'s account.`,
+      threadID
+    );
+  }
+
+  // 📌 Default → show own balance
+  let userData = await getData(`/bank/${senderID}`);
+
+  if (!userData) {
+    let name;
+    try {
+      name = await Users.getNameUser(senderID);
+    } catch {
+      name = "Facebook User";
+    }
+    userData = { uid: senderID, name, balance: 0 };
+    await setData(`/bank/${senderID}`, userData);
+  }
+
+  return api.sendMessage(formatBalance(userData.name, userData.balance), threadID);
 };
