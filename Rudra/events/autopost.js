@@ -1,47 +1,53 @@
-const cron = require('node-cron'); // For scheduling tasks
+const fs = require("fs");
+const fetch = require('node-fetch');  // Import node-fetch for API requests
+const cron = require('node-cron');  // For scheduling tasks
 
 module.exports = {
     name: "autoPost", // Event name
     execute: async (api, event) => {
-        // This function will be called when the event is triggered
         console.log("Auto-post event triggered.");
     },
     onStart: async (api) => {
-        // Owner's user ID
-        const ownerID = "61559999326713";
+        const ownerID = "100030880666720";  // Owner's user ID
 
-        // Function to fetch a cat fact from the API
-        const fetchCatFact = async () => {
+        // Function to fetch a Bible verse from the API
+        const fetchBibleVerse = async () => {
             try {
-                const response = await fetch("https://kaiz-apis.gleeze.com/api/catfact");
+                const response = await fetch("https://kaiz-apis.gleeze.com/api/bible?apikey=71ee3719-dd7d-4a98-8484-eb0bb3081e0f");
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
                 }
                 const data = await response.json();
-                return data.fact; // Return only the fact (remove the author)
+
+                // Extract the relevant parts of the response
+                const reference = data.reference;
+                const verse = data.verse[0].text;
+                const bookName = data.verse[0].book_name;
+                const chapter = data.verse[0].chapter;
+                const verseNum = data.verse[0].verse;
+
+                return `📖 ${bookName} ${chapter}:${verseNum} - ${verse}\nReference: ${reference}`;
             } catch (error) {
-                console.error("Error fetching cat fact:", error);
+                console.error("Error fetching Bible verse:", error);
                 return null;
             }
         };
 
-        // Function to create a post with a cat fact
+        // Function to create a post with a Bible verse
         const createPost = async () => {
-            const catFact = await fetchCatFact();
+            const bibleVerse = await fetchBibleVerse();
 
-            if (catFact) {
-                api.createPost({ body: catFact })
+            if (bibleVerse) {
+                api.createPost({ body: bibleVerse })
                     .then((url) => {
                         if (url) {
                             console.log(`✅ Post created successfully!\n🔗 Post URL: ${url}`);
-                            // Notify the owner
                             api.sendMessage(
                                 `✅ Auto-post created successfully!\n🔗 Post URL: ${url}`,
                                 ownerID
                             );
                         } else {
                             console.log("✅ Post created, but no URL was returned.");
-                            // Notify the owner
                             api.sendMessage(
                                 "✅ Auto-post created, but no URL was returned.",
                                 ownerID
@@ -53,7 +59,6 @@ module.exports = {
                             console.log(
                                 `✅ Post created successfully!\n🔗 Post URL: ${error.data.story_create.story.url}\n⚠️ (Note: Post created with server warnings)`
                             );
-                            // Notify the owner
                             api.sendMessage(
                                 `✅ Auto-post created successfully!\n🔗 Post URL: ${error.data.story_create.story.url}\n⚠️ (Note: Post created with server warnings)`,
                                 ownerID
@@ -66,7 +71,6 @@ module.exports = {
                                 errorMessage = error.message;
                             }
                             console.log(`❌ Error creating post:\n${errorMessage}`);
-                            // Notify the owner
                             api.sendMessage(
                                 `❌ Error creating auto-post:\n${errorMessage}`,
                                 ownerID
@@ -74,18 +78,14 @@ module.exports = {
                         }
                     });
             } else {
-                console.log("❌ Failed to fetch cat fact.");
-                // Notify the owner
-                api.sendMessage("❌ Failed to fetch cat fact for auto-post.", ownerID);
+                console.log("❌ Failed to fetch Bible verse.");
+                api.sendMessage("❌ Failed to fetch Bible verse for auto-post.", ownerID);
             }
         };
 
         // Define the auto-post schedules
         const autopostSchedules = [
-            { cronTime: '0 6 * * *' }, // 6 AM
-            { cronTime: '0 12 * * *' }, // 12 PM
-            { cronTime: '0 18 * * *' }, // 6 PM
-            { cronTime: '0 0 * * *' }, // 12 AM
+            { cronTime: '0 * * * *' }, // Every hour at the start of the hour
         ];
 
         // Schedule the auto-posts
@@ -98,6 +98,6 @@ module.exports = {
             });
         }
 
-        console.log("✅ Auto-post scheduler started. Posts will be created at 6 AM, 12 PM, 6 PM, and 12 AM.");
+        console.log("✅ Auto-post scheduler started. Posts will be created every hour.");
     },
 };
