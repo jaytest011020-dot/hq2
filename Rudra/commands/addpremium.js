@@ -1,5 +1,5 @@
 const fs = require("fs");
-const config = require("../config.json"); // Correct path to config.json from 'commands' folder
+const config = require("../../config.json"); // Corrected path to config.json from 'commands' folder
 
 module.exports.config = {
   name: "addpremium",
