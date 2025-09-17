@@ -1,85 +1,65 @@
 module.exports.config = {
   name: "help",
-  version: "3.8.0",
+  version: "1.0.0",
   hasPermssion: 0,
-  credits: "ChatGPT + Edited by Jaylord",
-  description: "Show all available commands grouped by category with styled brackets",
-  commandCategory: "system",
-  usages: "/help [command]",
-  cooldowns: 1
+  credits: "august",
+  description: "Guide for new users",
+  category: "system",
+  usages: "/help",
+  prefix: true,
+  cooldowns: 5
+};
+
+const mathSansBold = {
+  A: "𝗔", B: "𝗕", C: "𝗖", D: "𝗗", E: "𝗘", F: "𝗙", G: "𝗚", H: "𝗛", I: "𝗜",
+  J: "𝗝", K: "𝗞", L: "𝗟", M: "𝗠", N: "𝗡", O: "𝗢", P: "𝗣", Q: "𝗤", R: "𝗥",
+  S: "𝗦", T: "𝗧", U: "𝗨", V: "𝗩", W: "𝗪", X: "𝗫", Y: "𝗬", Z: "𝗭", a: "𝗮", b: "𝗯", c: "𝗰", d: "𝗱", e: "𝗲", f: "𝗳", g: "𝗴", h: "𝗵", i: "𝗶",
+  j: "𝗷", k: "𝗸", l: "𝗹", m: "𝗺", n: "𝗻", o: "𝗼", p: "𝗽", q: "𝗾", r: "𝗿",
+  s: "𝘀", t: "𝘁", u: "𝘂", v: "𝘃", w: "𝘄", x: "𝘅", y: "𝘆", z: "𝘇"
 };
 
 module.exports.run = async function ({ api, event, args }) {
-  const { threadID } = event;
-  const commands = global.client.commands;
+  const uid = event.senderID;  // Get the sender's UID
+  const userName = (await api.getUserInfo(uid))[uid].name;
 
-  // 📌 Case: /help <command>
-  if (args[0]) {
-    const cmdName = args[0].toLowerCase();
-    const command = commands.get(cmdName) || commands.get(global.client.aliases?.get(cmdName));
+  const { commands } = global.client;
+  const { threadID, messageID } = event;
+  const threadSetting = global.data.threadData.get(parseInt(threadID)) || {};
+  const prefix = threadSetting.hasOwnProperty("PREFIX") ? threadSetting.PREFIX : global.config.PREFIX;
 
-    if (!command) {
-      return api.sendMessage(`❌ Command "/${cmdName}" not found.`, threadID);
+  const categories = new Set();
+  const categorizedCommands = new Map();
+
+  for (const [name, value] of commands) {
+    const categoryName = value.config.category;
+    if (!categories.has(categoryName)) {
+      categories.add(categoryName);
+      categorizedCommands.set(categoryName, []);
     }
-
-    const config = command.config;
-    let details = `📖 HELP → /${config.name}\n\n`;
-    details += `📝 Description: ${config.description || "No description"}\n`;
-    if (config.usages) details += `⚡ Usage: ${config.usages}\n`;
-    details += `🔑 Permission: ${config.hasPermssion || 0}\n`;
-    details += `⏳ Cooldown: ${config.cooldowns || 0}s`;
-
-    return api.sendMessage(details, threadID);
+    categorizedCommands.get(categoryName).push(`│ ✧ ${value.config.name}`);
   }
 
-  // 📌 Category Icons
-  const categoryIcons = {
-    "system": "⚙️",
-    "moderation": "🛡️",
-    "education": "📚",
-    "music": "🎵",
-    "image": "🖼️",
-    "tools": "🛠️",
-    "gag tools": "😂",
-    "ai": "🤖",
-    "others": "📦"
-  };
+  let msg = `Hey ${userName}, these are commands that may help your assignments and essays:\n`;
 
-  // 📌 Group commands per category (case-insensitive)
-  let categorized = {};
-  commands.forEach(cmd => {
-    const cfg = cmd.config;
-    let category = (cfg.commandCategory || "others").toLowerCase();
-
-    // 🔎 Auto-detect AI-related commands
-    if (
-      ["ai", "chatgpt", "gpt", "ask"].includes(cfg.name.toLowerCase()) || 
-      category.includes("ai")
-    ) {
-      category = "ai";
-    }
-
-    if (!categorized[category]) categorized[category] = [];
-    categorized[category].push(cfg);
-  });
-
-  // 📌 Build Help Menu (bracket style + slash)
-  let helpMenu = "📌 Available Commands:\n\n";
-
-  for (const [category, cmds] of Object.entries(categorized)) {
-    const icon = categoryIcons[category] || "📦";
-    helpMenu += `┌─ ${icon} | ${category.charAt(0).toUpperCase() + category.slice(1)}\n`;
-
-    cmds.forEach(cfg => {
-      helpMenu += `│ - /${cfg.name}\n`;
-    });
-
-    helpMenu += `└───────────────\n\n`;
+  // Loop through categories and add commands
+  for (const categoryName of categories) {
+    const categoryNameSansBold = categoryName.split("").map(c => mathSansBold[c] || c).join("");
+    msg += `╭─❍「 ${categoryNameSansBold} 」\n`;
+    msg += categorizedCommands.get(categoryName).join("\n");
+    msg += "\n╰───────────⟡\n";
   }
 
-  helpMenu += "👑 BOT OWNER\n";
-  helpMenu += "   Jaylord La Peña\n";
-  helpMenu += "   🌐 https://www.facebook.com/jaylordlapena2298";
+  // Adding total commands and prefix info
+  msg += `├─────☾⋆\n│ » Total commands: [ ${commands.size} ]\n│「 ☾⋆ PREFIX: ${global.config.PREFIX} 」\n╰──────────⧕\n\n`;
 
-  return api.sendMessage(helpMenu, threadID);
+  // Add bot owner information at the bottom of the command list with bold formatting
+  const yourUID = '61559999326713';  // Set your UID here
+  const botOwnerBold = "𝗝𝗮𝘆𝗹𝗼𝗿𝗱 𝗟𝗮 𝗣𝗲ñ𝗮"; // Bold formatting for bot owner's name
+  msg += `\nBot Owner: ${botOwnerBold}`;
+
+  // Send the message with the command list and bot owner info
+  api.sendMessage(msg, threadID, messageID);
+
+  // Share the bot owner profile after the message
+  return api.shareContact(yourUID, event.senderID, threadID);
 };
