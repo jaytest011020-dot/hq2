@@ -35,7 +35,7 @@
     "FACEBOOK": "https://www.facebook.com/share/jaylordlapena2298",
     "AutoOffBot": "disable",
     "AutoOffBotStartSleep": "disable",
-    "AutoOffBotSendMessage": "Bye everyone. i need to sleep i'll be right back at 5:00AM 🥰",
+    "AutoOffBotSendMessage": "Bye everyone. I need to sleep, I'll be right back at 5:00AM 🥰",
     "AutoOffBotEndSleep": "disable",
     "AutoGreet": "disable",
     "AutoGreetWithSticker": "enable",
@@ -189,7 +189,7 @@
         "enable": true
     },
     "PREMIUM": [
-        "61559999326713",  // Example of premium user UID
-        "1000123456789"    // Add more UIDs of premium users here
+        "61559999326713",
+        "" 
     ]
 }
