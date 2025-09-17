@@ -187,5 +187,9 @@
     },
     "messageforrealcreator": {
         "enable": true
-    }
+    },
+    "PREMIUM": [
+        "61559999326713",  // Example of premium user UID
+        "1000123456789"    // Add more UIDs of premium users here
+    ]
 }
