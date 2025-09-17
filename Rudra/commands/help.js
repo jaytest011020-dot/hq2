@@ -6,7 +6,6 @@ module.exports.config = {
   description: "Guide for new users",
   category: "system",
   usages: "/help",
-  prefix: true,
   cooldowns: 5
 };
 
