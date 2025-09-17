@@ -1,8 +1,9 @@
+// === modules/commands/bank.js ===
 const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "2.1.0",
+  version: "2.2.0",
   credits: "ChatGPT + Jaylord",
   hasPermssion: 0,
   description: "Bank system with UID checker (auto-update name on /bank)",
@@ -14,7 +15,7 @@ module.exports.config = {
 // 🔑 Bot admins
 const BOT_ADMINS = ["61559999326713"];
 
-// Helper function to fetch username by UID
+// Helper function to fetch username by UID (with fallback)
 async function getUserName(uid, Users, api) {
   try {
     let name = await Users.getNameUser(uid);
@@ -23,7 +24,6 @@ async function getUserName(uid, Users, api) {
       let info = await api.getUserInfo(uid);
       if (info && info[uid]?.name) {
         name = info[uid].name;
-        console.log(`[BANK] Forced fetch name for ${uid}: ${name}`);
       } else {
         name = uid;
       }
@@ -44,7 +44,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
   const { threadID, senderID, messageID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // ✅ when the command is /bank all
+  // ✅ /bank all
   if (command === "all") {
     let allData = (await getData(`bank`)) || {};
     let results = [];
@@ -78,7 +78,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
     return api.sendMessage(msg, threadID, messageID);
   }
 
-  // ✅ when the command is /bank add <uid> <amount>
+  // ✅ /bank add <uid> <amount>
   if (command === "add") {
     if (!BOT_ADMINS.includes(senderID)) {
       return api.sendMessage("❌ Only bot admins can add coins.", threadID, messageID);
@@ -114,7 +114,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
     );
   }
 
-  // ✅ when the command is just /bank (check own balance)
+  // ✅ /bank (own balance)
   let freshName = await getUserName(senderID, Users, api);
 
   let userData = (await getData(`bank/${senderID}`)) || {
