@@ -1,4 +1,4 @@
-const { getData, setData, updateData, deleteData } = require("../../database.js");
+const { getData, setData, deleteData } = require("../../database.js");
 
 function pollText(poll) {
   const remaining = poll.end - Date.now();
@@ -25,10 +25,10 @@ function cleanPoll(poll) {
   return {
     start: poll.start,
     end: poll.end,
-    activeUsers: Array.isArray(poll.activeUsers) ? poll.activeUsers : [],
-    totalUsers: Array.isArray(poll.totalUsers) ? poll.totalUsers : [],
-    postID: poll.postID || null,
-    ended: poll.ended || false
+    activeUsers: poll.activeUsers,
+    totalUsers: poll.totalUsers,
+    postID: poll.postID,
+    ended: poll.ended
   };
 }
 
@@ -41,9 +41,7 @@ async function endPoll(api, threadID, poll) {
     const adminIDs = threadInfo.adminIDs.map(a => a.id);
 
     const inactive = poll.totalUsers.filter(
-      u => !poll.activeUsers.includes(u) && 
-           u !== api.getCurrentUserID() && 
-           !adminIDs.includes(u)
+      u => !poll.activeUsers.includes(u) && u !== api.getCurrentUserID() && !adminIDs.includes(u)
     );
 
     for (const uid of inactive) {
@@ -69,7 +67,7 @@ async function endPoll(api, threadID, poll) {
 
 module.exports.config = {
   name: "cleaner",
-  version: "4.5.0",
+  version: "5.0.0",
   hasPermssion: 1,
   credits: "NN + ChatGPT",
   description: "Active user poll with auto kick",
@@ -136,7 +134,7 @@ module.exports.run = async function ({ api, event, args }) {
       api.sendMessage(pollText(poll), threadID, async (err, info) => {
         if (!err) {
           poll.postID = info.messageID;
-          await updateData(`/cleaners/${threadID}`, { postID: poll.postID });
+          await setData(`/cleaners/${threadID}`, cleanPoll(poll));
         }
       });
       return;
@@ -159,13 +157,10 @@ module.exports.handleEvent = async function ({ api, event }) {
     const { threadID, senderID, body, messageReply } = event;
     if (!body || !messageReply) return;
 
-    const poll = await getData(`/cleaners/${threadID}`);
+    let poll = await getData(`/cleaners/${threadID}`);
     if (!poll || poll.ended) return;
     if (messageReply.messageID !== poll.postID) return;
     if (body.trim().toLowerCase() !== "active") return;
-
-    // 🔧 ensure array safety
-    if (!Array.isArray(poll.activeUsers)) poll.activeUsers = [];
 
     if (!poll.activeUsers.includes(senderID)) {
       poll.activeUsers.push(senderID);
