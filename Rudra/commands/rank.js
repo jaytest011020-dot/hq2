@@ -31,7 +31,7 @@ function getRequiredXP(level) {
 
 module.exports.config = {
   name: "rank",
-  version: "3.1.0",
+  version: "3.2.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
   description: "Rank system with XP + auto announce on level up",
@@ -45,11 +45,11 @@ module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, senderID } = event;
   if (!threadID || !senderID) return;
 
-  // Get fresh username (like in bank.js / rankup.js)
+  // Get fresh username
   const info = await api.getUserInfo(senderID);
   const senderName = info[senderID]?.name || "Facebook User";
 
-  let data = (await getData(`/rank/${threadID}`)) || {};
+  let data = (await getData(`rank/${threadID}`)) || {};
 
   if (!data[senderID]) {
     data[senderID] = { name: senderName, xp: 0, level: 1 };
@@ -62,12 +62,15 @@ module.exports.handleEvent = async function ({ api, event }) {
   const xpGain = Math.floor(Math.random() * 3) + 1;
   data[senderID].xp += xpGain;
 
-  // Check level up (use while para di ma-stuck pag sobra XP)
+  // ✅ Check level up (ayusin stuck sa 99 XP)
   let leveledUp = false;
-  while (data[senderID].xp >= getRequiredXP(data[senderID].level)) {
-    data[senderID].xp -= getRequiredXP(data[senderID].level);
-    data[senderID].level++;
-    leveledUp = true;
+  while (true) {
+    const required = getRequiredXP(data[senderID].level);
+    if (data[senderID].xp >= required) {
+      data[senderID].xp -= required;
+      data[senderID].level++;
+      leveledUp = true;
+    } else break;
   }
 
   if (leveledUp) {
@@ -95,13 +98,13 @@ module.exports.handleEvent = async function ({ api, event }) {
     );
   }
 
-  await setData(`/rank/${threadID}`, data);
+  await setData(`rank/${threadID}`, data);
 };
 
 // 📌 Commands: /rank, /rank @mention, /rank all
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID, mentions } = event;
-  let data = (await getData(`/rank/${threadID}`)) || {};
+  let data = (await getData(`rank/${threadID}`)) || {};
 
   // --- /rank (self)
   if (args.length === 0) {
