@@ -1,8 +1,8 @@
 module.exports.config = {
   name: "resend",
-  version: "2.3.0",
+  version: "2.4.0",
   hasPermssion: 1,
-  credits: "ryuko + fixed by ChatGPT",
+  credits: "ryuko + fixed by ChatGPT + improved by Jaylord",
   description: "Resend unsent messages (text + attachments)",
   commandCategory: "system",
   usages: "/resend",
@@ -40,7 +40,15 @@ module.exports.handleEvent = async function ({ event, api, Users }) {
     const getMsg = global.logMessage.get(messageID);
     if (!getMsg) return;
 
-    const name = await Users.getNameUser(senderID);
+    // ✅ Prefer event.senderName if available
+    let name = event.senderName;
+    if (!name) {
+      try {
+        name = await Users.getNameUser(senderID);
+      } catch (e) {
+        name = "Unknown User";
+      }
+    }
 
     // case: no attachment
     if (!getMsg.attachment || getMsg.attachment.length === 0) {
