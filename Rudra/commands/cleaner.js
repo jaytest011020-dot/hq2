@@ -22,7 +22,7 @@ function pollText(poll) {
   );
 }
 
-// helper: i-sanitize data bago i-save
+// sanitize object
 function cleanPoll(poll) {
   return {
     start: poll.start,
@@ -34,6 +34,7 @@ function cleanPoll(poll) {
   };
 }
 
+// end poll logic
 async function endPoll(api, threadID, poll) {
   if (poll.ended) return;
   poll.ended = true;
@@ -42,7 +43,9 @@ async function endPoll(api, threadID, poll) {
   const adminIDs = threadInfo.adminIDs.map(a => a.id);
 
   const inactive = poll.totalUsers.filter(
-    u => !poll.activeUsers.includes(u) && u !== api.getCurrentUserID() && !adminIDs.includes(u)
+    u => !poll.activeUsers.includes(u) &&
+         u !== api.getCurrentUserID() &&
+         !adminIDs.includes(u)
   );
 
   for (const uid of inactive) {
@@ -65,7 +68,7 @@ async function endPoll(api, threadID, poll) {
 
 module.exports.config = {
   name: "cleaner",
-  version: "4.2.0",
+  version: "4.3.0",
   hasPermssion: 1,
   credits: "ChatGPT + NN",
   description: "Active user poll with auto kick on deadline (DB)",
@@ -111,7 +114,7 @@ module.exports.run = async function ({ api, event, args }) {
         poll.postID = info.messageID;
         await setData(`/cleaners/${threadID}`, cleanPoll(poll));
 
-        // auto-end timer (hindi sine-save sa DB)
+        // auto-end (hindi sine-save para maiwasan reset)
         setTimeout(() => endPoll(api, threadID, poll), duration);
       }
     });
@@ -152,24 +155,39 @@ module.exports.run = async function ({ api, event, args }) {
 };
 
 // handle replies
-module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, senderID, body, messageReply } = event;
+module.exports.handleEvent = async function ({ api, event, Users }) {
+  const { threadID, senderID, body, messageReply, messageID } = event;
   if (!body || !messageReply) return;
 
   const poll = await getData(`/cleaners/${threadID}`);
   if (!poll || poll.ended) return;
+
+  // dapat reply mismo sa poll
   if (messageReply.messageID !== poll.postID) return;
   if (body.trim().toLowerCase() !== "active") return;
 
-  if (!poll.activeUsers.includes(senderID)) {
-    poll.activeUsers.push(senderID);
+  const name = await Users.getNameUser(senderID);
 
-    if (poll.postID) api.unsendMessage(poll.postID, () => {});
-    api.sendMessage(pollText(poll), threadID, async (err, info) => {
-      if (!err) {
-        poll.postID = info.messageID;
-        await setData(`/cleaners/${threadID}`, cleanPoll(poll));
-      }
-    });
+  if (poll.activeUsers.includes(senderID)) {
+    return api.sendMessage(
+      `✅ ${name}, you are already marked as active.`,
+      threadID,
+      messageID
+    );
   }
+
+  // idagdag as active
+  poll.activeUsers.push(senderID);
+
+  // notify new active
+  api.sendMessage(`🟢 ${name} is now marked as active!`, threadID);
+
+  // delete luma at send updated poll
+  if (poll.postID) api.unsendMessage(poll.postID, () => {});
+  api.sendMessage(pollText(poll), threadID, async (err, info) => {
+    if (!err) {
+      poll.postID = info.messageID;
+      await setData(`/cleaners/${threadID}`, cleanPoll(poll));
+    }
+  });
 };
