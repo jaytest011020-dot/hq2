@@ -34,4 +34,14 @@ async function getData(path) {
   }
 }
 
-module.exports = { setData, getData };
+async function deleteData(path) {
+  try {
+    await db.ref(path).remove();
+    return true;
+  } catch (err) {
+    console.error("Error deleting data:", err);
+    return false;
+  }
+}
+
+module.exports = { setData, getData, deleteData };
