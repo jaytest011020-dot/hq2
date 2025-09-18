@@ -1,5 +1,8 @@
 const { setData, getData } = require("../../database.js");
 
+// 📌 Configurable number of admins to display in text
+const MAX_DISPLAY_ADMINS = 5;
+
 // List of violations
 const badwords = [
   "tanga", "bobo", "gago", "puta", "pakyu", "inutil", "ulol",
@@ -50,21 +53,21 @@ async function getUserName(uid, api) {
 
 // Format warning UI
 function formatWarning(name, type, note, count) {
-  return `╭━━━[ ⚠️ WARNING ISSUED ]━━━╮
+  return `╭━━━[⚠️WARNING ISSUED]━━━╮
 ┃ 👤 User: @${name}
 ┃ 🚫 Violation: ${type}
 ┃ 📝 Note: ${note}
 ┃
 ┃ ⚠️ Your current warning count: ${count}
-╰━━━━━━━━━━━━━━━━━━━━━━━╯`;
+╰━━━━━━━━━━━━━━━━━━╯`;
 }
 
 module.exports.config = {
   name: "warning",
-  version: "2.0.0",
+  version: "2.1.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Auto warning system with per-thread DB",
+  description: "Auto warning system with per-thread DB + Admin notify",
   commandCategory: "system",
   usages: "/warning check @mention | /warning list",
   cooldowns: 5
@@ -165,11 +168,35 @@ module.exports.handleEvent = async function({ api, event }) {
   // Get violator name
   const name = await getUserName(senderID, api);
 
-  // Send warning as reply
+  // 🔔 Fetch admins
+  const threadInfo = await api.getThreadInfo(threadID);
+  const adminIDs = threadInfo.adminIDs.map(a => a.id);
+  const adminMentions = [];
+
+  for (const id of adminIDs) {
+    if (id !== senderID) {
+      const adminName = await getUserName(id, api);
+      adminMentions.push({ tag: `@${adminName}`, id });
+    }
+  }
+
+  // Limit displayed admins (text only)
+  let displayAdmins = adminMentions.slice(0, MAX_DISPLAY_ADMINS);
+  let extraCount = adminMentions.length - displayAdmins.length;
+
+  const adminLine =
+    displayAdmins.map(m => m.tag).join(" | ") +
+    (extraCount > 0 ? ` ... (+${extraCount} more)` : "");
+
+  // Send warning with admin notification
   api.sendMessage(
     {
-      body: formatWarning(name, violationType, note, warnings.count),
-      mentions: [{ tag: `@${name}`, id: senderID }]
+      body:
+        formatWarning(name, violationType, note, warnings.count) +
+        (adminMentions.length > 0
+          ? `\n\n📢 Notifying admins: ${adminLine}`
+          : ""),
+      mentions: [{ tag: `@${name}`, id: senderID }, ...adminMentions]
     },
     threadID,
     null,
