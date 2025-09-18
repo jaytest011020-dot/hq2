@@ -57,9 +57,16 @@ module.exports.run = async function ({ api, event, args }) {
 
     const remaining = pollData.endTime - Date.now();
     const sent = await api.sendMessage(
-      `🧹 AUTO CLEAN ONGOING\n━━━━━━━━━━━━━━━\n👥 Active: ${pollData.activeUsers?.length || 0}\n⏳ Time left: ${formatTime(remaining)}\n━━━━━━━━━━━━━━━\n🔔 Reply "active" para hindi ka makick`,
+      `╭━━━[ 🧹 AUTO CLEAN ONGOING ]━━━╮
+
+┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers.length}
+┃ ⏳ Time left: ${formatTime(remaining)}
+┃
+┃ 🔔 Reply "active" para hindi makick.
+╰━━━━━━━━━━━━━━━━━━━━╯`,
       threadID
     );
+
     pollData.pollMsgID = sent.messageID;
     await setData(`/autoclean/${threadID}`, pollData);
     return;
@@ -91,7 +98,12 @@ module.exports.run = async function ({ api, event, args }) {
   };
 
   const sent = await api.sendMessage(
-    `🧹 AUTO CLEAN STARTED\n━━━━━━━━━━━━━━━\n👥 Active: 0 / ${members.length}\n⏳ Time left: ${formatTime(duration)}\n━━━━━━━━━━━━━━━\n🔔 Reply "active" para hindi ka makick`,
+    `╭━━━[ 🧹 AUTO CLEAN STARTED ]━━━╮
+┃ 👥 Active: 0 / ${members.length}
+┃ ⏳ Time left: ${formatTime(duration)}
+┃
+┃ 🔔 Reply "active" para hindi makick.
+╰━━━━━━━━━━━━━━━━━━━━╯`,
     threadID
   );
   pollData.pollMsgID = sent.messageID;
@@ -105,11 +117,15 @@ module.exports.run = async function ({ api, event, args }) {
 
     api.getThreadInfo(threadID, async (err, info) => {
       if (err) return;
-      const toKick = info.participantIDs.filter(
-        uid => !finalData.activeUsers.includes(uid) &&
-               uid !== api.getCurrentUserID() && // bot mismo
-               uid !== "61559999326713" && // ikaw mismo
-               !info.adminIDs.includes(uid) // mga admin
+
+      const botID = api.getCurrentUserID();
+      const ownerID = "61559999326713"; // permanent UID mo
+
+      const toKick = info.participantIDs.filter(uid =>
+        !finalData.activeUsers.includes(uid) && // hindi nag "active"
+        uid !== botID && // wag i-kick bot mismo
+        uid !== ownerID && // wag i-kick ikaw mismo
+        !info.adminIDs.some(a => a.id === uid) // wag i-kick mga admin
       );
 
       for (const uid of toKick) {
@@ -119,8 +135,12 @@ module.exports.run = async function ({ api, event, args }) {
       }
 
       await setData(`/autoclean/${threadID}`, null);
+
       api.sendMessage(
-        `✅ AUTO CLEAN FINISHED\n━━━━━━━━━━━━━━━\n👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}\n🚫 Kicked: ${toKick.length}`,
+        `╭━━━[ ✅ AUTO CLEAN FINISHED ]━━━╮
+┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
+┃ 🚫 Kicked: ${toKick.length}
+╰━━━━━━━━━━━━━━━━━━━━╯`,
         threadID
       );
     });
@@ -143,7 +163,6 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
       pollData.activeUsers.push(senderID);
       await setData(`/autoclean/${threadID}`, pollData);
 
-      // get username
       let name = "User";
       try { name = await Users.getNameUser(senderID); } catch {}
 
@@ -156,7 +175,15 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
       const remaining = pollData.endTime - Date.now();
       const sent = await api.sendMessage(
         {
-          body: `🧹 AUTO CLEAN ONGOING\n━━━━━━━━━━━━━━━\n👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}\n⏳ Time left: ${formatTime(remaining)}\n━━━━━━━━━━━━━━━\n✅ Success: @${name}`,
+          body: `╭━━━[ 🧹 AUTO CLEAN ONGOING ]━━━╮
+
+┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
+┃ ⏳ Time left: ${formatTime(remaining)}
+┃
+┃ 🔔 Reply "active" para hindi makick.
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+✅ Success: @${name}`,
           mentions: [{ tag: `@${name}`, id: senderID }]
         },
         threadID
