@@ -31,7 +31,7 @@ function getRequiredXP(level) {
 
 module.exports.config = {
   name: "rank",
-  version: "3.0.0",
+  version: "3.1.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
   description: "Rank system with XP + auto announce on level up",
@@ -62,12 +62,15 @@ module.exports.handleEvent = async function ({ api, event }) {
   const xpGain = Math.floor(Math.random() * 3) + 1;
   data[senderID].xp += xpGain;
 
-  // Check level up
-  let requiredXP = getRequiredXP(data[senderID].level);
-  if (data[senderID].xp >= requiredXP) {
-    data[senderID].xp -= requiredXP;
+  // Check level up (use while para di ma-stuck pag sobra XP)
+  let leveledUp = false;
+  while (data[senderID].xp >= getRequiredXP(data[senderID].level)) {
+    data[senderID].xp -= getRequiredXP(data[senderID].level);
     data[senderID].level++;
+    leveledUp = true;
+  }
 
+  if (leveledUp) {
     const rankName = ranks[data[senderID].level - 1] || "Infinity";
 
     // Auto announce rank up with image card
