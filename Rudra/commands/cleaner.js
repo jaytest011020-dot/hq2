@@ -28,7 +28,7 @@ function formatPollMessage(poll, totalUsers) {
 ✅ Reply "active" to this message to stay in the group.
 ⚠️ Inactive users will be auto-kicked on deadline.
 ─────────────────────────────
-👥 Voters: ${poll.voters.length} / ${totalUsers}`
+👥 Active: ${poll.voters.length} / ${totalUsers}`
   );
 }
 
