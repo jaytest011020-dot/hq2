@@ -58,9 +58,8 @@ module.exports.run = async function ({ api, event, args }) {
     const remaining = pollData.endTime - Date.now();
     const sent = await api.sendMessage(
       `╭━━━[ 🧹 AUTO CLEAN ONGOING ]━━━╮
-┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers?.length || 0}
+┃ 👥 Active: ${pollData.activeUsers?.length || 0}
 ┃ ⏳ Time left: ${formatTime(remaining)}
-┃ 📅 Deadline: ${new Date(pollData.endTime).toLocaleString()}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
@@ -100,7 +99,6 @@ module.exports.run = async function ({ api, event, args }) {
     `╭━━━[ 🧹 AUTO CLEAN STARTED ]━━━╮
 ┃ 👥 Active: 0 / ${members.length}
 ┃ ⏳ Time left: ${formatTime(duration)}
-┃ 📅 Deadline: ${new Date(endTime).toLocaleString()}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
@@ -117,11 +115,9 @@ module.exports.run = async function ({ api, event, args }) {
 
     api.getThreadInfo(threadID, async (err, info) => {
       if (err) return;
-
       const toKick = info.participantIDs.filter(
         uid => !finalData.activeUsers.includes(uid) &&
                uid !== api.getCurrentUserID() &&
-               uid !== "61559999326713" && // your UID
                !info.adminIDs.includes(uid)
       );
 
@@ -136,7 +132,6 @@ module.exports.run = async function ({ api, event, args }) {
         `╭━━━[ ✅ AUTO CLEAN FINISHED ]━━━╮
 ┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
 ┃ 🚫 Kicked: ${toKick.length}
-┃ 📅 Ended: ${new Date().toLocaleString()}
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
         threadID
       );
@@ -176,7 +171,6 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
           body: `╭━━━[ 🧹 AUTO CLEAN ONGOING ]━━━╮
 ┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
-┃ 📅 Deadline: ${new Date(pollData.endTime).toLocaleString()}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
 ╰━━━━━━━━━━━━━━━━━━━━╯
