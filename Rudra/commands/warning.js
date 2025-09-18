@@ -7,7 +7,7 @@ const badwords = [
 ];
 const racistWords = [
   "negro", "nigger", "chimp", "nigga", "baluga",
-  "chink", "indio", "bakla", "niga", "bungal"// homophobic
+  "chink", "indio", "bakla", "niga", "bungal"
 ];
 const allowedLinks = ["facebook.com", "fb.com"];
 
@@ -37,6 +37,17 @@ function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// Helper para laging fresh username
+async function getUserName(uid, api) {
+  try {
+    const info = await api.getUserInfo(uid);
+    if (info && info[uid]?.name) return info[uid].name;
+    return "User";
+  } catch {
+    return "User";
+  }
+}
+
 // Format warning UI
 function formatWarning(name, type, note, count) {
   return `╭━━━[ ⚠️ WARNING ISSUED ]━━━╮
@@ -50,17 +61,17 @@ function formatWarning(name, type, note, count) {
 
 module.exports.config = {
   name: "warning",
-  version: "1.0.0",
+  version: "2.0.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Auto warning system with command to check/list warnings",
+  description: "Auto warning system with per-thread DB",
   commandCategory: "system",
   usages: "/warning check @mention | /warning list",
   cooldowns: 5
 };
 
 // 📌 COMMANDS
-module.exports.run = async function({ api, event, args, Users }) {
+module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID, mentions } = event;
 
   if (args.length === 0) {
@@ -74,9 +85,8 @@ module.exports.run = async function({ api, event, args, Users }) {
     const uid = Object.keys(mentions)[0];
     if (!uid) return api.sendMessage("❌ Please mention a user.", threadID, messageID);
 
-    const warnings = await getData(`/warnings/${threadID}/${uid}`) || { count: 0 };
-    let name = "User";
-    try { name = await Users.getNameUser(uid); } catch {}
+    const warnings = await getData(`${threadID}_warnings_${uid}`) || { count: 0 };
+    const name = await getUserName(uid, api);
 
     return api.sendMessage(
       `👤 User: ${name}\n⚠️ Warning Count: ${warnings.count}`,
@@ -87,24 +97,27 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   // /warning list
   if (sub === "list") {
-    const data = await getData(`/warnings/${threadID}`) || {};
     let msg = "📋 Warning List:\n\n";
+    let found = false;
 
-    if (Object.keys(data).length === 0) msg += "Wala pang na-warning.";
-    else {
-      for (const uid in data) {
-        let name = "User";
-        try { name = await Users.getNameUser(uid); } catch {}
-        msg += `• ${name}: ${data[uid].count} warnings\n`;
+    const data = await getData(threadID + "_warnings_all") || [];
+    for (const uid of data) {
+      const warnings = await getData(`${threadID}_warnings_${uid}`);
+      if (warnings && warnings.count > 0) {
+        const name = await getUserName(uid, api);
+        msg += `• ${name}: ${warnings.count} warnings\n`;
+        found = true;
       }
     }
+
+    if (!found) msg += "Wala pang na-warning.";
 
     return api.sendMessage(msg, threadID, messageID);
   }
 };
 
 // 📌 AUTO-DETECTION
-module.exports.handleEvent = async function({ api, event, Users }) {
+module.exports.handleEvent = async function({ api, event }) {
   const { threadID, messageID, senderID, body } = event;
   if (!body) return;
 
@@ -136,15 +149,21 @@ module.exports.handleEvent = async function({ api, event, Users }) {
   if (!violationType) return;
 
   // Get warnings
-  let warnings = await getData(`/warnings/${threadID}/${senderID}`);
+  let warnings = await getData(`${threadID}_warnings_${senderID}`);
   if (!warnings) warnings = { count: 0 };
 
   warnings.count++;
-  await setData(`/warnings/${threadID}/${senderID}`, warnings);
+  await setData(`${threadID}_warnings_${senderID}`, warnings);
+
+  // Track sa list of warned users para sa /warning list
+  let all = await getData(threadID + "_warnings_all") || [];
+  if (!all.includes(senderID)) {
+    all.push(senderID);
+    await setData(threadID + "_warnings_all", all);
+  }
 
   // Get violator name
-  let name = "User";
-  try { name = await Users.getNameUser(senderID); } catch {}
+  const name = await getUserName(senderID, api);
 
   // Send warning as reply
   api.sendMessage(
@@ -154,6 +173,6 @@ module.exports.handleEvent = async function({ api, event, Users }) {
     },
     threadID,
     null,
-    messageID // reply to violator’s message
+    messageID
   );
 };
