@@ -1,10 +1,10 @@
 module.exports.config = {
   name: "resend",
-  version: "2.1.0",
+  version: "2.3.0",
   hasPermssion: 1,
   credits: "ryuko + fixed by ChatGPT",
   description: "Resend unsent messages (text + attachments)",
-  commandCategory: "system", // 🔑 tama na para gumana sa help.js
+  commandCategory: "system",
   usages: "/resend",
   cooldowns: 0,
   dependencies: {
@@ -15,14 +15,16 @@ module.exports.config = {
 
 module.exports.handleEvent = async function ({ event, api, Users }) {
   const axios = global.nodemodule["axios"];
-  const { writeFileSync, createReadStream } = global.nodemodule["fs-extra"];
+  const { writeFileSync, createReadStream, unlinkSync } = global.nodemodule["fs-extra"];
   const { messageID, senderID, threadID, body } = event;
 
   if (!global.logMessage) global.logMessage = new Map();
   if (!global.data.botID) global.data.botID = api.getCurrentUserID();
 
+  // ✅ Default ON kung walang setting
   const thread = global.data.threadData.get(parseInt(threadID)) || {};
-  if (typeof thread["resend"] !== "undefined" && thread["resend"] === false) return;
+  if (typeof thread["resend"] === "undefined") thread["resend"] = true;
+  if (thread["resend"] === false) return;
   if (senderID == global.data.botID) return;
 
   // Save sent messages
@@ -40,32 +42,44 @@ module.exports.handleEvent = async function ({ event, api, Users }) {
 
     const name = await Users.getNameUser(senderID);
 
+    // case: no attachment
     if (!getMsg.attachment || getMsg.attachment.length === 0) {
       return api.sendMessage(
         `${name} just unsent a message:\n${getMsg.msgBody || "[empty]"}`,
         threadID
       );
-    } else {
-      let msg = {
-        body: `${name} just unsent ${getMsg.attachment.length} attachment(s)${
-          getMsg.msgBody ? `\nContent: ${getMsg.msgBody}` : ""
-        }`,
-        attachment: [],
-        mentions: [{ tag: name, id: senderID }]
-      };
-
-      let num = 0;
-      for (let att of getMsg.attachment) {
-        num++;
-        const ext = att.url.split(".").pop().split("?")[0]; // file extension
-        const path = __dirname + `/cache/${num}.${ext}`;
-        const data = (await axios.get(att.url, { responseType: "arraybuffer" })).data;
-        writeFileSync(path, Buffer.from(data, "utf-8"));
-        msg.attachment.push(createReadStream(path));
-      }
-
-      return api.sendMessage(msg, threadID);
     }
+
+    // case: with attachment(s)
+    let msg = {
+      body: `${name} just unsent ${getMsg.attachment.length} attachment(s)${
+        getMsg.msgBody ? `\n📝 Content: ${getMsg.msgBody}` : ""
+      }`,
+      attachment: [],
+      mentions: [{ tag: name, id: senderID }]
+    };
+
+    let num = 0;
+    for (let att of getMsg.attachment) {
+      try {
+        num++;
+        const ext = att.url.split(".").pop().split("?")[0] || "dat"; // default extension
+        const filePath = __dirname + `/cache/resend_${Date.now()}_${num}.${ext}`;
+        const response = await axios.get(att.url, { responseType: "arraybuffer" });
+        writeFileSync(filePath, Buffer.from(response.data));
+        msg.attachment.push(createReadStream(filePath));
+
+        // auto cleanup
+        setTimeout(() => {
+          try { unlinkSync(filePath); } catch (e) {}
+        }, 60 * 1000);
+
+      } catch (e) {
+        console.error("❌ Error downloading attachment:", e.message);
+      }
+    }
+
+    return api.sendMessage(msg, threadID);
   }
 };
 
@@ -73,11 +87,10 @@ module.exports.run = async function ({ api, event, Threads }) {
   const { threadID, messageID } = event;
 
   let data = (await Threads.getData(threadID)).data || {};
-  if (typeof data["resend"] === "undefined" || data["resend"] === false) {
-    data["resend"] = true;
-  } else {
-    data["resend"] = false;
-  }
+  if (typeof data["resend"] === "undefined") data["resend"] = true; // ✅ default ON
+
+  // toggle
+  data["resend"] = !data["resend"];
 
   await Threads.setData(parseInt(threadID), { data });
   global.data.threadData.set(parseInt(threadID), data);
