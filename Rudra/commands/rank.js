@@ -1,6 +1,6 @@
 const { getData, setData } = require("../../database.js");
 
-// ✅ 100 Rank Names
+// ✅ 100 Maangas Rank Names
 const ranks = [
   "Newbie", "Rookie", "Apprentice", "Novice", "Scout",
   "Learner", "Adventurer", "Explorer", "Wanderer", "Seeker",
@@ -24,9 +24,9 @@ const ranks = [
   "Starforged", "Dimension Breaker", "Time Weaver", "Infinity", "Godslayer"
 ];
 
-// 📌 Linear formula: required XP = 100 * level
+// 📌 Formula: Linear XP requirement
 function getRequiredXP(level) {
-  return 100 * level;
+  return 100 * level; // level 1 → 100 XP, level 2 → 200 XP, etc.
 }
 
 module.exports.config = {
@@ -34,18 +34,18 @@ module.exports.config = {
   version: "3.3.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
-  description: "Rank system with XP, level up auto announce, and leaderboard",
+  description: "Rank system with XP + auto announce on level up",
   commandCategory: "fun",
   usages: "/rank | /rank @mention | /rank all",
   cooldowns: 0
 };
 
-// 📌 Handle XP gain + auto announce level up
+// 📌 Handle messages → XP Gain + Auto Announce Level Up
 module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, senderID } = event;
   if (!threadID || !senderID) return;
 
-  // Fetch name
+  // Get fresh username
   const info = await api.getUserInfo(senderID);
   const senderName = info[senderID]?.name || "Facebook User";
 
@@ -55,21 +55,21 @@ module.exports.handleEvent = async function ({ api, event }) {
     data[senderID] = { name: senderName, xp: 0, level: 1 };
   }
 
+  // Always keep updated name
   data[senderID].name = senderName;
 
-  // Add XP (1–3 random)
+  // Add random XP (1–3)
   const xpGain = Math.floor(Math.random() * 3) + 1;
   data[senderID].xp += xpGain;
 
-  // Level up loop
+  // ✅ Check level up properly
   let leveledUp = false;
   while (data[senderID].xp >= getRequiredXP(data[senderID].level)) {
-    data[senderID].xp -= getRequiredXP(data[senderID].level);
+    data[senderID].xp -= getRequiredXP(data[senderID].level); // reset XP
     data[senderID].level++;
     leveledUp = true;
   }
 
-  // Auto announce if level up
   if (leveledUp) {
     const rankName = ranks[data[senderID].level - 1] || "Infinity";
 
@@ -82,16 +82,26 @@ module.exports.handleEvent = async function ({ api, event }) {
       `&currentXP=${data[senderID].xp}` +
       `&requiredXP=${getRequiredXP(data[senderID].level)}`;
 
-    api.sendMessage(
-      {
-        body:
-          `🎉 Congrats ${senderName}!\n` +
-          `You reached **Level ${data[senderID].level}** 🎖️\n` +
-          `Your new rank: ${rankName}`,
-        attachment: await global.utils.getStreamFromURL(imgUrl)
-      },
-      threadID
-    );
+    try {
+      api.sendMessage(
+        {
+          body:
+            `🎉 Congratulations ${senderName}!\n` +
+            `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
+            `Your new rank is: ${rankName}`,
+          attachment: await global.utils.getStreamFromURL(imgUrl)
+        },
+        threadID
+      );
+    } catch (e) {
+      api.sendMessage(
+        `🎉 Congratulations ${senderName}!\n` +
+          `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
+          `Your new rank is: ${rankName}\n\n` +
+          `⚠️ (Rank card image failed to load)`,
+        threadID
+      );
+    }
   }
 
   await setData(`rank/${threadID}`, data);
@@ -120,18 +130,30 @@ module.exports.run = async function ({ api, event, args }) {
       `&currentXP=${user.xp}` +
       `&requiredXP=${getRequiredXP(user.level)}`;
 
-    return api.sendMessage(
-      {
-        body:
-          `📊 Rank Info for ${user.name}\n\n` +
+    try {
+      return api.sendMessage(
+        {
+          body:
+            `📊 Rank Info for ${user.name}\n\n` +
+            `🏅 Level: ${user.level}\n` +
+            `⭐ XP: ${user.xp}/${getRequiredXP(user.level)}\n` +
+            `🎖️ Rank: ${rankName}`,
+          attachment: await global.utils.getStreamFromURL(imgUrl)
+        },
+        threadID,
+        messageID
+      );
+    } catch (e) {
+      return api.sendMessage(
+        `📊 Rank Info for ${user.name}\n\n` +
           `🏅 Level: ${user.level}\n` +
           `⭐ XP: ${user.xp}/${getRequiredXP(user.level)}\n` +
-          `🎖️ Rank: ${rankName}`,
-        attachment: await global.utils.getStreamFromURL(imgUrl)
-      },
-      threadID,
-      messageID
-    );
+          `🎖️ Rank: ${rankName}\n\n` +
+          `⚠️ (Rank card image failed to load)`,
+        threadID,
+        messageID
+      );
+    }
   }
 
   // --- /rank all (leaderboard)
@@ -170,18 +192,30 @@ module.exports.run = async function ({ api, event, args }) {
       `&currentXP=${user.xp}` +
       `&requiredXP=${getRequiredXP(user.level)}`;
 
-    return api.sendMessage(
-      {
-        body:
-          `📊 Rank Info for ${user.name}\n\n` +
+    try {
+      return api.sendMessage(
+        {
+          body:
+            `📊 Rank Info for ${user.name}\n\n` +
+            `🏅 Level: ${user.level}\n` +
+            `⭐ XP: ${user.xp}/${getRequiredXP(user.level)}\n` +
+            `🎖️ Rank: ${rankName}`,
+          attachment: await global.utils.getStreamFromURL(imgUrl)
+        },
+        threadID,
+        messageID
+      );
+    } catch (e) {
+      return api.sendMessage(
+        `📊 Rank Info for ${user.name}\n\n` +
           `🏅 Level: ${user.level}\n` +
           `⭐ XP: ${user.xp}/${getRequiredXP(user.level)}\n` +
-          `🎖️ Rank: ${rankName}`,
-        attachment: await global.utils.getStreamFromURL(imgUrl)
-      },
-      threadID,
-      messageID
-    );
+          `🎖️ Rank: ${rankName}\n\n` +
+          `⚠️ (Rank card image failed to load)`,
+        threadID,
+        messageID
+      );
+    }
   }
 
   return api.sendMessage("⚠️ Usage: /rank | /rank @mention | /rank all", threadID, messageID);
