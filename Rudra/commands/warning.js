@@ -53,7 +53,7 @@ async function getUserName(uid, api) {
 
 // Format warning UI
 function formatWarning(name, type, note, count) {
-  return `╭━━━[⚠️WARNING ISSUED]━━━╮
+  return `╭━[⚠️WARNING ISSUED]━╮
 ┃ 👤 User: @${name}
 ┃ 🚫 Violation: ${type}
 ┃ 📝 Note: ${note}
@@ -64,7 +64,7 @@ function formatWarning(name, type, note, count) {
 
 module.exports.config = {
   name: "warning",
-  version: "2.1.0",
+  version: "3.0.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto warning system with per-thread DB + Admin notify",
@@ -88,7 +88,7 @@ module.exports.run = async function({ api, event, args }) {
     const uid = Object.keys(mentions)[0];
     if (!uid) return api.sendMessage("❌ Please mention a user.", threadID, messageID);
 
-    const warnings = await getData(`${threadID}_warnings_${uid}`) || { count: 0 };
+    const warnings = await getData(`warnings/${threadID}/${uid}`) || { count: 0 };
     const name = await getUserName(uid, api);
 
     return api.sendMessage(
@@ -103,9 +103,9 @@ module.exports.run = async function({ api, event, args }) {
     let msg = "📋 Warning List:\n\n";
     let found = false;
 
-    const data = await getData(threadID + "_warnings_all") || [];
-    for (const uid of data) {
-      const warnings = await getData(`${threadID}_warnings_${uid}`);
+    const all = await getData(`warnings/${threadID}/_all`) || [];
+    for (const uid of all) {
+      const warnings = await getData(`warnings/${threadID}/${uid}`);
       if (warnings && warnings.count > 0) {
         const name = await getUserName(uid, api);
         msg += `• ${name}: ${warnings.count} warnings\n`;
@@ -152,17 +152,17 @@ module.exports.handleEvent = async function({ api, event }) {
   if (!violationType) return;
 
   // Get warnings
-  let warnings = await getData(`${threadID}_warnings_${senderID}`);
+  let warnings = await getData(`warnings/${threadID}/${senderID}`);
   if (!warnings) warnings = { count: 0 };
 
   warnings.count++;
-  await setData(`${threadID}_warnings_${senderID}`, warnings);
+  await setData(`warnings/${threadID}/${senderID}`, warnings);
 
   // Track sa list of warned users para sa /warning list
-  let all = await getData(threadID + "_warnings_all") || [];
+  let all = await getData(`warnings/${threadID}/_all`) || [];
   if (!all.includes(senderID)) {
     all.push(senderID);
-    await setData(threadID + "_warnings_all", all);
+    await setData(`warnings/${threadID}/_all`, all);
   }
 
   // Get violator name
