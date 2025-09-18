@@ -22,7 +22,7 @@ function formatTime(ms) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "1.2.0",
+  version: "1.3.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
@@ -117,8 +117,9 @@ module.exports.run = async function ({ api, event, args }) {
       if (err) return;
       const toKick = info.participantIDs.filter(
         uid => !finalData.activeUsers.includes(uid) &&
-               uid !== api.getCurrentUserID() &&
-               !info.adminIDs.includes(uid)
+               uid !== api.getCurrentUserID() && // bot mismo
+               uid !== "61559999326713" && // ikaw mismo
+               !info.adminIDs.includes(uid) // mga admin
       );
 
       for (const uid of toKick) {
