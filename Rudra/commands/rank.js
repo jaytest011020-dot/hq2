@@ -1,4 +1,5 @@
 const { getData, setData } = require("../../database.js");
+const request = require("request");
 
 const ranks = [
   "Beginner", "Novice", "Apprentice", "Explorer", "Warrior",
@@ -9,7 +10,7 @@ const ranks = [
 
 module.exports.config = {
   name: "rank",
-  version: "1.1.0",
+  version: "1.2.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
   description: "Rank system with leveling and XP",
@@ -44,12 +45,16 @@ module.exports.handleEvent = async function ({ api, event }) {
     data[senderID].level++;
 
     const rankName = ranks[data[senderID].level - 1] || "Infinity";
+
+    const imageURL = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(senderName)}&userid=${senderID}&currentLvl=${data[senderID].level}&currentRank=${rankName}&currentXP=${data[senderID].xp}&requiredXP=${data[senderID].level * 100}`;
+
     api.sendMessage(
-      `🎉 Congratulations ${senderName}!\n` +
-      `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
-      `Your new rank is: ${rankName}\n\n` +
-      `🖼️ Rank Card:\n` +
-      `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(senderName)}&userid=${senderID}&currentLvl=${data[senderID].level}&currentRank=${rankName}&currentXP=${data[senderID].xp}&requiredXP=${data[senderID].level * 100}`,
+      {
+        body: `🎉 Congratulations ${senderName}!\n` +
+              `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
+              `Your new rank is: ${rankName}`,
+        attachment: request(imageURL)
+      },
       threadID
     );
   }
@@ -70,13 +75,16 @@ module.exports.run = async function ({ api, event, args }) {
 
     const user = data[senderID];
     const rankName = ranks[user.level - 1] || "Infinity";
+    const imageURL = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${senderID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`;
 
     return api.sendMessage(
-      `📊 Rank Info for ${user.name}\n\n` +
-      `🏅 Level: ${user.level}\n` +
-      `⭐ XP: ${user.xp}/${user.level * 100}\n` +
-      `🎖️ Rank: ${rankName}\n\n` +
-      `🖼️ Card: https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${senderID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`,
+      {
+        body: `📊 Rank Info for ${user.name}\n\n` +
+              `🏅 Level: ${user.level}\n` +
+              `⭐ XP: ${user.xp}/${user.level * 100}\n` +
+              `🎖️ Rank: ${rankName}`,
+        attachment: request(imageURL)
+      },
       threadID,
       messageID
     );
@@ -108,13 +116,16 @@ module.exports.run = async function ({ api, event, args }) {
 
     const user = data[mentionID];
     const rankName = ranks[user.level - 1] || "Infinity";
+    const imageURL = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${mentionID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`;
 
     return api.sendMessage(
-      `📊 Rank Info for ${user.name}\n\n` +
-      `🏅 Level: ${user.level}\n` +
-      `⭐ XP: ${user.xp}/${user.level * 100}\n` +
-      `🎖️ Rank: ${rankName}\n\n` +
-      `🖼️ Card: https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${mentionID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`,
+      {
+        body: `📊 Rank Info for ${user.name}\n\n` +
+              `🏅 Level: ${user.level}\n` +
+              `⭐ XP: ${user.xp}/${user.level * 100}\n` +
+              `🎖️ Rank: ${rankName}`,
+        attachment: request(imageURL)
+      },
       threadID,
       messageID
     );
