@@ -22,7 +22,7 @@ function pollText(poll) {
   );
 }
 
-// sanitize object
+// sanitize poll object
 function cleanPoll(poll) {
   return {
     start: poll.start,
@@ -34,7 +34,7 @@ function cleanPoll(poll) {
   };
 }
 
-// end poll logic
+// end poll
 async function endPoll(api, threadID, poll) {
   if (poll.ended) return;
   poll.ended = true;
@@ -56,7 +56,11 @@ async function endPoll(api, threadID, poll) {
     }
   }
 
-  if (poll.postID) api.unsendMessage(poll.postID, () => {});
+  if (poll.postID) {
+    try {
+      await api.unsendMessage(poll.postID);
+    } catch (e) {}
+  }
 
   api.sendMessage(
     `✅ Poll Ended!\n👥 Active: ${poll.activeUsers.length}\n🚫 Kicked: ${inactive.length}`,
@@ -68,7 +72,7 @@ async function endPoll(api, threadID, poll) {
 
 module.exports.config = {
   name: "cleaner",
-  version: "4.3.0",
+  version: "4.4.0",
   hasPermssion: 1,
   credits: "ChatGPT + NN",
   description: "Active user poll with auto kick on deadline (DB)",
@@ -114,7 +118,7 @@ module.exports.run = async function ({ api, event, args }) {
         poll.postID = info.messageID;
         await setData(`/cleaners/${threadID}`, cleanPoll(poll));
 
-        // auto-end (hindi sine-save para maiwasan reset)
+        // auto-end
         setTimeout(() => endPoll(api, threadID, poll), duration);
       }
     });
@@ -134,7 +138,13 @@ module.exports.run = async function ({ api, event, args }) {
   // resend
   if (sub === "resend") {
     if (!poll) return api.sendMessage("⚠️ Walang active poll.", threadID, messageID);
-    if (poll.postID) api.unsendMessage(poll.postID, () => {});
+
+    if (poll.postID) {
+      try {
+        await api.unsendMessage(poll.postID);
+      } catch (e) {}
+    }
+
     api.sendMessage(pollText(poll), threadID, async (err, info) => {
       if (!err) {
         poll.postID = info.messageID;
@@ -148,7 +158,11 @@ module.exports.run = async function ({ api, event, args }) {
   if (sub === "cancel") {
     if (!poll) return api.sendMessage("⚠️ Walang active poll.", threadID, messageID);
     poll.ended = true;
-    if (poll.postID) api.unsendMessage(poll.postID, () => {});
+    if (poll.postID) {
+      try {
+        await api.unsendMessage(poll.postID);
+      } catch (e) {}
+    }
     await deleteData(`/cleaners/${threadID}`);
     return api.sendMessage("❌ Poll has been cancelled.", threadID);
   }
@@ -162,7 +176,6 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
   const poll = await getData(`/cleaners/${threadID}`);
   if (!poll || poll.ended) return;
 
-  // dapat reply mismo sa poll
   if (messageReply.messageID !== poll.postID) return;
   if (body.trim().toLowerCase() !== "active") return;
 
@@ -176,14 +189,16 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
     );
   }
 
-  // idagdag as active
   poll.activeUsers.push(senderID);
 
-  // notify new active
   api.sendMessage(`🟢 ${name} is now marked as active!`, threadID);
 
-  // delete luma at send updated poll
-  if (poll.postID) api.unsendMessage(poll.postID, () => {});
+  if (poll.postID) {
+    try {
+      await api.unsendMessage(poll.postID);
+    } catch (e) {}
+  }
+
   api.sendMessage(pollText(poll), threadID, async (err, info) => {
     if (!err) {
       poll.postID = info.messageID;
