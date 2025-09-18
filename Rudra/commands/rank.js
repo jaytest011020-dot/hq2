@@ -1,99 +1,56 @@
-const axios = require("axios");
-const fs = require("fs-extra");
-const path = require("path");
-const { getData, setData } = require("../../database.js"); // ✅ gamit DB mo
+// 📌 Handle messages → XP Gain
+module.exports.handleEvent = async function ({ api, event }) {
+  const { threadID, senderID } = event;
+  if (!threadID || !senderID) return;
 
-module.exports.config = {
-  name: "rank",
-  version: "3.0.0",
-  hasPermission: 0,
-  credits: "ChatGPT",
-  description: "Show user rank info",
-  commandCategory: "system",
-  usages: "/rank [@mention or blank]",
-  cooldowns: 5,
-};
+  let data = (await getData(`/rank/${threadID}`)) || {};
 
-// XP gain per message
-const XP_PER_MESSAGE = 1;
+  // ✅ Kunin username via api.getUserInfo
+  const info = await api.getUserInfo(senderID);
+  const username = info[senderID]?.name || "Facebook User";
 
-module.exports.handleEvent = async function ({ api, event, Users }) {
-  if (event.type !== "message") return;
-
-  const { senderID } = event;
-  if (!senderID) return;
-
-  let user = await getData("rank", senderID);
-  if (!user) {
-    user = { xp: 0, level: 1, requiredXP: 100 };
+  // Create user if not exist
+  if (!data[senderID]) {
+    data[senderID] = { name: username, xp: 0, level: 1 };
   }
 
-  // add xp
-  user.xp += XP_PER_MESSAGE;
+  // Always update name
+  data[senderID].name = username;
 
-  // check level up
-  let leveledUp = false;
-  while (user.xp >= user.requiredXP) {
-    user.xp -= user.requiredXP;
-    user.level += 1;
-    user.requiredXP = user.level * 100;
-    leveledUp = true;
-  }
+  // Add random XP (1–3)
+  const xpGain = Math.floor(Math.random() * 3) + 1;
+  data[senderID].xp += xpGain;
 
-  await setData("rank", senderID, user);
+  // Check level up
+  let requiredXP = getRequiredXP(data[senderID].level);
+  if (data[senderID].xp >= requiredXP) {
+    data[senderID].xp -= requiredXP;
+    data[senderID].level++;
 
-  if (leveledUp) {
-    const name = await Users.getNameUser(senderID);
+    const rankName = ranks[data[senderID].level - 1] || "Infinity";
+
+    // Auto announce with image
+    const imgUrl =
+      `https://betadash-api-swordslush-production.up.railway.app/rankcard2` +
+      `?name=${encodeURIComponent(username)}` +
+      `&userid=${senderID}` +
+      `&currentLvl=${data[senderID].level}` +
+      `&currentRank=${rankName}` +
+      `&currentXP=${data[senderID].xp}` +
+      `&requiredXP=${getRequiredXP(data[senderID].level)}`;
+
     api.sendMessage(
-      `🎉 Congrats ${name}! You leveled up to Level ${user.level}!`,
-      event.threadID
-    );
-  }
-};
-
-module.exports.run = async function ({ api, event, args, Users }) {
-  const { threadID, messageID, senderID } = event;
-
-  let targetID = senderID;
-  if (event.mentions && Object.keys(event.mentions).length > 0) {
-    targetID = Object.keys(event.mentions)[0];
-  }
-
-  let user = await getData("rank", targetID);
-  if (!user) {
-    user = { xp: 0, level: 1, requiredXP: 100 };
-    await setData("rank", targetID, user);
-  }
-
-  const name = await Users.getNameUser(targetID);
-
-  // Generate rank card image
-  const cardUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(
-    name
-  )}&userid=${targetID}&currentLvl=${user.level}&currentRank=Beginner&currentXP=${
-    user.xp
-  }&requiredXP=${user.requiredXP}`;
-
-  const imgPath = path.join(__dirname, "cache", `rank_${targetID}.png`);
-  try {
-    const response = await axios.get(cardUrl, { responseType: "arraybuffer" });
-    fs.writeFileSync(imgPath, Buffer.from(response.data, "utf-8"));
-
-    return api.sendMessage(
       {
-        body: `📊 Rank Info for ${name}\n\n🏅 Level: ${user.level}\n⭐ XP: ${user.xp}/${user.requiredXP}\n🎖️ Rank: Beginner`,
-        attachment: fs.createReadStream(imgPath),
+        body:
+          `🎉 Congratulations ${username}!\n` +
+          `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
+          `Your new rank is: ${rankName}`,
+        attachment: await global.utils.getStreamFromURL(imgUrl)
       },
-      threadID,
-      () => fs.unlinkSync(imgPath),
-      messageID
-    );
-  } catch (e) {
-    console.error("Error fetching rank card:", e.message);
-    return api.sendMessage(
-      `📊 Rank Info for ${name}\n\n🏅 Level: ${user.level}\n⭐ XP: ${user.xp}/${user.requiredXP}\n🎖️ Rank: Beginner`,
-      threadID,
-      messageID
+      threadID
     );
   }
+
+  // Save
+  await setData(`/rank/${threadID}`, data);
 };
