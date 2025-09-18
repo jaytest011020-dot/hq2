@@ -2,10 +2,10 @@ const { setData, getData, deleteData } = require("../../database.js");
 
 module.exports.config = {
   name: "cleaner",
-  version: "1.5.0",
+  version: "1.6.0",
   credits: "ChatGPT + NN",
   description: "Active user voting system with reply-based voting and deadline",
-  usages: "/clean <time> (e.g. 5d, 12h, 30m) | /cleaner resend | /cleaner list",
+  usages: "/clean <time> (5d, 12h, 30m) | /cleaner resend | /cleaner list | /cleaner cancel",
   commandCategory: "system",
   cooldowns: 5,
 };
@@ -13,10 +13,8 @@ module.exports.config = {
 function parseTime(input) {
   const match = input.match(/^(\d+)([dhm])$/i);
   if (!match) return null;
-
   let value = parseInt(match[1]);
   let unit = match[2].toLowerCase();
-
   switch (unit) {
     case "d": return value * 24 * 60 * 60 * 1000;
     case "h": return value * 60 * 60 * 1000;
@@ -112,6 +110,15 @@ module.exports.run = async function ({ api, event, args, Users }) {
       threadID,
       messageID
     );
+  }
+
+  // 📌 Cancel poll
+  if (args[0] === "cancel") {
+    let poll = await getData(`cleaner/${threadID}`);
+    if (!poll) return api.sendMessage("❌ No active poll found.", threadID, messageID);
+
+    await deleteData(`cleaner/${threadID}`);
+    return api.sendMessage("🛑 The active user poll has been cancelled.", threadID, messageID);
   }
 };
 
