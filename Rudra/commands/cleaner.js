@@ -22,6 +22,18 @@ function pollText(poll) {
   );
 }
 
+// helper: i-sanitize data bago i-save
+function cleanPoll(poll) {
+  return {
+    start: poll.start,
+    end: poll.end,
+    activeUsers: poll.activeUsers,
+    totalUsers: poll.totalUsers,
+    postID: poll.postID,
+    ended: poll.ended
+  };
+}
+
 async function endPoll(api, threadID, poll) {
   if (poll.ended) return;
   poll.ended = true;
@@ -53,7 +65,7 @@ async function endPoll(api, threadID, poll) {
 
 module.exports.config = {
   name: "cleaner",
-  version: "4.1.0",
+  version: "4.2.0",
   hasPermssion: 1,
   credits: "ChatGPT + NN",
   description: "Active user poll with auto kick on deadline (DB)",
@@ -97,9 +109,9 @@ module.exports.run = async function ({ api, event, args }) {
     api.sendMessage(pollText(poll), threadID, async (err, info) => {
       if (!err) {
         poll.postID = info.messageID;
-        await setData(`/cleaners/${threadID}`, poll);
+        await setData(`/cleaners/${threadID}`, cleanPoll(poll));
 
-        // auto-end timer
+        // auto-end timer (hindi sine-save sa DB)
         setTimeout(() => endPoll(api, threadID, poll), duration);
       }
     });
@@ -156,7 +168,7 @@ module.exports.handleEvent = async function ({ api, event }) {
     api.sendMessage(pollText(poll), threadID, async (err, info) => {
       if (!err) {
         poll.postID = info.messageID;
-        await setData(`/cleaners/${threadID}`, poll);
+        await setData(`/cleaners/${threadID}`, cleanPoll(poll));
       }
     });
   }
