@@ -57,7 +57,7 @@ module.exports.run = async function ({ api, event, args }) {
 
     const remaining = pollData.endTime - Date.now();
     const sent = await api.sendMessage(
-      `╭━━━[ 🧹 AUTO CLEAN ONGOING ]━━━╮
+      `╭━━━[AUTO CLEAN ONGOING]━━━╮
 
 ┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
@@ -98,7 +98,7 @@ module.exports.run = async function ({ api, event, args }) {
   };
 
   const sent = await api.sendMessage(
-    `╭━━━[ 🧹 AUTO CLEAN STARTED ]━━━╮
+    `╭━━━[AUTO CLEAN STARTED]━━━╮
 ┃ 👥 Active: 0 / ${members.length}
 ┃ ⏳ Time left: ${formatTime(duration)}
 ┃
@@ -137,7 +137,7 @@ module.exports.run = async function ({ api, event, args }) {
       await setData(`/autoclean/${threadID}`, null);
 
       api.sendMessage(
-        `╭━━━[ ✅ AUTO CLEAN FINISHED ]━━━╮
+        `╭━━━[✅ AUTO CLEAN FINISHED]━━━╮
 ┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
 ┃ 🚫 Kicked: ${toKick.length}
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
@@ -184,7 +184,7 @@ module.exports.handleEvent = async function ({ api, event }) {
       const remaining = pollData.endTime - Date.now();
       const sent = await api.sendMessage(
         {
-          body: `╭━━━[ 🧹 AUTO CLEAN ONGOING ]━━━╮
+          body: `╭━━━[AUTO CLEAN ONGOING]━━━╮
 
 ┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
