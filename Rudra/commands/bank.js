@@ -5,31 +5,26 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "2.3.0",
-  credits: "ChatGPT + Jaylord",
+  version: "2.4.0",
+  credits: "ChatGPT + NN",
   hasPermission: 0,
-  description: "Bank system with UID checker (auto-update name on /bank)",
+  description: "Bank system with auto-updated usernames",
   usages: "/bank, /bank all, /bank add <uid> <amount>",
   commandCategory: "economy",
   cooldowns: 3,
 };
 
-// 🔑 Helper: Fetch username by UID
-async function getUserName(uid, Users, api) {
+// 🔑 Always fetch fresh username via api.getUserInfo
+async function getUserName(uid, api) {
   try {
-    let name = await Users.getNameUser(uid);
-    if (!name || name === uid) {
-      let info = await api.getUserInfo(uid);
-      if (info && info[uid]?.name) {
-        name = info[uid].name;
-      } else {
-        name = uid;
-      }
+    const info = await api.getUserInfo(uid);
+    if (info && info[uid]?.name) {
+      return info[uid].name;
     }
-    return name;
+    return `FB-User(${uid})`;
   } catch (err) {
     console.log(`[BANK] Error fetching name for UID: ${uid}`, err);
-    return uid;
+    return `FB-User(${uid})`;
   }
 }
 
@@ -38,7 +33,7 @@ function formatBalance(user, balance) {
   return `🏦 Bank Account 🏦\n\n👤 ${user}\n💰 Balance: ${balance.toLocaleString()} coins`;
 }
 
-module.exports.run = async ({ api, event, args, Users }) => {
+module.exports.run = async ({ api, event, args }) => {
   const { threadID, senderID, messageID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
@@ -48,22 +43,18 @@ module.exports.run = async ({ api, event, args, Users }) => {
     let results = [];
 
     for (let uid in allData) {
-      // ✅ Gamitin latest name kung available
-      let name;
-      if (uid === senderID && event.senderName) {
-        name = event.senderName;
-      } else {
-        name = await getUserName(uid, Users, api);
-      }
+      // ✅ Always fetch fresh username
+      let freshName = await getUserName(uid, api);
 
-      if (allData[uid].name !== name) {
-        allData[uid].name = name;
+      // update name in DB if changed
+      if (allData[uid].name !== freshName) {
+        allData[uid].name = freshName;
         await setData(`bank/${uid}`, allData[uid]);
       }
 
       results.push({
         uid,
-        name,
+        name: freshName,
         balance: allData[uid].balance || 0
       });
     }
@@ -95,7 +86,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID, messageID);
     }
 
-    let freshName = await getUserName(targetUID, Users, api);
+    const freshName = await getUserName(targetUID, api);
 
     let userData = (await getData(`bank/${targetUID}`)) || {
       uid: targetUID,
@@ -105,6 +96,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
 
     userData.balance += amount;
 
+    // auto-update name if changed
     if (userData.name !== freshName) {
       userData.name = freshName;
     }
@@ -119,7 +111,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
   }
 
   // 👤 Default: Check own balance
-  let freshName = event.senderName || await getUserName(senderID, Users, api);
+  const freshName = await getUserName(senderID, api);
 
   let userData = (await getData(`bank/${senderID}`)) || {
     uid: senderID,
