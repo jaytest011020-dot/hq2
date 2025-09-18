@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 // List of violations
 const badwords = [
   "tanga", "bobo", "gago", "puta", "pakyu", "inutil", "ulol",
-  "fuck", "shit", "asshole", "bitch", "dumb", "stupid", "motherfucker", "pota", "tangina", "tang ina", "kantot", "jakol", "jakul", "jabol", "puke", "puki"
+  "fuck", "shit", "asshole", "bitch", "dumb", "stupid", "motherfucker", "pota", "tangina", "tang ina", "kantot", "jakol", "jakul", "jabol", "puke", "puki", "baliw"
 ];
 const racistWords = [
   "negro", "nigger", "chimp", "nigga", "baluga",
