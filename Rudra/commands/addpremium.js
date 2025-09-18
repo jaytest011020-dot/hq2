@@ -5,7 +5,7 @@ let config = require(configPath);
 
 module.exports.config = {
   name: "addpremium",
-  version: "1.1.0",
+  version: "1.3.0",
   permission: 1, // Admin-only permissions
   credits: "ChatGPT + Fixed by NN",
   description: "Adds a user to the premium list using UID or mention",
@@ -18,7 +18,7 @@ module.exports.run = async function ({ api, event, args }) {
   const { threadID, senderID, messageID } = event;
 
   // Check if the sender is an admin
-  if (!config.ADMINBOT.includes(senderID)) {
+  if (!config.ADMINBOT || !config.ADMINBOT.includes(senderID)) {
     return api.sendMessage("❌ You do not have permission to use this command.", threadID, messageID);
   }
 
@@ -37,9 +37,14 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage("❌ Please provide a valid UID or mention a user to add to the premium list.", threadID, messageID);
   }
 
+  // Ensure PREMIUM exists
+  if (!Array.isArray(config.PREMIUM)) {
+    config.PREMIUM = [];
+  }
+
   // Check if already premium
   if (config.PREMIUM.includes(targetUID)) {
-    return api.sendMessage("❌ This user is already a premium user.", threadID, messageID);
+    return api.sendMessage(`⚠️ User with UID ${targetUID} is already a premium user.`, threadID, messageID);
   }
 
   // Add to PREMIUM list
