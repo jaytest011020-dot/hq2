@@ -2,7 +2,7 @@ const { getData, setData, deleteData } = require("../../database.js");
 
 module.exports.config = {
   name: "cleaner",
-  version: "3.0.0",
+  version: "2.6.0",
   hasPermssion: 1,
   credits: "ChatGPT",
   description: "Poll to check active users, kicks inactive users on deadline",
@@ -47,13 +47,13 @@ function parseTime(str) {
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  let poll = await getData(`cleaner.${threadID}`);
+  let poll = await getData(`cleaner/${threadID}`);
   const sub = args[0];
 
   // cancel
   if (sub === "cancel") {
     if (!poll) return api.sendMessage("⚠️ No active poll to cancel.", threadID, messageID);
-    await deleteData(`cleaner.${threadID}`);
+    await deleteData(`cleaner/${threadID}`);
     return api.sendMessage("✅ Cleaner poll cancelled. You may start a new one.", threadID, messageID);
   }
 
@@ -74,8 +74,8 @@ module.exports.run = async function({ api, event, args }) {
       threadID,
       (err, info) => {
         if (!err) {
-          poll.messageIDs.push(info.messageID); // 🔹 append new msg id
-          setData(`cleaner.${threadID}`, poll);
+          poll.messageID = info.messageID;
+          setData(`cleaner/${threadID}`, poll);
         }
       }
     );
@@ -98,7 +98,7 @@ module.exports.run = async function({ api, event, args }) {
     admins,
     voters: [],
     botID: api.getCurrentUserID(),
-    messageIDs: [],   // 🔹 store array of poll messages
+    messageID: null,
     finished: false
   };
 
@@ -107,8 +107,8 @@ module.exports.run = async function({ api, event, args }) {
     threadID,
     (err, info) => {
       if (!err) {
-        poll.messageIDs.push(info.messageID);
-        setData(`cleaner.${threadID}`, poll);
+        poll.messageID = info.messageID;
+        setData(`cleaner/${threadID}`, poll);
       }
     }
   );
@@ -119,15 +119,15 @@ module.exports.handleEvent = async function({ api, event, Users }) {
   const { threadID, messageReply, senderID, body } = event;
   if (!body || !messageReply) return;
 
-  let poll = await getData(`cleaner.${threadID}`);
+  let poll = await getData(`cleaner/${threadID}`);
   if (!poll || poll.finished) return;
 
-  if (!poll.messageIDs.includes(messageReply.messageID)) return; // 🔹 accept reply from any poll message
+  if (messageReply.messageID !== poll.messageID) return;
   if (body.toLowerCase() !== "active") return;
 
   if (!poll.voters.includes(senderID)) {
     poll.voters.push(senderID);
-    await setData(`cleaner.${threadID}`, poll);
+    await setData(`cleaner/${threadID}`, poll);
 
     const name = await Users.getNameUser(senderID);
     api.sendMessage(
@@ -141,8 +141,8 @@ module.exports.handleEvent = async function({ api, event, Users }) {
       threadID,
       (err, info) => {
         if (!err) {
-          poll.messageIDs.push(info.messageID); // 🔹 save new poll message ID
-          setData(`cleaner.${threadID}`, poll);
+          poll.messageID = info.messageID;
+          setData(`cleaner/${threadID}`, poll);
         }
       }
     );
@@ -160,7 +160,7 @@ module.exports.handleSchedule = async function({ api }) {
 
     if (Date.now() >= poll.endTime) {
       poll.finished = true;
-      await setData(`cleaner.${threadID}`, poll);
+      await setData(`cleaner/${threadID}`, poll);
 
       const toKick = poll.members.filter(uid => 
         !poll.voters.includes(uid) &&
