@@ -22,9 +22,9 @@ function formatTime(ms) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermission: 1,
-  credits: "ChatGPT",
+  credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
   commandCategory: "system",
   usages: "/autoclean 1m|1h|1d | cancel | resend | list",
@@ -39,30 +39,34 @@ module.exports.run = async function ({ api, event, args }) {
   }
 
   const sub = args[0].toLowerCase();
+  let pollData = await getData(`/autoclean/${threadID}`);
 
   if (sub === "cancel") {
+    if (pollData?.pollMsgID) {
+      try { await api.unsendMessage(pollData.pollMsgID); } catch {}
+    }
     await setData(`/autoclean/${threadID}`, null);
     return api.sendMessage("🛑 AutoClean canceled.", threadID, messageID);
   }
 
   if (sub === "resend") {
-    const pollData = await getData(`/autoclean/${threadID}`);
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
+    if (pollData.pollMsgID) {
+      try { await api.unsendMessage(pollData.pollMsgID); } catch {}
+    }
 
     const remaining = pollData.endTime - Date.now();
-    const message = {
-      body: `🧹 AUTO CLEAN ONGOING\n✅ Active: ${pollData.activeUsers?.length || 0}\n⏳ Time left: ${formatTime(remaining)}\n\nReply "active" para hindi makick.`,
-    };
-    const sent = await api.sendMessage(message, threadID);
+    const sent = await api.sendMessage(
+      `🧹 AUTO CLEAN ONGOING\n✅ Active: ${pollData.activeUsers?.length || 0}\n⏳ Time left: ${formatTime(remaining)}\n\nReply "active" para hindi makick.`,
+      threadID
+    );
     pollData.pollMsgID = sent.messageID;
     await setData(`/autoclean/${threadID}`, pollData);
     return;
   }
 
   if (sub === "list") {
-    const pollData = await getData(`/autoclean/${threadID}`);
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
-
     return api.sendMessage(
       `📋 Active Users:\n${pollData.activeUsers.map(uid => `• ${uid}`).join("\n") || "Wala pa."}`,
       threadID,
@@ -77,17 +81,16 @@ module.exports.run = async function ({ api, event, args }) {
   }
 
   const endTime = Date.now() + duration;
-  const pollData = {
+  pollData = {
     endTime,
     activeUsers: [],
     pollMsgID: null
   };
 
-  const message = {
-    body: `🧹 AUTO CLEAN STARTED\n✅ Active: 0\n⏳ Time left: ${formatTime(duration)}\n\nReply "active" para hindi makick.`,
-  };
-
-  const sent = await api.sendMessage(message, threadID);
+  const sent = await api.sendMessage(
+    `🧹 AUTO CLEAN STARTED\n✅ Active: 0\n⏳ Time left: ${formatTime(duration)}\n\nReply "active" para hindi makick.`,
+    threadID
+  );
   pollData.pollMsgID = sent.messageID;
 
   await setData(`/autoclean/${threadID}`, pollData);
@@ -100,13 +103,13 @@ module.exports.run = async function ({ api, event, args }) {
     api.getThreadInfo(threadID, async (err, info) => {
       if (err) return;
       const toKick = info.participantIDs.filter(
-        uid => !finalData.activeUsers.includes(uid) && uid !== api.getCurrentUserID() && !info.adminIDs.includes(uid)
+        uid => !finalData.activeUsers.includes(uid) &&
+               uid !== api.getCurrentUserID() &&
+               !info.adminIDs.includes(uid)
       );
 
       for (const uid of toKick) {
-        try {
-          await api.removeUserFromGroup(uid, threadID);
-        } catch (e) {
+        try { await api.removeUserFromGroup(uid, threadID); } catch (e) {
           console.error("Kick error:", e.message);
         }
       }
@@ -117,42 +120,45 @@ module.exports.run = async function ({ api, event, args }) {
   }, duration);
 };
 
-module.exports.handleEvent = async function ({ api, event }) {
+module.exports.handleEvent = async function ({ api, event, Users }) {
   const { threadID, messageID, senderID, body } = event;
   if (!body) return;
 
-  const pollData = await getData(`/autoclean/${threadID}`);
+  let pollData = await getData(`/autoclean/${threadID}`);
   if (!pollData) return;
 
   if (!Array.isArray(pollData.activeUsers)) {
     pollData.activeUsers = [];
   }
 
-  if (body.toLowerCase().includes("active")) {
+  if (body.trim().toLowerCase() === "active") {
     if (!pollData.activeUsers.includes(senderID)) {
       pollData.activeUsers.push(senderID);
       await setData(`/autoclean/${threadID}`, pollData);
 
+      // get username
+      let name = "User";
+      try { name = await Users.getNameUser(senderID); } catch {}
+
       // delete old poll
       if (pollData.pollMsgID) {
-        try {
-          await api.unsendMessage(pollData.pollMsgID);
-        } catch (err) {
-          console.error("Unsend error:", err.message);
-        }
+        try { await api.unsendMessage(pollData.pollMsgID); } catch {}
       }
 
       // resend updated poll
       const remaining = pollData.endTime - Date.now();
-      const message = {
-        body: `🧹 AUTO CLEAN ONGOING\n✅ Active: ${pollData.activeUsers.length}\n⏳ Time left: ${formatTime(remaining)}\n\nReply "active" para hindi makick.`,
-      };
+      const sent = await api.sendMessage(
+        {
+          body: `🧹 AUTO CLEAN ONGOING\n✅ Active: ${pollData.activeUsers.length}\n⏳ Time left: ${formatTime(remaining)}\n\nReply "active" para hindi makick.\n\n✅ Success: @${name}`,
+          mentions: [{ tag: `@${name}`, id: senderID }]
+        },
+        threadID
+      );
 
-      const sent = await api.sendMessage(message, threadID);
       pollData.pollMsgID = sent.messageID;
       await setData(`/autoclean/${threadID}`, pollData);
     } else {
-      api.sendMessage("✅ Naka-register ka na.", threadID, messageID);
+      api.sendMessage("✅ Nakaregister ka na bilang active.", threadID, messageID);
     }
   }
 };
