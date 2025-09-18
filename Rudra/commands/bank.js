@@ -1,62 +1,133 @@
-const { setData, getData } = require("../../database.js"); // Database functions
-const config = require("../../config.json"); // Import config.json
-const BOT_ADMINS = config.ADMINBOT; // Kukunin yung admin list sa config
+const { setData, getData } = require("../../database.js");
+
+// ✅ Load admin list via global.config
+const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "1.0.0",
+  version: "2.2.1",
   credits: "ChatGPT + Jaylord",
-  description: "Bank system with admin restriction",
-  usages: "/bank",
-  cooldowns: 5,
-  hasPermission: 0
+  hasPermission: 0,
+  description: "Bank system with UID checker (auto-update name on /bank)",
+  usages: "/bank, /bank all, /bank add <uid> <amount>",
+  commandCategory: "economy",
+  cooldowns: 3,
 };
 
-module.exports.run = async function ({ api, event, args }) {
+// 🔑 Helper: Fetch username by UID
+async function getUserName(uid, Users, api) {
+  try {
+    let name = await Users.getNameUser(uid);
+    if (!name || name === uid) {
+      let info = await api.getUserInfo(uid);
+      if (info && info[uid]?.name) {
+        name = info[uid].name;
+      } else {
+        name = uid;
+      }
+    }
+    return name;
+  } catch (err) {
+    console.log(`[BANK] Error fetching name for UID: ${uid}`, err);
+    return uid;
+  }
+}
+
+// 🏦 Format balance message
+function formatBalance(user, balance) {
+  return `🏦 Bank Account 🏦\n\n👤 ${user}\n💰 Balance: ${balance.toLocaleString()} coins`;
+}
+
+module.exports.run = async ({ api, event, args, Users }) => {
   const { threadID, senderID, messageID } = event;
+  const command = args[0] ? args[0].toLowerCase() : "";
 
-  // Check kung admin yung nag run
-  if (!BOT_ADMINS.includes(senderID)) {
-    return api.sendMessage(
-      "❌ Only bot admins can use this command.",
-      threadID,
-      messageID
-    );
-  }
+  // 📋 Show all accounts
+  if (command === "all") {
+    let allData = (await getData(`bank`)) || {};
+    let results = [];
 
-  // Example basic feature (pwede mong dagdagan dito)
-  if (args[0] === "balance") {
-    let balance = await getData(senderID, "bank");
-    if (!balance) balance = 0;
+    for (let uid in allData) {
+      let name = await getUserName(uid, Users, api);
 
-    return api.sendMessage(
-      `🏦 Your current balance is: ${balance} coins`,
-      threadID,
-      messageID
-    );
-  }
+      if (allData[uid].name !== name) {
+        allData[uid].name = name;
+        await setData(`bank/${uid}`, allData[uid]);
+      }
 
-  if (args[0] === "add") {
-    let amount = parseInt(args[1]);
-    if (isNaN(amount)) {
-      return api.sendMessage("⚠️ Please enter a valid number.", threadID, messageID);
+      results.push({
+        uid,
+        name,
+        balance: allData[uid].balance || 0
+      });
     }
 
-    let balance = await getData(senderID, "bank");
-    if (!balance) balance = 0;
+    if (results.length === 0) {
+      return api.sendMessage("🏦 No accounts found in the bank.", threadID, messageID);
+    }
 
-    balance += amount;
-    await setData(senderID, "bank", balance);
+    results.sort((a, b) => b.balance - a.balance);
+
+    let msg = `📋 Bank Accounts (Total: ${results.length}) 📋\n`;
+    for (let i = 0; i < results.length; i++) {
+      msg += `\n${i + 1}. 👤 ${results[i].name} — 💰 ${results[i].balance.toLocaleString()} coins`;
+    }
+
+    return api.sendMessage(msg, threadID, messageID);
+  }
+
+  // ➕ Add coins (admin only)
+  if (command === "add") {
+    if (!ADMINBOT.includes(senderID)) {
+      return api.sendMessage("❌ Only bot admins can add coins.", threadID, messageID);
+    }
+
+    const targetUID = args[1];
+    const amount = parseInt(args[2]);
+
+    if (!targetUID || isNaN(amount) || amount <= 0) {
+      return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID, messageID);
+    }
+
+    let freshName = await getUserName(targetUID, Users, api);
+
+    let userData = (await getData(`bank/${targetUID}`)) || {
+      uid: targetUID,
+      name: freshName,
+      balance: 0
+    };
+
+    userData.balance += amount;
+
+    if (userData.name !== freshName) {
+      userData.name = freshName;
+    }
+
+    await setData(`bank/${targetUID}`, userData);
 
     return api.sendMessage(
-      `✅ Added ${amount} coins. New balance: ${balance}`,
+      `✅ Added 💰 ${amount.toLocaleString()} coins to ${userData.name}'s account.`,
       threadID,
       messageID
     );
+  }
+
+  // 👤 Default: Check own balance
+  let freshName = await getUserName(senderID, Users, api);
+
+  let userData = (await getData(`bank/${senderID}`)) || {
+    uid: senderID,
+    name: freshName,
+    balance: 0
+  };
+
+  if (userData.name !== freshName) {
+    userData.name = freshName;
+    await setData(`bank/${senderID}`, userData);
   }
 
   return api.sendMessage(
-    "📌 Usage:\n/bank balance\n/bank add <amount>",
+    formatBalance(userData.name, userData.balance),
     threadID,
     messageID
   );
