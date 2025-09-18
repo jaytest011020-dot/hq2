@@ -2,7 +2,7 @@ const fs = require("fs");
 
 module.exports.config = {
   name: "addpremium",
-  version: "1.4.0",
+  version: "1.5.0",
   permission: 1, // Admin-only permissions
   credits: "ChatGPT + Fixed by NN",
   description: "Adds a user to the premium list using UID or mention",
@@ -13,9 +13,9 @@ module.exports.config = {
 
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, senderID, messageID, mentions } = event;
-  const { configPath } = global.client;     // ✅ centralized config path
-  const config = global.config;             // ✅ live config
-  const { ADMINBOT } = global.config;
+  const { configPath } = global.client; // ✅ centralized config path
+  let config = JSON.parse(fs.readFileSync(configPath, "utf8")); // ✅ always read fresh copy
+  const { ADMINBOT } = config;
 
   // Check if the sender is an admin
   if (!ADMINBOT || !ADMINBOT.includes(senderID)) {
@@ -62,12 +62,11 @@ module.exports.run = async function ({ api, event, args }) {
   // Add to PREMIUM list
   config.PREMIUM.push(targetUID);
 
-  // Save to root config.json
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  // Save to root config.json (overwrite with new data)
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
 
-  // Reload global.config to apply immediately
-  delete require.cache[require.resolve(configPath)];
-  global.config = require(configPath);
+  // Update global.config para visible sa lahat ng modules
+  global.config = config;
 
   return api.sendMessage(
     `✅ User with UID ${targetUID} has been added to the premium list!`,
