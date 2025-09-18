@@ -1,204 +1,213 @@
 const fs = require("fs");
 const path = require("path");
 
-const auctionFile = path.join(__dirname, "auctions.json");
+const cleanerFile = path.join(__dirname, "cleaners.json");
 
-// Ensure file exists
-if (!fs.existsSync(auctionFile)) fs.writeFileSync(auctionFile, JSON.stringify({}, null, 2), "utf8");
+// ensure db file exists
+if (!fs.existsSync(cleanerFile)) fs.writeFileSync(cleanerFile, JSON.stringify({}, null, 2), "utf8");
 
-// Load/save auctions
-function loadAuctions() {
+// load/save helpers
+function loadCleaners() {
   try {
-    return JSON.parse(fs.readFileSync(auctionFile, "utf8"));
+    return JSON.parse(fs.readFileSync(cleanerFile, "utf8"));
   } catch {
     return {};
   }
 }
-function saveAuctions(data) {
-  fs.writeFileSync(auctionFile, JSON.stringify(data, null, 2), "utf8");
+function saveCleaners(data) {
+  fs.writeFileSync(cleanerFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-// Generate 6-digit ID
-function generateID() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
+// format poll UI
+function formatPoll(poll) {
+  const remaining = poll.end - Date.now();
+  const m = Math.max(0, Math.floor((remaining / 1000 / 60) % 60));
+  const h = Math.max(0, Math.floor((remaining / 1000 / 60 / 60) % 24));
+  const d = Math.max(0, Math.floor(remaining / 1000 / 60 / 60 / 24));
 
-// Usage Example Helper
-function usageExample(api, threadID, messageID) {
-  return api.sendMessage(
-    `❌ Wrong usage!\n\n📌 Correct Usage:\n/bid start <item> <starting_amount>\n/bid end <auction_id>\n/bid resend <auction_id>\n\n💡 Examples:\n/bid start Raccoon 200\n/bid end 123456\n/bid resend 654321`,
-    threadID,
-    messageID
+  return (
+`📊 ┃ Active User Poll ┃ 📊
+─────────────────────────────
+⏳ Ends in: ${d}d ${h}h ${m}m
+📅 End: ${new Date(poll.end).toLocaleString()}
+─────────────────────────────
+✅ Reply "active" to this poll to stay in the group.
+⚠️ Inactive users will be auto-kicked.
+─────────────────────────────
+👥 Active: ${poll.activeUsers.length} / ${poll.totalUsers.length}`
   );
+}
+
+// schedule auto end
+function scheduleEnd(api, threadID, poll) {
+  const remaining = poll.end - Date.now();
+  if (remaining <= 0) return endPoll(api, threadID, poll);
+
+  poll.timeout = setTimeout(() => {
+    endPoll(api, threadID, poll);
+  }, remaining);
+}
+
+// end poll logic
+async function endPoll(api, threadID, poll) {
+  if (poll.ended) return;
+  poll.ended = true;
+
+  const threadInfo = await api.getThreadInfo(threadID);
+  const adminIDs = threadInfo.adminIDs.map(a => a.id);
+
+  const inactive = poll.totalUsers.filter(
+    u => !poll.activeUsers.includes(u) && u !== api.getCurrentUserID() && !adminIDs.includes(u)
+  );
+
+  for (const uid of inactive) {
+    try {
+      await api.removeUserFromGroup(uid, threadID);
+    } catch (e) {
+      console.log("Kick failed:", uid, e.error || e);
+    }
+  }
+
+  // unsend last poll messages
+  if (poll.postIDs?.length) {
+    poll.postIDs.forEach(id => {
+      api.unsendMessage(id, () => {});
+    });
+  }
+
+  api.sendMessage(
+    `✅ Poll Ended!\n👥 Active: ${poll.activeUsers.length}\n🚫 Kicked: ${inactive.length}`,
+    threadID
+  );
+
+  let cleaners = loadCleaners();
+  delete cleaners[threadID];
+  saveCleaners(cleaners);
 }
 
 module.exports.config = {
-  name: "bid",
-  version: "3.1.1",
-  hasPermssion: 0,
-  credits: "ChatGPT",
-  description: "Auction system with 6-digit IDs, auto-end in 24h, and resend option",
-  commandCategory: "gag tools",
-  usages: "/bid start <item> <amount> | /bid end <id> | /bid resend <id>",
+  name: "cleaner",
+  version: "3.0.0",
+  hasPermssion: 1,
+  credits: "ChatGPT + Fix by NN",
+  description: "Active user poll with auto kick on deadline",
+  commandCategory: "system",
+  usages: "/cleaner <time> | list | resend | cancel",
   cooldowns: 5,
 };
 
-module.exports.run = async function ({ api, event, args, Users, Threads }) {
-  const { threadID, messageID, senderID } = event;
-  let auctions = loadAuctions();
-  if (!auctions[threadID]) auctions[threadID] = [];
-
+module.exports.run = async function ({ api, event, args }) {
+  const { threadID, messageID } = event;
+  let cleaners = loadCleaners();
   const sub = args[0]?.toLowerCase();
 
-  // start auction
-  if (sub === "start") {
-    const match = args.join(" ").match(/start\s+(.+)\s+(\d+)$/i);
-    if (!match) return usageExample(api, threadID, messageID);
+  // start new poll
+  if (sub && !["list", "resend", "cancel"].includes(sub)) {
+    if (cleaners[threadID]) return api.sendMessage("⚠️ May active poll pa.", threadID, messageID);
 
-    const item = match[1].trim();
-    const startAmount = parseInt(match[2]);
-    if (!item || isNaN(startAmount)) return usageExample(api, threadID, messageID);
+    const match = args[0].match(/^(\d+)([mhd])$/i);
+    if (!match) return api.sendMessage("❌ Example: /cleaner 5m | 2h | 1d", threadID, messageID);
 
-    const hostName = await Users.getNameUser(senderID);
-    const newAuction = {
-      id: generateID(),
-      active: true,
-      item,
-      highest: startAmount,
-      bidder: null,
-      bidderID: null,
-      postID: null,
-      hostID: senderID,
-      hostName,
-      endTime: Date.now() + 24 * 60 * 60 * 1000 // 24h auto end
+    const num = parseInt(match[1]);
+    const unit = match[2].toLowerCase();
+    let duration = 0;
+    if (unit === "m") duration = num * 60 * 1000;
+    if (unit === "h") duration = num * 60 * 60 * 1000;
+    if (unit === "d") duration = num * 24 * 60 * 60 * 1000;
+
+    const threadInfo = await api.getThreadInfo(threadID);
+    const members = threadInfo.participantIDs;
+
+    const poll = {
+      start: Date.now(),
+      end: Date.now() + duration,
+      activeUsers: [],
+      totalUsers: members,
+      postIDs: [],
+      ended: false,
     };
 
-    auctions[threadID].push(newAuction);
-    saveAuctions(auctions);
+    cleaners[threadID] = poll;
+    saveCleaners(cleaners);
 
-    return api.sendMessage(
-      `📢 Auction Started!\n📦 Item: ${item}\n💵 Starting Bid: ${startAmount}\n👑 Host: ${hostName}\n🆔 Auction ID: ${newAuction.id}\n\n📝 Reply to this message with your bid!`,
+    api.sendMessage(
+      formatPoll(poll),
       threadID,
       (err, info) => {
         if (!err) {
-          newAuction.postID = info.messageID;
-          saveAuctions(auctions);
+          poll.postIDs.push(info.messageID);
+          saveCleaners(cleaners);
         }
       }
     );
+
+    scheduleEnd(api, threadID, poll);
+    return;
   }
 
-  // end auction
-  if (sub === "end") {
-    const auctionID = args[1];
-    if (!auctionID) return usageExample(api, threadID, messageID);
-
-    const auction = auctions[threadID]?.find(a => a.id === auctionID && a.active);
-    if (!auction) return api.sendMessage("⚠️ Auction not found or already ended.", threadID, messageID);
-
-    // check if sender is host or admin
-    const threadInfo = await Threads.getInfo(threadID);
-    const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
-
-    if (auction.hostID !== senderID && !isAdmin) {
-      return api.sendMessage("❌ Only the host or a group admin can end this auction.", threadID, messageID);
-    }
-
-    const winner = auction.bidder
-      ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
-      : `❌ No valid bids were placed for ${auction.item}.`;
-
-    auction.active = false;
-    saveAuctions(auctions);
-
-    return api.sendMessage(`📌 Auction Ended!\n${winner}`, threadID);
-  }
-
-  // resend auction post
+  // resend poll manually
   if (sub === "resend") {
-    const auctionID = args[1];
-    if (!auctionID) return usageExample(api, threadID, messageID);
+    const poll = cleaners[threadID];
+    if (!poll) return api.sendMessage("⚠️ Walang active poll.", threadID, messageID);
 
-    const auction = auctions[threadID]?.find(a => a.id === auctionID && a.active);
-    if (!auction) return api.sendMessage("⚠️ Auction not found or already ended.", threadID, messageID);
-
-    return api.sendMessage(
-      `📢 Auction Resent!\n📦 Item: ${auction.item}\n💵 Current Highest: ${auction.highest}\n👤 Bidder: ${auction.bidder || "None"}\n👑 Host: ${auction.hostName}\n🆔 Auction ID: ${auction.id}\n\n📝 Reply to this message with your bid!`,
+    api.sendMessage(
+      formatPoll(poll),
       threadID,
       (err, info) => {
         if (!err) {
-          auction.postID = info.messageID;
-          saveAuctions(auctions);
+          poll.postIDs.push(info.messageID);
+          saveCleaners(cleaners);
         }
       }
     );
+    return;
   }
 
-  // default: wrong usage
-  return usageExample(api, threadID, messageID);
+  // cancel poll
+  if (sub === "cancel") {
+    const poll = cleaners[threadID];
+    if (!poll) return api.sendMessage("⚠️ Walang active poll.", threadID, messageID);
+
+    poll.ended = true;
+    if (poll.timeout) clearTimeout(poll.timeout);
+    delete cleaners[threadID];
+    saveCleaners(cleaners);
+
+    return api.sendMessage("❌ Poll cancelled.", threadID);
+  }
 };
 
-// Handle replies for bidding
-module.exports.handleEvent = async function ({ api, event, Users }) {
-  const { threadID, messageID, senderID, body, messageReply } = event;
-  if (!body) return;
+// handle replies
+module.exports.handleEvent = async function ({ api, event }) {
+  const { threadID, senderID, body, messageReply } = event;
+  if (!body || !messageReply) return;
 
-  let auctions = loadAuctions();
-  if (!auctions[threadID]) return;
+  let cleaners = loadCleaners();
+  const poll = cleaners[threadID];
+  if (!poll || poll.ended) return;
 
-  // auto-remove expired auctions
-  for (const auction of auctions[threadID]) {
-    if (auction.active && Date.now() > auction.endTime) {
-      const winner = auction.bidder
-        ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
-        : `❌ No valid bids were placed for ${auction.item}.`;
+  if (!poll.postIDs.includes(messageReply.messageID)) return;
+  if (body.trim().toLowerCase() !== "active") return;
 
-      auction.active = false;
-      api.sendMessage(`📌 Auction Ended (24h Auto)!\n${winner}`, threadID);
+  if (!poll.activeUsers.includes(senderID)) {
+    poll.activeUsers.push(senderID);
+
+    // delete last poll message
+    if (poll.postIDs?.length) {
+      const lastID = poll.postIDs[poll.postIDs.length - 1];
+      api.unsendMessage(lastID, () => {});
     }
-  }
 
-  // clean up thread if no active auctions left
-  if (auctions[threadID].every(a => !a.active)) {
-    delete auctions[threadID];
-  }
-  saveAuctions(auctions);
-
-  // check replies for active auctions
-  if (!messageReply) return;
-  const auction = auctions[threadID]?.find(a => a.active && a.postID === messageReply.messageID);
-  if (!auction) return;
-
-  const match = body.match(/\d+/);
-  if (!match) {
-    return api.sendMessage("⚠️ Please enter a valid number for your bid.", threadID, messageID);
-  }
-
-  const bidAmount = parseInt(match[0]);
-
-  if (bidAmount <= auction.highest) {
-    return api.sendMessage(
-      `⚠️ Your bid (${bidAmount}) must be higher than the current highest bid: ${auction.highest}.`,
+    // resend updated poll
+    api.sendMessage(
+      formatPoll(poll),
       threadID,
-      messageID
+      (err, info) => {
+        if (!err) {
+          poll.postIDs.push(info.messageID);
+          saveCleaners(cleaners);
+        }
+      }
     );
   }
-
-  const name = await Users.getNameUser(senderID);
-  auction.highest = bidAmount;
-  auction.bidder = name;
-  auction.bidderID = senderID;
-
-  saveAuctions(auctions);
-
-  api.sendMessage(
-    `📢 New Highest Bid!\n📦 Item: ${auction.item}\n💵 Bid: ${bidAmount}\n👤 Bidder: ${name}\n👑 Host: ${auction.hostName}\n🆔 Auction ID: ${auction.id}\n\n📝 Reply to this message to bid higher!`,
-    threadID,
-    (err, info) => {
-      if (!err) {
-        auction.postID = info.messageID; // update latest post
-        saveAuctions(auctions);
-      }
-    }
-  );
 };
