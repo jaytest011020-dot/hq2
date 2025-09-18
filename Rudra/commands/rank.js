@@ -1,111 +1,195 @@
-const { getData, setData, getAllData } = require("../../database.js");
-const axios = require("axios");
+const { getData, setData } = require("../../database.js");
+
+// ✅ 100 Maangas Rank Names (IBALIK)
+const ranks = [
+  "Newbie", "Rookie", "Apprentice", "Novice", "Scout",
+  "Learner", "Adventurer", "Explorer", "Wanderer", "Seeker",
+  "Warrior", "Soldier", "Guardian", "Mercenary", "Berserker",
+  "Gladiator", "Samurai", "Ronin", "Vanguard", "Knight",
+  "Crusader", "Paladin", "Templar", "Sentinel", "Marksman",
+  "Sharpshooter", "Assassin", "Shadowblade", "Duelist", "Slayer",
+  "Champion", "Warlord", "Destroyer", "Executioner", "Reaper",
+  "Phantom", "Specter", "Ranger", "Hunter", "Tracker",
+  "Battle Master", "Sword Saint", "Blade Dancer", "Arcane Mage", "Warlock",
+  "Necromancer", "Invoker", "Elementalist", "Pyromancer", "Cryomancer",
+  "Storm Bringer", "Thunderlord", "Earthshaker", "Flamecaller", "Frost Warden",
+  "Beastmaster", "Dragon Slayer", "Wyvern Rider", "Griffin Knight", "Phoenix Guard",
+  "Titan", "Colossus", "Leviathan", "Kraken", "Hydra",
+  "Minotaur", "Gorgon", "Chimera", "Basilisk", "Cerberus",
+  "Demigod", "Deity", "Celestial", "Oracle", "Prophet",
+  "High Priest", "Archangel", "Seraph", "Virtue", "Dominion",
+  "Overlord", "Dark Lord", "Blood Emperor", "Soul Reaver", "Void Bringer",
+  "Abyss Walker", "Chaos Wielder", "Shadow King", "Demon Lord", "Fallen Angel",
+  "Immortal", "Eternal", "Transcendent", "Cosmic Ruler", "Galaxy Emperor",
+  "Starforged", "Dimension Breaker", "Time Weaver", "Infinity", "Godslayer"
+];
+
+// ✅ Quadratic required XP (tulad ng napag-usapan)
+function getRequiredXP(level) {
+  return 100 * (level ** 2);
+}
+
+// Helper: fetch exact username (same style ng ginamit sa bank/rankup)
+async function getUserName(uid, Users, api) {
+  try {
+    let name = await Users.getNameUser(uid);
+    if (!name || name === uid) {
+      const info = await api.getUserInfo(uid);
+      if (info && info[uid] && info[uid].name) name = info[uid].name;
+      else name = uid;
+    }
+    return name;
+  } catch (e) {
+    console.error("[rank] getUserName error:", e);
+    return uid;
+  }
+}
 
 module.exports.config = {
   name: "rank",
-  version: "3.0.0",
+  version: "3.2.1",
   hasPermission: 0,
-  credits: "ChatGPT + Jaylord",
-  description: "Rank system with XP, Levels, Rank names",
-  commandCategory: "system",
-  usages: "/rank, /rank @mention, /rank all",
-  cooldowns: 5
+  credits: "ChatGPT + NN",
+  description: "Rank system with XP + auto announce on level up",
+  commandCategory: "fun",
+  usages: "/rank | /rank @mention | /rank all",
+  cooldowns: 0
 };
 
-// Rank names 1–100 (sample, palitan mo gusto mo)
-const rankNames = Array.from({ length: 100 }, (_, i) => `Warrior ${i+1}`);
+// --- HANDLE EVENT: gain XP when user chats
+module.exports.handleEvent = async function ({ api, event, Users }) {
+  const { threadID, senderID } = event;
+  if (!threadID || !senderID) return;
 
-// XP requirement formula (linear)
-function getRequiredXP(level) {
-  return 100 + (level - 1) * 100;
-}
+  // load thread rank data (per-thread)
+  let data = (await getData(`rank/${threadID}`)) || {};
 
-// Get rank name from level
-function getRankName(level) {
-  if (level <= rankNames.length) return rankNames[level - 1];
-  return `Legend ${level}`;
-}
-
-// Generate rank card API
-function getRankCardUrl(name, userID, level, rank, xp, requiredXP) {
-  return `https://betadash-api-swordslush-production.up.railway.app/rankcard?name=${encodeURIComponent(name)}&userid=${userID}&currentLvl=${level}&currentRank=${encodeURIComponent(rank)}&currentXP=${xp}&requiredXP=${requiredXP}`;
-}
-
-module.exports.handleEvent = async function ({ event, api, Users }) {
-  const senderID = event.senderID;
-  if (!senderID) return;
-
-  let userData = await getData(senderID) || { xp: 0, level: 1 };
-  userData.xp += 1;
-
-  let requiredXP = getRequiredXP(userData.level);
-
-  // Check level up
-  if (userData.xp >= requiredXP) {
-    userData.level += 1;
-    userData.xp = 0;
-    await setData(senderID, userData);
-
-    const rankName = getRankName(userData.level);
-    const userName = await Users.getNameUser(senderID);
-    const nextXP = getRequiredXP(userData.level);
-
-    const imageUrl = getRankCardUrl(userName, senderID, userData.level, rankName, userData.xp, nextXP);
-
-    api.sendMessage({
-      body: `🎉 Congrats ${userName}!\nUmangat ka sa 🥇 Level ${userData.level}!\n🎖️ Rank: ${rankName}`,
-      attachment: await global.utils.getStreamFromURL(imageUrl)
-    }, event.threadID);
+  // ensure user entry
+  if (!data[senderID]) {
+    const initialName = await getUserName(senderID, Users, api);
+    data[senderID] = { name: initialName, xp: 0, level: 1 };
   }
 
-  await setData(senderID, userData);
+  // keep name fresh
+  try {
+    data[senderID].name = await getUserName(senderID, Users, api);
+  } catch (err) { /* ignore */ }
+
+  // add random xp 1-3
+  const xpGain = Math.floor(Math.random() * 3) + 1;
+  data[senderID].xp += xpGain;
+
+  // level up loop (handles overflow properly)
+  let leveledUp = false;
+  while (data[senderID].xp >= getRequiredXP(data[senderID].level)) {
+    data[senderID].xp -= getRequiredXP(data[senderID].level);
+    data[senderID].level++;
+    leveledUp = true;
+  }
+
+  // save ASAP
+  await setData(`rank/${threadID}`, data);
+
+  // auto announce (if leveled)
+  if (leveledUp) {
+    const user = data[senderID];
+    const rankName = ranks[user.level - 1] || `Rank ${user.level}`;
+    const required = getRequiredXP(user.level);
+
+    const mention = [{ tag: `${user.name}`, id: senderID }];
+    // send text (mention)
+    try {
+      await api.sendMessage(
+        {
+          body: `🎉 Congratulations @${user.name}!\nYou leveled up to Level ${user.level} 🎖️\nNew rank: ${rankName}`,
+          mentions: mention
+        },
+        threadID
+      );
+    } catch (e) {
+      // fallback: send without mention if it errors
+      await api.sendMessage(`🎉 Congratulations ${user.name}! You leveled up to Level ${user.level} — ${rankName}`, threadID);
+    }
+
+    // send image (rank card) separately to avoid Messenger failing
+    const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard?name=${encodeURIComponent(user.name)}&userid=${senderID}&currentLvl=${user.level}&currentRank=${encodeURIComponent(rankName)}&currentXP=${user.xp}&requiredXP=${required}`;
+
+    try {
+      const stream = await global.utils.getStreamFromURL(imgUrl);
+      await api.sendMessage({ attachment: stream }, threadID);
+    } catch (err) {
+      console.warn("[rank] could not load rank card image:", err.message || err);
+      await api.sendMessage("⚠️ (Rank card image failed to load)", threadID);
+    }
+  }
 };
 
-module.exports.run = async function ({ event, api, args, Users }) {
-  const mention = Object.keys(event.mentions || {});
-  const allData = await getAllData();
+// --- COMMANDS: /rank, /rank @mention, /rank all
+module.exports.run = async function ({ api, event, args, Users }) {
+  const { threadID, messageID, senderID, mentions } = event;
+  let data = (await getData(`rank/${threadID}`)) || {};
 
-  // /rank all → leaderboard
+  // /rank all -> leaderboard (text only)
   if (args[0] && args[0].toLowerCase() === "all") {
-    const leaderboard = Object.entries(allData)
-      .map(([id, data]) => ({
-        id,
-        level: data.level || 1,
-        xp: data.xp || 0,
-        name: data.name || id
-      }))
-      .sort((a, b) => b.level - a.level || b.xp - a.xp)
-      .slice(0, 10);
+    const entries = Object.entries(data);
+    if (entries.length === 0) return api.sendMessage("⚠️ Walang rank data sa GC na ito.", threadID, messageID);
 
-    let msg = "🏆 Leaderboard 🏆\n";
-    leaderboard.forEach((u, i) => {
-      msg += `${i+1}. ${u.name} — Level ${u.level} (${u.xp} XP)\n`;
-    });
+    const leaderboard = entries
+      .map(([uid, u]) => ({ uid, name: u.name || uid, level: u.level || 1, xp: u.xp || 0 }))
+      .sort((a, b) => (b.level - a.level) || (b.xp - a.xp))
+      .map((u, i) => `${i + 1}. ${u.name} — Level ${u.level} (${u.xp}/${getRequiredXP(u.level)} XP)`);
 
-    return api.sendMessage(msg, event.threadID, event.messageID);
+    return api.sendMessage(`🏆 RANK LEADERBOARD 🏆\n\n${leaderboard.join("\n")}`, threadID, messageID);
   }
 
-  // /rank @mention → ibang tao
-  let targetID = mention[0] || event.senderID;
-  let targetName = mention[0]
-    ? Object.values(event.mentions)[0]
-    : await Users.getNameUser(event.senderID);
+  // /rank @mention
+  const mentionID = Object.keys(mentions || {})[0];
+  if (mentionID) {
+    if (!data[mentionID]) return api.sendMessage("⚠️ Walang data yung user na yan.", threadID, messageID);
 
-  let targetData = await getData(targetID) || { xp: 0, level: 1 };
-  let requiredXP = getRequiredXP(targetData.level);
-  let rankName = getRankName(targetData.level);
+    const user = data[mentionID];
+    const rankName = ranks[user.level - 1] || `Rank ${user.level}`;
+    const required = getRequiredXP(user.level);
 
-  const imageUrl = getRankCardUrl(
-    targetName,
-    targetID,
-    targetData.level,
-    rankName,
-    targetData.xp,
-    requiredXP
-  );
+    // send text then image separately
+    await api.sendMessage(
+      `📊 Rank Info for ${user.name}\n\n🏅 Level: ${user.level}\n⭐ XP: ${user.xp}/${required}\n🎖️ Rank: ${rankName}`,
+      threadID,
+      messageID
+    );
 
-  return api.sendMessage({
-    body: `📊 Rank Info for ${targetName}\n\n🥇 Level: ${targetData.level}\n⭐ XP: ${targetData.xp}/${requiredXP}\n🎖️ Rank: ${rankName}`,
-    attachment: await global.utils.getStreamFromURL(imageUrl)
-  }, event.threadID, event.messageID);
+    const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard?name=${encodeURIComponent(user.name)}&userid=${mentionID}&currentLvl=${user.level}&currentRank=${encodeURIComponent(rankName)}&currentXP=${user.xp}&requiredXP=${required}`;
+    try {
+      const stream = await global.utils.getStreamFromURL(imgUrl);
+      return api.sendMessage({ attachment: stream }, threadID);
+    } catch (e) {
+      return api.sendMessage("⚠️ (Rank card image failed to load)", threadID);
+    }
+  }
+
+  // /rank (self)
+  if (args.length === 0) {
+    if (!data[senderID]) return api.sendMessage("⚠️ Wala ka pang XP data.", threadID, messageID);
+
+    const user = data[senderID];
+    const rankName = ranks[user.level - 1] || `Rank ${user.level}`;
+    const required = getRequiredXP(user.level);
+
+    // text then image
+    await api.sendMessage(
+      `📊 Rank Info for ${user.name}\n\n🏅 Level: ${user.level}\n⭐ XP: ${user.xp}/${required}\n🎖️ Rank: ${rankName}`,
+      threadID,
+      messageID
+    );
+
+    const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard?name=${encodeURIComponent(user.name)}&userid=${senderID}&currentLvl=${user.level}&currentRank=${encodeURIComponent(rankName)}&currentXP=${user.xp}&requiredXP=${required}`;
+    try {
+      const stream = await global.utils.getStreamFromURL(imgUrl);
+      return api.sendMessage({ attachment: stream }, threadID);
+    } catch (e) {
+      return api.sendMessage("⚠️ (Rank card image failed to load)", threadID);
+    }
+  }
+
+  return api.sendMessage("⚠️ Usage: /rank | /rank @mention | /rank all", threadID, messageID);
 };
