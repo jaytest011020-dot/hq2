@@ -1,11 +1,8 @@
 const fs = require("fs");
-const path = require("path");
-const configPath = path.join(__dirname, "../../config.json"); // ensure main root path
-let config = require(configPath);
 
 module.exports.config = {
   name: "addpremium",
-  version: "1.3.0",
+  version: "1.4.0",
   permission: 1, // Admin-only permissions
   credits: "ChatGPT + Fixed by NN",
   description: "Adds a user to the premium list using UID or mention",
@@ -15,18 +12,25 @@ module.exports.config = {
 };
 
 module.exports.run = async function ({ api, event, args }) {
-  const { threadID, senderID, messageID } = event;
+  const { threadID, senderID, messageID, mentions } = event;
+  const { configPath } = global.client;     // ✅ centralized config path
+  const config = global.config;             // ✅ live config
+  const { ADMINBOT } = global.config;
 
   // Check if the sender is an admin
-  if (!config.ADMINBOT || !config.ADMINBOT.includes(senderID)) {
-    return api.sendMessage("❌ You do not have permission to use this command.", threadID, messageID);
+  if (!ADMINBOT || !ADMINBOT.includes(senderID)) {
+    return api.sendMessage(
+      "❌ You do not have permission to use this command.",
+      threadID,
+      messageID
+    );
   }
 
   let targetUID;
 
   // If mention
-  if (event.mentions && Object.keys(event.mentions).length > 0) {
-    targetUID = Object.keys(event.mentions)[0]; // UID ng na-mention
+  if (mentions && Object.keys(mentions).length > 0) {
+    targetUID = Object.keys(mentions)[0];
   } else if (args[0]) {
     // If UID manually given
     targetUID = args[0];
@@ -34,7 +38,11 @@ module.exports.run = async function ({ api, event, args }) {
 
   // If no UID found
   if (!targetUID) {
-    return api.sendMessage("❌ Please provide a valid UID or mention a user to add to the premium list.", threadID, messageID);
+    return api.sendMessage(
+      "❌ Please provide a valid UID or mention a user to add to the premium list.",
+      threadID,
+      messageID
+    );
   }
 
   // Ensure PREMIUM exists
@@ -44,7 +52,11 @@ module.exports.run = async function ({ api, event, args }) {
 
   // Check if already premium
   if (config.PREMIUM.includes(targetUID)) {
-    return api.sendMessage(`⚠️ User with UID ${targetUID} is already a premium user.`, threadID, messageID);
+    return api.sendMessage(
+      `⚠️ User with UID ${targetUID} is already a premium user.`,
+      threadID,
+      messageID
+    );
   }
 
   // Add to PREMIUM list
@@ -53,5 +65,13 @@ module.exports.run = async function ({ api, event, args }) {
   // Save to root config.json
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-  return api.sendMessage(`✅ User with UID ${targetUID} has been added to the premium list!`, threadID, messageID);
+  // Reload global.config to apply immediately
+  delete require.cache[require.resolve(configPath)];
+  global.config = require(configPath);
+
+  return api.sendMessage(
+    `✅ User with UID ${targetUID} has been added to the premium list!`,
+    threadID,
+    messageID
+  );
 };
