@@ -2,13 +2,28 @@ const { setData, getData, deleteData } = require("../../database.js");
 
 module.exports.config = {
   name: "cleaner",
-  version: "1.1.0",
+  version: "1.2.0",
   credits: "ChatGPT + NN",
-  description: "Active user voting system with auto-kick after deadline",
-  usages: "/clean <days> | /cleaner resend",
+  description: "Active user voting system with flexible deadline",
+  usages: "/clean <time> (e.g. 5d, 12h, 30m) | /cleaner resend",
   commandCategory: "system",
   cooldowns: 5,
 };
+
+function parseTime(input) {
+  const match = input.match(/^(\d+)([dhm])$/i);
+  if (!match) return null;
+
+  let value = parseInt(match[1]);
+  let unit = match[2].toLowerCase();
+
+  switch (unit) {
+    case "d": return value * 24 * 60 * 60 * 1000;
+    case "h": return value * 60 * 60 * 1000;
+    case "m": return value * 60 * 1000;
+    default: return null;
+  }
+}
 
 function formatTimeLeft(ms) {
   if (ms <= 0) return "Expired";
@@ -30,7 +45,7 @@ async function sendPoll(api, threadID) {
   let countdown = formatTimeLeft(timeLeft);
 
   let msg =
-    `🧹 Active User Poll Started 🧹\n\n` +
+    `🧹 Active User Poll 🧹\n\n` +
     `⏳ Ends in: ${countdown}\n` +
     `📅 End Date: ${new Date(poll.end).toLocaleString()}\n\n` +
     `✅ ${count}/${total} users have voted\n\n` +
@@ -44,17 +59,17 @@ async function sendPoll(api, threadID) {
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  // 📌 Start a clean poll
-  if (args[0] && !isNaN(args[0])) {
-    let days = parseInt(args[0]);
-    if (days <= 0) return api.sendMessage("❌ Invalid days.", threadID, messageID);
+  // 📌 Start poll
+  if (args[0] && args[0].match(/^\d+[dhm]$/i)) {
+    let ms = parseTime(args[0]);
+    if (!ms) return api.sendMessage("❌ Invalid time format. Use 5d, 12h, 30m", threadID, messageID);
 
     let info = await api.getThreadInfo(threadID);
     let members = info.participantIDs;
 
     let poll = {
       start: Date.now(),
-      end: Date.now() + days * 24 * 60 * 60 * 1000,
+      end: Date.now() + ms,
       voters: [],
       members,
     };
@@ -69,7 +84,7 @@ module.exports.run = async function ({ api, event, args }) {
   }
 };
 
-// 📌 Listen for /vote replies
+// 📌 Handle votes + auto-end
 module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, senderID, body } = event;
 
