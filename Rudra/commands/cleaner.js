@@ -2,10 +2,10 @@ const { setData, getData, deleteData } = require("../../database.js");
 
 module.exports.config = {
   name: "cleaner",
-  version: "1.2.0",
+  version: "1.5.0",
   credits: "ChatGPT + NN",
-  description: "Active user voting system with flexible deadline",
-  usages: "/clean <time> (e.g. 5d, 12h, 30m) | /cleaner resend",
+  description: "Active user voting system with reply-based voting and deadline",
+  usages: "/clean <time> (e.g. 5d, 12h, 30m) | /cleaner resend | /cleaner list",
   commandCategory: "system",
   cooldowns: 5,
 };
@@ -49,14 +49,14 @@ async function sendPoll(api, threadID) {
     `⏳ Ends in: ${countdown}\n` +
     `📅 End Date: ${new Date(poll.end).toLocaleString()}\n\n` +
     `✅ ${count}/${total} users have voted\n\n` +
-    `Reply "/vote" to mark yourself as active!`;
+    `👉 Reply "active" to this message to mark yourself as active!`;
 
   let sent = await api.sendMessage(msg, threadID);
   poll.messageID = sent.messageID;
   await setData(`cleaner/${threadID}`, poll);
 }
 
-module.exports.run = async function ({ api, event, args }) {
+module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, messageID } = event;
 
   // 📌 Start poll
@@ -66,12 +66,17 @@ module.exports.run = async function ({ api, event, args }) {
 
     let info = await api.getThreadInfo(threadID);
     let members = info.participantIDs;
+    let admins = info.adminIDs.map(a => a.id);
+    let botID = api.getCurrentUserID();
 
     let poll = {
       start: Date.now(),
       end: Date.now() + ms,
       voters: [],
       members,
+      admins,
+      botID,
+      messageID: null,
     };
 
     await setData(`cleaner/${threadID}`, poll);
@@ -82,27 +87,58 @@ module.exports.run = async function ({ api, event, args }) {
   if (args[0] === "resend") {
     return sendPoll(api, threadID);
   }
+
+  // 📌 Show list of voters
+  if (args[0] === "list") {
+    let poll = await getData(`cleaner/${threadID}`);
+    if (!poll) return api.sendMessage("❌ No active poll found.", threadID, messageID);
+
+    if (poll.voters.length === 0) {
+      return api.sendMessage("📋 No one has voted yet.", threadID, messageID);
+    }
+
+    let names = [];
+    for (let uid of poll.voters) {
+      try {
+        let name = await Users.getNameUser(uid);
+        names.push(`👤 ${name} (${uid})`);
+      } catch {
+        names.push(`👤 ${uid}`);
+      }
+    }
+
+    return api.sendMessage(
+      `📋 Voted Users (${poll.voters.length}):\n\n${names.join("\n")}`,
+      threadID,
+      messageID
+    );
+  }
 };
 
-// 📌 Handle votes + auto-end
+// 📌 Handle replies + auto-end
 module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, senderID, body } = event;
+  const { threadID, senderID, messageReply, body } = event;
 
   let poll = await getData(`cleaner/${threadID}`);
   if (!poll) return;
 
-  // Only respond to "/vote"
-  if (body && body.toLowerCase().trim() === "/vote") {
-    if (!poll.voters.includes(senderID)) {
-      poll.voters.push(senderID);
-      await setData(`cleaner/${threadID}`, poll);
-      return sendPoll(api, threadID);
+  // ✅ Count only replies to the poll message AND only if body === "active"
+  if (messageReply && messageReply.messageID === poll.messageID) {
+    if (body && body.trim().toLowerCase() === "active") {
+      if (!poll.voters.includes(senderID)) {
+        poll.voters.push(senderID);
+        await setData(`cleaner/${threadID}`, poll);
+        return sendPoll(api, threadID);
+      }
     }
   }
 
-  // Auto-end if expired
+  // 🕒 Auto-end if expired
   if (Date.now() >= poll.end) {
-    let inactive = poll.members.filter((id) => !poll.voters.includes(id));
+    let inactive = poll.members.filter(
+      (id) => !poll.voters.includes(id) && !poll.admins.includes(id) && id !== poll.botID
+    );
+
     await api.sendMessage(
       `🧹 Poll ended!\n` +
       `✅ ${poll.voters.length}/${poll.members.length} are active.\n` +
