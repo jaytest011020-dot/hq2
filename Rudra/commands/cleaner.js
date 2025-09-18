@@ -4,8 +4,8 @@ module.exports.config = {
   name: "cleaner",
   version: "2.0.0",
   credits: "ChatGPT + NN",
-  description: "Active user poll system with auto kick",
-  usages: "/clean <time> (5d, 12h, 30m) | /cleaner resend | /cleaner list | /cleaner cancel",
+  description: "Active user poll system with auto-kick",
+  usages: "/cleaner <time> | /cleaner resend | /cleaner list | /cleaner cancel",
   commandCategory: "system",
   cooldowns: 5,
 };
@@ -13,8 +13,10 @@ module.exports.config = {
 function parseTime(input) {
   const match = input.match(/^(\d+)([dhm])$/i);
   if (!match) return null;
-  let value = parseInt(match[1]);
-  let unit = match[2].toLowerCase();
+
+  const value = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+
   switch (unit) {
     case "d": return value * 24 * 60 * 60 * 1000;
     case "h": return value * 60 * 60 * 1000;
@@ -25,24 +27,24 @@ function parseTime(input) {
 
 function formatTimeLeft(ms) {
   if (ms <= 0) return "Expired";
-  let d = Math.floor(ms / (24 * 60 * 60 * 1000));
-  let h = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-  let m = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
-  return `${d}d ${h}h ${m}m`;
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  const minutes = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+  return `${days}d ${hours}h ${minutes}m`;
 }
 
 async function sendPoll(api, threadID) {
   let poll = await getData(`cleaner/${threadID}`);
   if (!poll) return;
 
-  let voters = poll.voters || [];
-  let total = poll.members.length;
-  let count = voters.length;
+  const voters = poll.voters || [];
+  const total = poll.members.length;
+  const count = voters.length;
 
-  let timeLeft = poll.end - Date.now();
-  let countdown = formatTimeLeft(timeLeft);
+  const timeLeft = poll.end - Date.now();
+  const countdown = formatTimeLeft(timeLeft);
 
-  let msg =
+  const msg =
     `🧹 Active User Poll 🧹\n\n` +
     `⏳ Ends in: ${countdown}\n` +
     `📅 End Date: ${new Date(poll.end).toLocaleString()}\n\n` +
@@ -50,115 +52,115 @@ async function sendPoll(api, threadID) {
     `📌 Reply with "active" to confirm your activity.\n\n` +
     `⚠️ Users who don't reply will be kicked automatically at deadline!`;
 
-  let sent = await api.sendMessage(msg, threadID);
+  const sent = await api.sendMessage(msg, threadID);
   poll.messageID = sent.messageID;
   await setData(`cleaner/${threadID}`, poll);
-}
-
-// 📌 End poll and kick inactives
-async function endPoll(api, threadID) {
-  let poll = await getData(`cleaner/${threadID}`);
-  if (!poll) return;
-
-  let inactive = poll.members.filter(
-    (id) => !poll.voters.includes(id) && !poll.admins.includes(id) && id !== api.getCurrentUserID()
-  );
-
-  await api.sendMessage(
-    `🧹 Poll ended!\n` +
-    `✅ ${poll.voters.length}/${poll.members.length} are active.\n` +
-    `🚪 Kicking ${inactive.length} inactive users...`,
-    threadID
-  );
-
-  for (let uid of inactive) {
-    try {
-      await api.removeUserFromGroup(uid, threadID);
-    } catch (e) {
-      console.log(`❌ Failed to kick ${uid}:`, e);
-    }
-  }
-
-  await deleteData(`cleaner/${threadID}`);
 }
 
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  // Start poll
-  if (args[0] && args[0].match(/^\d+[dhm]$/i)) {
-    let ms = parseTime(args[0]);
-    if (!ms) return api.sendMessage("❌ Invalid time format. Use 5d, 12h, 30m", threadID, messageID);
-
-    let info = await api.getThreadInfo(threadID);
-    let members = info.participantIDs;
-    let admins = info.adminIDs.map(a => a.id);
-
-    let poll = {
-      start: Date.now(),
-      end: Date.now() + ms,
-      voters: [],
-      members,
-      admins,
-    };
-
-    await setData(`cleaner/${threadID}`, poll);
-    await sendPoll(api, threadID);
-
-    // Auto end
-    setTimeout(() => endPoll(api, threadID), ms);
-    return;
-  }
-
-  // Resend poll
-  if (args[0] === "resend") {
-    return sendPoll(api, threadID);
-  }
-
-  // List voters
-  if (args[0] === "list") {
-    let poll = await getData(`cleaner/${threadID}`);
-    if (!poll) return api.sendMessage("❌ No active poll.", threadID, messageID);
-
-    let names = [];
-    let infos = await api.getUserInfo(poll.voters);
-    for (let uid of poll.voters) {
-      names.push(infos[uid]?.name || uid);
-    }
-
+  // Check if may existing poll
+  let existing = await getData(`cleaner/${threadID}`);
+  if (existing && Date.now() < existing.end) {
     return api.sendMessage(
-      `✅ Active Users (${poll.voters.length}):\n` + names.join("\n"),
+      "⚠️ May naka-active na poll na sa GC na ito. Gumamit ng /cleaner cancel muna bago gumawa ulit.",
       threadID,
       messageID
     );
   }
 
-  // Cancel poll
+  // 📌 Start poll
+  if (args[0] && args[0].match(/^\d+[dhm]$/i)) {
+    const ms = parseTime(args[0]);
+    if (!ms) return api.sendMessage("❌ Invalid time format. Use 5d, 12h, 30m", threadID, messageID);
+
+    const info = await api.getThreadInfo(threadID);
+    const members = info.participantIDs;
+    const admins = info.adminIDs.map(a => a.id);
+
+    const poll = {
+      start: Date.now(),
+      end: Date.now() + ms,
+      voters: [],
+      members,
+      admins,
+      botID: api.getCurrentUserID()
+    };
+
+    await setData(`cleaner/${threadID}`, poll);
+    return sendPoll(api, threadID);
+  }
+
+  // 📌 Resend poll
+  if (args[0] === "resend") {
+    return sendPoll(api, threadID);
+  }
+
+  // 📌 List voters
+  if (args[0] === "list") {
+    let poll = await getData(`cleaner/${threadID}`);
+    if (!poll) return api.sendMessage("❌ Walang active poll sa GC na ito.", threadID, messageID);
+
+    if (poll.voters.length === 0) {
+      return api.sendMessage("📋 Walang nag vote pa.", threadID, messageID);
+    }
+
+    return api.sendMessage(
+      `📋 Active Users:\n${poll.voters.map(uid => `• ${uid}`).join("\n")}`,
+      threadID,
+      messageID
+    );
+  }
+
+  // 📌 Cancel poll
   if (args[0] === "cancel") {
     let poll = await getData(`cleaner/${threadID}`);
-    if (!poll) return api.sendMessage("❌ No active poll to cancel.", threadID, messageID);
+    if (!poll) return api.sendMessage("❌ Walang active poll na pwedeng i-cancel.", threadID, messageID);
 
     await deleteData(`cleaner/${threadID}`);
-    return api.sendMessage("❌ Poll has been cancelled.", threadID, messageID);
+    return api.sendMessage("🛑 The poll has been cancelled.", threadID, messageID);
   }
 };
 
-// 📌 Handle votes
+// 📌 Handle replies + auto-end
 module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, senderID, body, messageReply } = event;
+  const { threadID, senderID, body } = event;
+  if (!body) return;
 
   let poll = await getData(`cleaner/${threadID}`);
   if (!poll) return;
 
-  let text = body?.toLowerCase().trim();
-  if (text === "active") {
-    // Allow reply OR normal chat
+  // ✅ User reply "active"
+  if (body.toLowerCase().trim() === "active") {
     if (!poll.voters.includes(senderID)) {
       poll.voters.push(senderID);
       await setData(`cleaner/${threadID}`, poll);
-
-      await api.sendMessage("✅ Marked you as active!", threadID, event.messageID);
       return sendPoll(api, threadID);
     }
+  }
+
+  // ⏳ Auto-end check
+  if (Date.now() >= poll.end) {
+    const inactive = poll.members.filter(
+      (id) => !poll.voters.includes(id) && !poll.admins.includes(id) && id !== poll.botID
+    );
+
+    await api.sendMessage(
+      `🧹 Poll ended!\n` +
+      `✅ ${poll.voters.length}/${poll.members.length} marked active.\n` +
+      `🚪 Kicking ${inactive.length} inactive users...`,
+      threadID
+    );
+
+    for (let uid of inactive) {
+      try {
+        await api.removeUserFromGroup(uid, threadID);
+      } catch (e) {
+        console.log(`❌ Failed to kick ${uid}:`, e);
+      }
+    }
+
+    await deleteData(`cleaner/${threadID}`);
   }
 };
