@@ -1,105 +1,93 @@
-const { getData, setData } = require("../../database.js");
 const axios = require("axios");
 
-module.exports.config = {
-  name: "rank",
-  version: "2.5.0",
-  hasPermission: 0,
-  credits: "ChatGPT + Jaylord",
-  description: "Show user rank or leaderboard",
-  commandCategory: "games",
-  usages: "/rank, /rank @mention, /rank all",
-  cooldowns: 0
-};
+...
 
-module.exports.handleEvent = async function ({ api, event, Users }) {
-  const { threadID, senderID } = event;
-  if (!event.body) return;
+// AUTO ANNOUNCE RANK UP
+if (data[senderID].xp >= requiredXP) {
+  data[senderID].xp -= requiredXP;
+  data[senderID].level++;
 
-  let data = await getData(`/rank/${threadID}/${senderID}`);
-  if (!data) {
-    const name = await Users.getNameUser(senderID);
-    data = { xp: 0, level: 1, name };
-  }
+  const rankName = ranks[data[senderID].level - 1] || "Infinity";
+  const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(senderName)}&userid=${senderID}&currentLvl=${data[senderID].level}&currentRank=${rankName}&currentXP=${data[senderID].xp}&requiredXP=${data[senderID].level * 100}`;
 
-  // random XP 1-3
-  const gain = Math.floor(Math.random() * 3) + 1;
-  data.xp += gain;
-
-  // required XP scaling
-  const requiredXP = 5 * Math.pow(2, data.level - 1);
-  if (data.xp >= requiredXP) {
-    data.level++;
-    data.xp = 0;
+  try {
+    const imgStream = (await axios.get(imgUrl, { responseType: "stream" })).data;
 
     api.sendMessage(
-      `🎉 Congrats ${data.name}! You leveled up to Level ${data.level}!`,
+      {
+        body:
+          `🎉 Congratulations ${senderName}!\n` +
+          `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
+          `Your new rank is: ${rankName}`,
+        attachment: imgStream
+      },
+      threadID
+    );
+  } catch (e) {
+    api.sendMessage(
+      `🎉 Congratulations ${senderName}! You leveled up to Level ${data[senderID].level} (${rankName})`,
       threadID
     );
   }
+}
 
-  // update name if outdated
-  const realName = await Users.getNameUser(senderID);
-  if (data.name !== realName) data.name = realName;
-
-  await setData(`/rank/${threadID}/${senderID}`, data);
-};
-
-module.exports.run = async function ({ api, event, args, Users }) {
-  const { threadID, messageID, senderID } = event;
-
-  // Rank All
-  if (args[0] === "all") {
-    let data = await getData(`/rank/${threadID}`) || {};
-
-    // auto-update names
-    for (let uid in data) {
-      const realName = await Users.getNameUser(uid);
-      if (data[uid].name !== realName) {
-        data[uid].name = realName;
-      }
-    }
-    await setData(`/rank/${threadID}`, data);
-
-    // sort leaderboard
-    const sorted = Object.entries(data).sort((a, b) => {
-      if (b[1].level === a[1].level) {
-        return b[1].xp - a[1].xp;
-      }
-      return b[1].level - a[1].level;
-    });
-
-    let msg = "🏆 Group Leaderboard 🏆\n\n";
-    let count = 0;
-    for (const [uid, info] of sorted) {
-      count++;
-      msg += `${count}. ${info.name} - Level ${info.level} (${info.xp} XP)\n`;
-      if (count >= 10) break;
-    }
-
-    return api.sendMessage(msg, threadID, messageID);
+// /RANK SELF
+if (args.length === 0) {
+  if (!data[senderID]) {
+    return api.sendMessage("⚠️ Wala ka pang XP data.", threadID, messageID);
   }
 
-  // Rank for self or mention
-  const mention = Object.keys(event.mentions)[0] || senderID;
-  let data = await getData(`/rank/${threadID}/${mention}`);
+  const user = data[senderID];
+  const rankName = ranks[user.level - 1] || "Infinity";
+  const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${senderID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`;
 
-  if (!data) {
-    const name = await Users.getNameUser(mention);
-    data = { xp: 0, level: 1, name };
-    await setData(`/rank/${threadID}/${mention}`, data);
+  try {
+    const imgStream = (await axios.get(imgUrl, { responseType: "stream" })).data;
+
+    return api.sendMessage(
+      {
+        body:
+          `📊 Rank Info for ${user.name}\n\n` +
+          `🏅 Level: ${user.level}\n` +
+          `⭐ XP: ${user.xp}/${user.level * 100}\n` +
+          `🎖️ Rank: ${rankName}`,
+        attachment: imgStream
+      },
+      threadID,
+      messageID
+    );
+  } catch (e) {
+    return api.sendMessage("⚠️ Error loading rank card image.", threadID, messageID);
+  }
+}
+
+// /RANK @MENTION
+const mentionID = Object.keys(mentions)[0];
+if (mentionID) {
+  if (!data[mentionID]) {
+    return api.sendMessage("⚠️ Walang data yung user na yan.", threadID, messageID);
   }
 
-  const requiredXP = 5 * Math.pow(2, data.level - 1);
-  const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(
-    data.name
-  )}&userid=${mention}&currentLvl=${data.level}&currentRank=🌟&currentXP=${data.xp}&requiredXP=${requiredXP}`;
+  const user = data[mentionID];
+  const rankName = ranks[user.level - 1] || "Infinity";
+  const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${mentionID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`;
 
-  const img = (await axios.get(apiUrl, { responseType: "stream" })).data;
+  try {
+    const imgStream = (await axios.get(imgUrl, { responseType: "stream" })).data;
 
-  return api.sendMessage(
-    { body: "", attachment: img },
-    threadID,
-    messageID
-  );
-};
+    return api.sendMessage(
+      {
+        body:
+          `📊 Rank Info for ${user.name}\n\n` +
+          `🏅 Level: ${user.level}\n` +
+          `⭐ XP: ${user.xp}/${user.level * 100}\n` +
+          `🎖️ Rank: ${rankName}`,
+        attachment: imgStream
+      },
+      threadID,
+      messageID
+    );
+  } catch (e) {
+    return api.sendMessage("⚠️ Error loading rank card image.", threadID, messageID);
+  }
+                           }
