@@ -1,137 +1,204 @@
-const { getData, setData, deleteData } = require("../../database.js");
+const fs = require("fs");
+const path = require("path");
 
-function formatBid(bid) {
-  return (
-`📢 ┃ Auction Started ┃ 📢
-─────────────────────────────
-📦 Item: ${bid.item}
-💰 Current Bid: ${bid.currentBid} by ${bid.highestBidder ? bid.highestBidder : "None"}
-🏷️ Starting Price: ${bid.startPrice}
-─────────────────────────────
-⏳ Ends in: ${Math.max(0, Math.floor((bid.end - Date.now()) / 1000))}s
-📅 End: ${new Date(bid.end).toLocaleString()}
-─────────────────────────────
-✅ Place bid: /bid <amount>
-❌ End auction: /bid end
-`
-  );
+const auctionFile = path.join(__dirname, "auctions.json");
+
+// Ensure file exists
+if (!fs.existsSync(auctionFile)) fs.writeFileSync(auctionFile, JSON.stringify({}, null, 2), "utf8");
+
+// Load/save auctions
+function loadAuctions() {
+  try {
+    return JSON.parse(fs.readFileSync(auctionFile, "utf8"));
+  } catch {
+    return {};
+  }
+}
+function saveAuctions(data) {
+  fs.writeFileSync(auctionFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-async function endBid(api, threadID, bid) {
-  if (bid.ended) return;
-  bid.ended = true;
+// Generate 6-digit ID
+function generateID() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
-  let msg = `⏰ Auction Ended!\n📦 Item: ${bid.item}\n`;
-
-  if (bid.highestBidder) {
-    msg += `🏆 Winner: ${bid.highestBidder}\n💰 Price: ${bid.currentBid}`;
-  } else {
-    msg += `❌ No bids placed.`;
-  }
-
-  api.sendMessage(msg, threadID);
-  await deleteData(`bid/${threadID}`);
+// Usage Example Helper
+function usageExample(api, threadID, messageID) {
+  return api.sendMessage(
+    `❌ Wrong usage!\n\n📌 Correct Usage:\n/bid start <item> <starting_amount>\n/bid end <auction_id>\n/bid resend <auction_id>\n\n💡 Examples:\n/bid start Raccoon 200\n/bid end 123456\n/bid resend 654321`,
+    threadID,
+    messageID
+  );
 }
 
 module.exports.config = {
   name: "bid",
-  version: "3.0.0",
-  hasPermssion: 1,
-  credits: "ChatGPT + NN",
-  description: "Auction system with database",
-  commandCategory: "system",
-  usages: "/bid start <item> <price> | /bid <amount> | /bid end | /bid info",
-  cooldowns: 2,
+  version: "3.1.1",
+  hasPermssion: 0,
+  credits: "ChatGPT",
+  description: "Auction system with 6-digit IDs, auto-end in 24h, and resend option",
+  commandCategory: "gag tools",
+  usages: "/bid start <item> <amount> | /bid end <id> | /bid resend <id>",
+  cooldowns: 5,
 };
 
-module.exports.run = async function ({ api, event, args }) {
-  const { threadID, senderID, messageID } = event;
+module.exports.run = async function ({ api, event, args, Users, Threads }) {
+  const { threadID, messageID, senderID } = event;
+  let auctions = loadAuctions();
+  if (!auctions[threadID]) auctions[threadID] = [];
+
   const sub = args[0]?.toLowerCase();
-  let bid = await getData(`bid/${threadID}`);
 
   // start auction
   if (sub === "start") {
-    if (bid) return api.sendMessage("⚠️ May active auction pa.", threadID, messageID);
+    const match = args.join(" ").match(/start\s+(.+)\s+(\d+)$/i);
+    if (!match) return usageExample(api, threadID, messageID);
 
-    const item = args[1];
-    const startPrice = parseInt(args[2]);
+    const item = match[1].trim();
+    const startAmount = parseInt(match[2]);
+    if (!item || isNaN(startAmount)) return usageExample(api, threadID, messageID);
 
-    if (!item || isNaN(startPrice)) {
-      return api.sendMessage("❌ Usage: /bid start <item> <starting_price>", threadID, messageID);
-    }
-
-    bid = {
+    const hostName = await Users.getNameUser(senderID);
+    const newAuction = {
+      id: generateID(),
+      active: true,
       item,
-      startPrice,
-      currentBid: startPrice,
-      highestBidder: null,
-      end: Date.now() + 60000, // default 1 min
-      ended: false,
+      highest: startAmount,
+      bidder: null,
+      bidderID: null,
+      postID: null,
+      hostID: senderID,
+      hostName,
+      endTime: Date.now() + 24 * 60 * 60 * 1000 // 24h auto end
     };
 
-    api.sendMessage(
-      formatBid(bid),
+    auctions[threadID].push(newAuction);
+    saveAuctions(auctions);
+
+    return api.sendMessage(
+      `📢 Auction Started!\n📦 Item: ${item}\n💵 Starting Bid: ${startAmount}\n👑 Host: ${hostName}\n🆔 Auction ID: ${newAuction.id}\n\n📝 Reply to this message with your bid!`,
       threadID,
-      async (err, info) => {
+      (err, info) => {
         if (!err) {
-          bid.messageID = info.messageID;
-          await setData(`bid/${threadID}`, bid);
+          newAuction.postID = info.messageID;
+          saveAuctions(auctions);
         }
       }
     );
-
-    setTimeout(async () => {
-      let b = await getData(`bid/${threadID}`);
-      if (b && !b.ended) await endBid(api, threadID, b);
-    }, 60000);
-
-    return;
   }
 
-  // place bid
-  if (!isNaN(sub)) {
-    if (!bid) return api.sendMessage("⚠️ Walang active auction.", threadID, messageID);
-    if (bid.ended) return api.sendMessage("❌ Auction already ended.", threadID, messageID);
-
-    const amount = parseInt(sub);
-    if (amount <= bid.currentBid) {
-      return api.sendMessage(`❌ Bid must be higher than current bid (${bid.currentBid}).`, threadID, messageID);
-    }
-
-    bid.currentBid = amount;
-    bid.highestBidder = senderID;
-
-    // delete old message and resend
-    if (bid.messageID) {
-      api.unsendMessage(bid.messageID, () => {});
-    }
-
-    api.sendMessage(
-      formatBid(bid),
-      threadID,
-      async (err, info) => {
-        if (!err) {
-          bid.messageID = info.messageID;
-          await setData(`bid/${threadID}`, bid);
-        }
-      }
-    );
-
-    return;
-  }
-
-  // end auction manually
+  // end auction
   if (sub === "end") {
-    if (!bid) return api.sendMessage("⚠️ Walang active auction.", threadID, messageID);
-    await endBid(api, threadID, bid);
-    return;
+    const auctionID = args[1];
+    if (!auctionID) return usageExample(api, threadID, messageID);
+
+    const auction = auctions[threadID]?.find(a => a.id === auctionID && a.active);
+    if (!auction) return api.sendMessage("⚠️ Auction not found or already ended.", threadID, messageID);
+
+    // check if sender is host or admin
+    const threadInfo = await Threads.getInfo(threadID);
+    const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+
+    if (auction.hostID !== senderID && !isAdmin) {
+      return api.sendMessage("❌ Only the host or a group admin can end this auction.", threadID, messageID);
+    }
+
+    const winner = auction.bidder
+      ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
+      : `❌ No valid bids were placed for ${auction.item}.`;
+
+    auction.active = false;
+    saveAuctions(auctions);
+
+    return api.sendMessage(`📌 Auction Ended!\n${winner}`, threadID);
   }
 
-  // info
-  if (sub === "info") {
-    if (!bid) return api.sendMessage("⚠️ Walang active auction.", threadID, messageID);
-    return api.sendMessage(formatBid(bid), threadID, messageID);
+  // resend auction post
+  if (sub === "resend") {
+    const auctionID = args[1];
+    if (!auctionID) return usageExample(api, threadID, messageID);
+
+    const auction = auctions[threadID]?.find(a => a.id === auctionID && a.active);
+    if (!auction) return api.sendMessage("⚠️ Auction not found or already ended.", threadID, messageID);
+
+    return api.sendMessage(
+      `📢 Auction Resent!\n📦 Item: ${auction.item}\n💵 Current Highest: ${auction.highest}\n👤 Bidder: ${auction.bidder || "None"}\n👑 Host: ${auction.hostName}\n🆔 Auction ID: ${auction.id}\n\n📝 Reply to this message with your bid!`,
+      threadID,
+      (err, info) => {
+        if (!err) {
+          auction.postID = info.messageID;
+          saveAuctions(auctions);
+        }
+      }
+    );
   }
 
-  return api.sendMessage("❌ Usage: /bid start <item> <price> | /bid <amount> | /bid end | /bid info", threadID, messageID);
+  // default: wrong usage
+  return usageExample(api, threadID, messageID);
+};
+
+// Handle replies for bidding
+module.exports.handleEvent = async function ({ api, event, Users }) {
+  const { threadID, messageID, senderID, body, messageReply } = event;
+  if (!body) return;
+
+  let auctions = loadAuctions();
+  if (!auctions[threadID]) return;
+
+  // auto-remove expired auctions
+  for (const auction of auctions[threadID]) {
+    if (auction.active && Date.now() > auction.endTime) {
+      const winner = auction.bidder
+        ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
+        : `❌ No valid bids were placed for ${auction.item}.`;
+
+      auction.active = false;
+      api.sendMessage(`📌 Auction Ended (24h Auto)!\n${winner}`, threadID);
+    }
+  }
+
+  // clean up thread if no active auctions left
+  if (auctions[threadID].every(a => !a.active)) {
+    delete auctions[threadID];
+  }
+  saveAuctions(auctions);
+
+  // check replies for active auctions
+  if (!messageReply) return;
+  const auction = auctions[threadID]?.find(a => a.active && a.postID === messageReply.messageID);
+  if (!auction) return;
+
+  const match = body.match(/\d+/);
+  if (!match) {
+    return api.sendMessage("⚠️ Please enter a valid number for your bid.", threadID, messageID);
+  }
+
+  const bidAmount = parseInt(match[0]);
+
+  if (bidAmount <= auction.highest) {
+    return api.sendMessage(
+      `⚠️ Your bid (${bidAmount}) must be higher than the current highest bid: ${auction.highest}.`,
+      threadID,
+      messageID
+    );
+  }
+
+  const name = await Users.getNameUser(senderID);
+  auction.highest = bidAmount;
+  auction.bidder = name;
+  auction.bidderID = senderID;
+
+  saveAuctions(auctions);
+
+  api.sendMessage(
+    `📢 New Highest Bid!\n📦 Item: ${auction.item}\n💵 Bid: ${bidAmount}\n👤 Bidder: ${name}\n👑 Host: ${auction.hostName}\n🆔 Auction ID: ${auction.id}\n\n📝 Reply to this message to bid higher!`,
+    threadID,
+    (err, info) => {
+      if (!err) {
+        auction.postID = info.messageID; // update latest post
+        saveAuctions(auctions);
+      }
+    }
+  );
 };
