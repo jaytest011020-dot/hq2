@@ -1,88 +1,159 @@
-module.exports.config = {
-	name: "warning",
-	version: "1.0.0",
-	hasPermssion: 2,
-	credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭",
-	description: "Warning people!",
-	commandCategory: "system",
-	usages: "[ do/all]",
-	cooldowns: 5,
-	dependencies: {
-		"fs-extra": "",
-		"path": ""
-	}
+const { setData, getData } = require("../../database.js");
+
+// List of violations
+const badwords = [
+  "tanga", "bobo", "gago", "puta", "pakyu", "inutil", "ulol",
+  "fuck", "shit", "asshole", "bitch", "dumb", "stupid", "motherfucker", "pota", "tangina", "tang ina", "kantot", "jakol", "jakul", "jabol", "puke", "puki"
+];
+const racistWords = [
+  "negro", "nigger", "chimp", "nigga", "baluga",
+  "chink", "indio", "bakla", "niga", "bungal"// homophobic
+];
+const allowedLinks = ["facebook.com", "fb.com"];
+
+// Randomized warning messages
+const messages = {
+  badword: [
+    "Please maintain respect in this group.",
+    "Offensive words are not tolerated here.",
+    "Language matters. Kindly watch your words.",
+    "This is your warning for using bad language."
+  ],
+  racist: [
+    "Racist or discriminatory remarks are strictly prohibited.",
+    "Respect diversity. Avoid racist language.",
+    "This group does not tolerate any form of discrimination.",
+    "Be mindful. Racist terms will not be accepted here."
+  ],
+  link: [
+    "Unauthorized links are not allowed in this group.",
+    "Please refrain from sharing suspicious links.",
+    "Links outside the allowed list are prohibited.",
+    "Your message contains an unauthorized link."
+  ]
 };
 
-module.exports.onLoad = function () {
-    const { existsSync, writeFileSync } = global.nodemodule["fs-extra"];
-    const { resolve } = global.nodemodule["path"];
-
-    const path = resolve(__dirname, "cache", "listwarning.json");
-
-	if (!existsSync(path)) writeFileSync(path, JSON.stringify({}), 'utf-8');
-	return;
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
 }
 
-module.exports.run = async function ({ event, api, args, permssion, Users }) {
-    const { readFileSync, writeFileSync } = global.nodemodule["fs-extra"];
-    const { resolve } = global.nodemodule["path"];
-    const { threadID, messageID, mentions, senderID } = event;
-    const mention = Object.keys(mentions);
+// Format warning UI
+function formatWarning(name, type, note, count) {
+  return `╭━━━[ ⚠️ WARNING ISSUED ]━━━╮
+┃ 👤 User: @${name}
+┃ 🚫 Violation: ${type}
+┃ 📝 Note: ${note}
+┃
+┃ ⚠️ Your current warning count: ${count}
+╰━━━━━━━━━━━━━━━━━━━━━━━╯`;
+}
 
-    const path = resolve(__dirname, "cache", "listwarning.json");
-    const dataFile = readFileSync(path, "utf-8");
-    var warningData = JSON.parse(dataFile);
+module.exports.config = {
+  name: "warning",
+  version: "1.0.0",
+  hasPermission: 1,
+  credits: "ChatGPT + NN",
+  description: "Auto warning system with command to check/list warnings",
+  commandCategory: "system",
+  usages: "/warning check @mention | /warning list",
+  cooldowns: 5
+};
 
-    switch (args[0]) {
-        case "all": {
-            if (permssion != 2) return api.sendMessage(`You are not authorized to use this command!`, threadID, messageID);
-            var listUser = "";
+// 📌 COMMANDS
+module.exports.run = async function({ api, event, args, Users }) {
+  const { threadID, messageID, mentions } = event;
 
-            for (const IDUser in warningData) {
-                const name = global.data.userName.get(IDUser) || await Users.getNameUser(IDUser);
-                listUser += `- ${name}: still ${warningData[IDUser].warningLeft} warning times\n`;
-            }
-            if (listUser.length == 0) listUser = "Currently no users have been warned";
-            return api.sendMessage(listUser, threadID, messageID);
-        }
-        case "reset": {
-            writeFileSync(path, JSON.stringify({}), 'utf-8');
-            return api.sendMessage("Reset all warning list!", threadID, messageID);
-        }
-        default: {
-            if (permssion != 2) {
-                const data = warningData[args[0] || mention[0] || senderID];
-                console.log(data);
-                const name = global.data.userName.get(args[0] || mention[0] || senderID) || await Users.getNameUser(args[0] || mention[0] || senderID);
-                if (!data) return api.sendMessage(`Present ${name} without any warning!`, threadID, messageID);
-                else {
-                    var reason = "";
-                    for (const n of data.warningReason) reason += `- ${n}\n`;
-                    return api.sendMessage(`Present ${name} remaining ${data.warningLeft} times of warning:\n\n${reason}`, threadID, messageID);
-                }
-            }
-            else {
-                try {
-                    if (event.type != "message_reply") return api.sendMessage("You have not replied to the message to be warned.", threadID, messageID);
-                    if (event.messageReply.senderID == api.getCurrentUserID()) return api.sendMessage('The bot account could not be alerted.', threadID, messageID);
-                    if (args.length == 0) return api.sendMessage("You have not entered the reason for the warning!", threadID, messageID);
-                    var data = warningData[event.messageReply.senderID] || { "warningLeft": 3, "warningReason": [], "banned": false };
-                    if (data.banned) return api.sendMessage("Account on has been banned, It has been warned 3 times!", threadID, messageID);
-                    const name = global.data.userName.get(event.messageReply.senderID) || await Users.getNameUser(event.messageReply.senderID);
-                    data.warningLeft -= 1;
-                    data.warningReason.push(args.join(" "));
-                    if (data.warningLeft == 0) data.banned = true;
-                    warningData[event.messageReply.senderID] = data;
-                    writeFileSync(path, JSON.stringify(warningData, null, 4), "utf-8");
-                    if (data.banned) {
-                        const data = (await Users.getData(event.messageReply.senderID)).data || {};
-                        data.banned = 1;
-                        await Users.setData(event.messageReply.senderID, { data });
-                        global.data.userBanned.set(parseInt(event.messageReply.senderID), 1);
-                    }
-                    return api.sendMessage(`Warned ${name} with reason: ${args.join(" ")}, ${(data.banned) ? `Because of the warning 3 times, the above account has been banned` : `The above account is also ${data.warningLeft} warning turn!`}`, threadID, messageID);
-                } catch (e) { return console.log(e) };
-            }
-        }
+  if (args.length === 0) {
+    return api.sendMessage("❌ Usage: /warning check @mention | /warning list", threadID, messageID);
+  }
+
+  const sub = args[0].toLowerCase();
+
+  // /warning check @mention
+  if (sub === "check") {
+    const uid = Object.keys(mentions)[0];
+    if (!uid) return api.sendMessage("❌ Please mention a user.", threadID, messageID);
+
+    const warnings = await getData(`/warnings/${threadID}/${uid}`) || { count: 0 };
+    let name = "User";
+    try { name = await Users.getNameUser(uid); } catch {}
+
+    return api.sendMessage(
+      `👤 User: ${name}\n⚠️ Warning Count: ${warnings.count}`,
+      threadID,
+      messageID
+    );
+  }
+
+  // /warning list
+  if (sub === "list") {
+    const data = await getData(`/warnings/${threadID}`) || {};
+    let msg = "📋 Warning List:\n\n";
+
+    if (Object.keys(data).length === 0) msg += "Wala pang na-warning.";
+    else {
+      for (const uid in data) {
+        let name = "User";
+        try { name = await Users.getNameUser(uid); } catch {}
+        msg += `• ${name}: ${data[uid].count} warnings\n`;
+      }
     }
-}
+
+    return api.sendMessage(msg, threadID, messageID);
+  }
+};
+
+// 📌 AUTO-DETECTION
+module.exports.handleEvent = async function({ api, event, Users }) {
+  const { threadID, messageID, senderID, body } = event;
+  if (!body) return;
+
+  const text = body.toLowerCase();
+  let violationType = null;
+  let note = "";
+
+  // Detect badwords
+  if (badwords.some(word => text.includes(word))) {
+    violationType = "Bad Language";
+    note = pickRandom(messages.badword);
+  }
+
+  // Detect racist words
+  if (racistWords.some(word => text.includes(word))) {
+    violationType = "Racist/Discriminatory Term";
+    note = pickRandom(messages.racist);
+  }
+
+  // Detect unauthorized links
+  if (text.includes("http") || text.includes("www.")) {
+    const isAllowed = allowedLinks.some(link => text.includes(link));
+    if (!isAllowed) {
+      violationType = "Unauthorized Link";
+      note = pickRandom(messages.link);
+    }
+  }
+
+  if (!violationType) return;
+
+  // Get warnings
+  let warnings = await getData(`/warnings/${threadID}/${senderID}`);
+  if (!warnings) warnings = { count: 0 };
+
+  warnings.count++;
+  await setData(`/warnings/${threadID}/${senderID}`, warnings);
+
+  // Get violator name
+  let name = "User";
+  try { name = await Users.getNameUser(senderID); } catch {}
+
+  // Send warning as reply
+  api.sendMessage(
+    {
+      body: formatWarning(name, violationType, note, warnings.count),
+      mentions: [{ tag: `@${name}`, id: senderID }]
+    },
+    threadID,
+    null,
+    messageID // reply to violator’s message
+  );
+};
