@@ -1,213 +1,137 @@
-const fs = require("fs");
-const path = require("path");
+const { getData, setData, deleteData } = require("../../database.js");
 
-const cleanerFile = path.join(__dirname, "cleaners.json");
-
-// ensure db file exists
-if (!fs.existsSync(cleanerFile)) fs.writeFileSync(cleanerFile, JSON.stringify({}, null, 2), "utf8");
-
-// load/save helpers
-function loadCleaners() {
-  try {
-    return JSON.parse(fs.readFileSync(cleanerFile, "utf8"));
-  } catch {
-    return {};
-  }
-}
-function saveCleaners(data) {
-  fs.writeFileSync(cleanerFile, JSON.stringify(data, null, 2), "utf8");
-}
-
-// format poll UI
-function formatPoll(poll) {
-  const remaining = poll.end - Date.now();
-  const m = Math.max(0, Math.floor((remaining / 1000 / 60) % 60));
-  const h = Math.max(0, Math.floor((remaining / 1000 / 60 / 60) % 24));
-  const d = Math.max(0, Math.floor(remaining / 1000 / 60 / 60 / 24));
-
+function formatBid(bid) {
   return (
-`📊 ┃ Active User Poll ┃ 📊
+`📢 ┃ Auction Started ┃ 📢
 ─────────────────────────────
-⏳ Ends in: ${d}d ${h}h ${m}m
-📅 End: ${new Date(poll.end).toLocaleString()}
+📦 Item: ${bid.item}
+💰 Current Bid: ${bid.currentBid} by ${bid.highestBidder ? bid.highestBidder : "None"}
+🏷️ Starting Price: ${bid.startPrice}
 ─────────────────────────────
-✅ Reply "active" to this poll to stay in the group.
-⚠️ Inactive users will be auto-kicked.
+⏳ Ends in: ${Math.max(0, Math.floor((bid.end - Date.now()) / 1000))}s
+📅 End: ${new Date(bid.end).toLocaleString()}
 ─────────────────────────────
-👥 Active: ${poll.activeUsers.length} / ${poll.totalUsers.length}`
+✅ Place bid: /bid <amount>
+❌ End auction: /bid end
+`
   );
 }
 
-// schedule auto end
-function scheduleEnd(api, threadID, poll) {
-  const remaining = poll.end - Date.now();
-  if (remaining <= 0) return endPoll(api, threadID, poll);
+async function endBid(api, threadID, bid) {
+  if (bid.ended) return;
+  bid.ended = true;
 
-  poll.timeout = setTimeout(() => {
-    endPoll(api, threadID, poll);
-  }, remaining);
-}
+  let msg = `⏰ Auction Ended!\n📦 Item: ${bid.item}\n`;
 
-// end poll logic
-async function endPoll(api, threadID, poll) {
-  if (poll.ended) return;
-  poll.ended = true;
-
-  const threadInfo = await api.getThreadInfo(threadID);
-  const adminIDs = threadInfo.adminIDs.map(a => a.id);
-
-  const inactive = poll.totalUsers.filter(
-    u => !poll.activeUsers.includes(u) && u !== api.getCurrentUserID() && !adminIDs.includes(u)
-  );
-
-  for (const uid of inactive) {
-    try {
-      await api.removeUserFromGroup(uid, threadID);
-    } catch (e) {
-      console.log("Kick failed:", uid, e.error || e);
-    }
+  if (bid.highestBidder) {
+    msg += `🏆 Winner: ${bid.highestBidder}\n💰 Price: ${bid.currentBid}`;
+  } else {
+    msg += `❌ No bids placed.`;
   }
 
-  // unsend last poll messages
-  if (poll.postIDs?.length) {
-    poll.postIDs.forEach(id => {
-      api.unsendMessage(id, () => {});
-    });
-  }
-
-  api.sendMessage(
-    `✅ Poll Ended!\n👥 Active: ${poll.activeUsers.length}\n🚫 Kicked: ${inactive.length}`,
-    threadID
-  );
-
-  let cleaners = loadCleaners();
-  delete cleaners[threadID];
-  saveCleaners(cleaners);
+  api.sendMessage(msg, threadID);
+  await deleteData(`bid/${threadID}`);
 }
 
 module.exports.config = {
-  name: "cleaner",
+  name: "bid",
   version: "3.0.0",
   hasPermssion: 1,
-  credits: "ChatGPT + Fix by NN",
-  description: "Active user poll with auto kick on deadline",
+  credits: "ChatGPT + NN",
+  description: "Auction system with database",
   commandCategory: "system",
-  usages: "/cleaner <time> | list | resend | cancel",
-  cooldowns: 5,
+  usages: "/bid start <item> <price> | /bid <amount> | /bid end | /bid info",
+  cooldowns: 2,
 };
 
 module.exports.run = async function ({ api, event, args }) {
-  const { threadID, messageID } = event;
-  let cleaners = loadCleaners();
+  const { threadID, senderID, messageID } = event;
   const sub = args[0]?.toLowerCase();
+  let bid = await getData(`bid/${threadID}`);
 
-  // start new poll
-  if (sub && !["list", "resend", "cancel"].includes(sub)) {
-    if (cleaners[threadID]) return api.sendMessage("⚠️ May active poll pa.", threadID, messageID);
+  // start auction
+  if (sub === "start") {
+    if (bid) return api.sendMessage("⚠️ May active auction pa.", threadID, messageID);
 
-    const match = args[0].match(/^(\d+)([mhd])$/i);
-    if (!match) return api.sendMessage("❌ Example: /cleaner 5m | 2h | 1d", threadID, messageID);
+    const item = args[1];
+    const startPrice = parseInt(args[2]);
 
-    const num = parseInt(match[1]);
-    const unit = match[2].toLowerCase();
-    let duration = 0;
-    if (unit === "m") duration = num * 60 * 1000;
-    if (unit === "h") duration = num * 60 * 60 * 1000;
-    if (unit === "d") duration = num * 24 * 60 * 60 * 1000;
+    if (!item || isNaN(startPrice)) {
+      return api.sendMessage("❌ Usage: /bid start <item> <starting_price>", threadID, messageID);
+    }
 
-    const threadInfo = await api.getThreadInfo(threadID);
-    const members = threadInfo.participantIDs;
-
-    const poll = {
-      start: Date.now(),
-      end: Date.now() + duration,
-      activeUsers: [],
-      totalUsers: members,
-      postIDs: [],
+    bid = {
+      item,
+      startPrice,
+      currentBid: startPrice,
+      highestBidder: null,
+      end: Date.now() + 60000, // default 1 min
       ended: false,
     };
 
-    cleaners[threadID] = poll;
-    saveCleaners(cleaners);
-
     api.sendMessage(
-      formatPoll(poll),
+      formatBid(bid),
       threadID,
-      (err, info) => {
+      async (err, info) => {
         if (!err) {
-          poll.postIDs.push(info.messageID);
-          saveCleaners(cleaners);
+          bid.messageID = info.messageID;
+          await setData(`bid/${threadID}`, bid);
         }
       }
     );
 
-    scheduleEnd(api, threadID, poll);
+    setTimeout(async () => {
+      let b = await getData(`bid/${threadID}`);
+      if (b && !b.ended) await endBid(api, threadID, b);
+    }, 60000);
+
     return;
   }
 
-  // resend poll manually
-  if (sub === "resend") {
-    const poll = cleaners[threadID];
-    if (!poll) return api.sendMessage("⚠️ Walang active poll.", threadID, messageID);
+  // place bid
+  if (!isNaN(sub)) {
+    if (!bid) return api.sendMessage("⚠️ Walang active auction.", threadID, messageID);
+    if (bid.ended) return api.sendMessage("❌ Auction already ended.", threadID, messageID);
 
-    api.sendMessage(
-      formatPoll(poll),
-      threadID,
-      (err, info) => {
-        if (!err) {
-          poll.postIDs.push(info.messageID);
-          saveCleaners(cleaners);
-        }
-      }
-    );
-    return;
-  }
-
-  // cancel poll
-  if (sub === "cancel") {
-    const poll = cleaners[threadID];
-    if (!poll) return api.sendMessage("⚠️ Walang active poll.", threadID, messageID);
-
-    poll.ended = true;
-    if (poll.timeout) clearTimeout(poll.timeout);
-    delete cleaners[threadID];
-    saveCleaners(cleaners);
-
-    return api.sendMessage("❌ Poll cancelled.", threadID);
-  }
-};
-
-// handle replies
-module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, senderID, body, messageReply } = event;
-  if (!body || !messageReply) return;
-
-  let cleaners = loadCleaners();
-  const poll = cleaners[threadID];
-  if (!poll || poll.ended) return;
-
-  if (!poll.postIDs.includes(messageReply.messageID)) return;
-  if (body.trim().toLowerCase() !== "active") return;
-
-  if (!poll.activeUsers.includes(senderID)) {
-    poll.activeUsers.push(senderID);
-
-    // delete last poll message
-    if (poll.postIDs?.length) {
-      const lastID = poll.postIDs[poll.postIDs.length - 1];
-      api.unsendMessage(lastID, () => {});
+    const amount = parseInt(sub);
+    if (amount <= bid.currentBid) {
+      return api.sendMessage(`❌ Bid must be higher than current bid (${bid.currentBid}).`, threadID, messageID);
     }
 
-    // resend updated poll
+    bid.currentBid = amount;
+    bid.highestBidder = senderID;
+
+    // delete old message and resend
+    if (bid.messageID) {
+      api.unsendMessage(bid.messageID, () => {});
+    }
+
     api.sendMessage(
-      formatPoll(poll),
+      formatBid(bid),
       threadID,
-      (err, info) => {
+      async (err, info) => {
         if (!err) {
-          poll.postIDs.push(info.messageID);
-          saveCleaners(cleaners);
+          bid.messageID = info.messageID;
+          await setData(`bid/${threadID}`, bid);
         }
       }
     );
+
+    return;
   }
+
+  // end auction manually
+  if (sub === "end") {
+    if (!bid) return api.sendMessage("⚠️ Walang active auction.", threadID, messageID);
+    await endBid(api, threadID, bid);
+    return;
+  }
+
+  // info
+  if (sub === "info") {
+    if (!bid) return api.sendMessage("⚠️ Walang active auction.", threadID, messageID);
+    return api.sendMessage(formatBid(bid), threadID, messageID);
+  }
+
+  return api.sendMessage("❌ Usage: /bid start <item> <price> | /bid <amount> | /bid end | /bid info", threadID, messageID);
 };
