@@ -5,7 +5,7 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "2.2.1",
+  version: "2.3.0",
   credits: "ChatGPT + Jaylord",
   hasPermission: 0,
   description: "Bank system with UID checker (auto-update name on /bank)",
@@ -48,7 +48,13 @@ module.exports.run = async ({ api, event, args, Users }) => {
     let results = [];
 
     for (let uid in allData) {
-      let name = await getUserName(uid, Users, api);
+      // ✅ Gamitin latest name kung available
+      let name;
+      if (uid === senderID && event.senderName) {
+        name = event.senderName;
+      } else {
+        name = await getUserName(uid, Users, api);
+      }
 
       if (allData[uid].name !== name) {
         allData[uid].name = name;
@@ -113,7 +119,7 @@ module.exports.run = async ({ api, event, args, Users }) => {
   }
 
   // 👤 Default: Check own balance
-  let freshName = await getUserName(senderID, Users, api);
+  let freshName = event.senderName || await getUserName(senderID, Users, api);
 
   let userData = (await getData(`bank/${senderID}`)) || {
     uid: senderID,
