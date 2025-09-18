@@ -8,7 +8,7 @@ module.exports = {
         console.log("Auto-post event triggered.");
     },
     onStart: async (api) => {
-        const ownerID = "100030880666720";  // Owner's user ID
+        const ownerID = "61559999326713";  // Owner's user ID
 
         // Function to fetch a Bible verse from the API
         const fetchBibleVerse = async () => {
