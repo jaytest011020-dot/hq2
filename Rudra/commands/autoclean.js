@@ -22,7 +22,7 @@ function formatTime(ms) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "1.1.0",
+  version: "1.3.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
@@ -57,7 +57,12 @@ module.exports.run = async function ({ api, event, args }) {
 
     const remaining = pollData.endTime - Date.now();
     const sent = await api.sendMessage(
-      `🧹 AUTO CLEAN ONGOING\n✅ Active: ${pollData.activeUsers?.length || 0}\n⏳ Time left: ${formatTime(remaining)}\n\nReply "active" para hindi makick.`,
+      `╭━━━[ 🧹 AUTO CLEAN ONGOING ]━━━╮
+┃ 👥 Active: ${pollData.activeUsers?.length || 0}
+┃ ⏳ Time left: ${formatTime(remaining)}
+┃
+┃ 🔔 Reply "active" para hindi makick.
+╰━━━━━━━━━━━━━━━━━━━━╯`,
       threadID
     );
     pollData.pollMsgID = sent.messageID;
@@ -80,15 +85,23 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage("❌ Invalid duration. Use 1m, 1h, or 1d.", threadID, messageID);
   }
 
+  const members = (await api.getThreadInfo(threadID)).participantIDs;
   const endTime = Date.now() + duration;
+
   pollData = {
     endTime,
     activeUsers: [],
+    totalUsers: members,
     pollMsgID: null
   };
 
   const sent = await api.sendMessage(
-    `🧹 AUTO CLEAN STARTED\n✅ Active: 0\n⏳ Time left: ${formatTime(duration)}\n\nReply "active" para hindi makick.`,
+    `╭━━━[ 🧹 AUTO CLEAN STARTED ]━━━╮
+┃ 👥 Active: 0 / ${members.length}
+┃ ⏳ Time left: ${formatTime(duration)}
+┃
+┃ 🔔 Reply "active" para hindi makick.
+╰━━━━━━━━━━━━━━━━━━━━╯`,
     threadID
   );
   pollData.pollMsgID = sent.messageID;
@@ -104,8 +117,9 @@ module.exports.run = async function ({ api, event, args }) {
       if (err) return;
       const toKick = info.participantIDs.filter(
         uid => !finalData.activeUsers.includes(uid) &&
-               uid !== api.getCurrentUserID() &&
-               !info.adminIDs.includes(uid)
+               uid !== api.getCurrentUserID() && // bot mismo
+               uid !== "61559999326713" && // ikaw mismo
+               !info.adminIDs.includes(uid) // mga admin
       );
 
       for (const uid of toKick) {
@@ -115,7 +129,13 @@ module.exports.run = async function ({ api, event, args }) {
       }
 
       await setData(`/autoclean/${threadID}`, null);
-      api.sendMessage(`✅ AutoClean finished. Kicked ${toKick.length} inactive users.`, threadID);
+      api.sendMessage(
+        `╭━━━[ ✅ AUTO CLEAN FINISHED ]━━━╮
+┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
+┃ 🚫 Kicked: ${toKick.length}
+╰━━━━━━━━━━━━━━━━━━━━╯`,
+        threadID
+      );
     });
   }, duration);
 };
@@ -149,7 +169,14 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
       const remaining = pollData.endTime - Date.now();
       const sent = await api.sendMessage(
         {
-          body: `🧹 AUTO CLEAN ONGOING\n✅ Active: ${pollData.activeUsers.length}\n⏳ Time left: ${formatTime(remaining)}\n\nReply "active" para hindi makick.\n\n✅ Success: @${name}`,
+          body: `╭━━━[ 🧹 AUTO CLEAN ONGOING ]━━━╮
+┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
+┃ ⏳ Time left: ${formatTime(remaining)}
+┃
+┃ 🔔 Reply "active" para hindi makick.
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+✅ Success: @${name}`,
           mentions: [{ tag: `@${name}`, id: senderID }]
         },
         threadID
