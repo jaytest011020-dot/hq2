@@ -1,5 +1,5 @@
-const { getData, setData } = require("../../database.js");
 const request = require("request");
+const { getData, setData } = require("../../database.js");
 
 const ranks = [
   "Beginner", "Novice", "Apprentice", "Explorer", "Warrior",
@@ -20,19 +20,20 @@ module.exports.config = {
 };
 
 // Handle messages for XP gain
-module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, senderID, senderName } = event;
-  if (!threadID || !senderID || !senderName) return;
+module.exports.handleEvent = async function ({ api, event, Users }) {
+  const { threadID, senderID } = event;
+  if (!threadID || !senderID) return;
 
   let data = await getData(`/rank/${threadID}`) || {};
   if (!data[senderID]) {
+    const senderName = await Users.getNameUser(senderID);
     data[senderID] = { name: senderName, xp: 0, level: 1 };
   }
 
-  // Always keep name updated
-  data[senderID].name = senderName;
+  // Always update latest name
+  data[senderID].name = await Users.getNameUser(senderID);
 
-  // Random XP gain (1-3)
+  // Random XP gain (1–3)
   const xpGain = Math.floor(Math.random() * 3) + 1;
   data[senderID].xp += xpGain;
 
@@ -45,17 +46,24 @@ module.exports.handleEvent = async function ({ api, event }) {
     data[senderID].level++;
 
     const rankName = ranks[data[senderID].level - 1] || "Infinity";
-
-    const imageURL = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(senderName)}&userid=${senderID}&currentLvl=${data[senderID].level}&currentRank=${rankName}&currentXP=${data[senderID].xp}&requiredXP=${data[senderID].level * 100}`;
-
     api.sendMessage(
-      {
-        body: `🎉 Congratulations ${senderName}!\n` +
-              `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
-              `Your new rank is: ${rankName}`,
-        attachment: request(imageURL)
-      },
-      threadID
+      `🎉 Congrats ${data[senderID].name}!\n` +
+      `Level Up → **Level ${data[senderID].level}** 🎖️\n` +
+      `New Rank: ${rankName}`,
+      threadID,
+      () => {
+        api.sendMessage(
+          {
+            attachment: request(
+              `https://betadash-api-swordslush-production.up.railway.app/rankcard2?` +
+              `name=${encodeURIComponent(data[senderID].name)}&userid=${senderID}` +
+              `&currentLvl=${data[senderID].level}&currentRank=${rankName}` +
+              `&currentXP=${data[senderID].xp}&requiredXP=${data[senderID].level * 100}`
+            )
+          },
+          threadID
+        );
+      }
     );
   }
 
@@ -63,34 +71,45 @@ module.exports.handleEvent = async function ({ api, event }) {
 };
 
 // Command handler
-module.exports.run = async function ({ api, event, args }) {
+module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, messageID, senderID, mentions } = event;
   let data = await getData(`/rank/${threadID}`) || {};
 
-  // If no args → self rank
+  // 🟡 Self rank
   if (args.length === 0) {
     if (!data[senderID]) {
-      return api.sendMessage("⚠️ Wala ka pang XP data.", threadID, messageID);
+      const senderName = await Users.getNameUser(senderID);
+      data[senderID] = { name: senderName, xp: 0, level: 1 };
+      await setData(`/rank/${threadID}`, data);
     }
 
     const user = data[senderID];
     const rankName = ranks[user.level - 1] || "Infinity";
-    const imageURL = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${senderID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`;
 
     return api.sendMessage(
-      {
-        body: `📊 Rank Info for ${user.name}\n\n` +
-              `🏅 Level: ${user.level}\n` +
-              `⭐ XP: ${user.xp}/${user.level * 100}\n` +
-              `🎖️ Rank: ${rankName}`,
-        attachment: request(imageURL)
-      },
+      `📊 Rank Info for ${user.name}\n` +
+      `🏅 Level: ${user.level}\n` +
+      `⭐ XP: ${user.xp}/${user.level * 100}\n` +
+      `🎖️ Rank: ${rankName}`,
       threadID,
-      messageID
+      () => {
+        api.sendMessage(
+          {
+            attachment: request(
+              `https://betadash-api-swordslush-production.up.railway.app/rankcard2?` +
+              `name=${encodeURIComponent(user.name)}&userid=${senderID}` +
+              `&currentLvl=${user.level}&currentRank=${rankName}` +
+              `&currentXP=${user.xp}&requiredXP=${user.level * 100}`
+            )
+          },
+          threadID,
+          messageID
+        );
+      }
     );
   }
 
-  // If /rank all → show leaderboard
+  // 🟡 Rank All
   if (args[0].toLowerCase() === "all") {
     if (Object.keys(data).length === 0) {
       return api.sendMessage("⚠️ Walang rank data sa GC na ito.", threadID, messageID);
@@ -107,27 +126,38 @@ module.exports.run = async function ({ api, event, args }) {
     );
   }
 
-  // If mention → show mentioned user's rank
+  // 🟡 Mention rank
   const mentionID = Object.keys(mentions)[0];
   if (mentionID) {
     if (!data[mentionID]) {
-      return api.sendMessage("⚠️ Walang data yung user na yan.", threadID, messageID);
+      const mentionName = await Users.getNameUser(mentionID);
+      data[mentionID] = { name: mentionName, xp: 0, level: 1 };
+      await setData(`/rank/${threadID}`, data);
     }
 
     const user = data[mentionID];
     const rankName = ranks[user.level - 1] || "Infinity";
-    const imageURL = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${mentionID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`;
 
     return api.sendMessage(
-      {
-        body: `📊 Rank Info for ${user.name}\n\n` +
-              `🏅 Level: ${user.level}\n` +
-              `⭐ XP: ${user.xp}/${user.level * 100}\n` +
-              `🎖️ Rank: ${rankName}`,
-        attachment: request(imageURL)
-      },
+      `📊 Rank Info for ${user.name}\n` +
+      `🏅 Level: ${user.level}\n` +
+      `⭐ XP: ${user.xp}/${user.level * 100}\n` +
+      `🎖️ Rank: ${rankName}`,
       threadID,
-      messageID
+      () => {
+        api.sendMessage(
+          {
+            attachment: request(
+              `https://betadash-api-swordslush-production.up.railway.app/rankcard2?` +
+              `name=${encodeURIComponent(user.name)}&userid=${mentionID}` +
+              `&currentLvl=${user.level}&currentRank=${rankName}` +
+              `&currentXP=${user.xp}&requiredXP=${user.level * 100}`
+            )
+          },
+          threadID,
+          messageID
+        );
+      }
     );
   }
 
