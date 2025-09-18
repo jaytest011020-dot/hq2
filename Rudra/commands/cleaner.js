@@ -85,7 +85,7 @@ async function endPoll(api, threadID, poll) {
 
 module.exports.config = {
   name: "cleaner",
-  version: "3.0.0",
+  version: "3.1.0",
   hasPermssion: 1,
   credits: "ChatGPT + NN",
   description: "Active user poll with auto kick on deadline",
@@ -131,6 +131,7 @@ module.exports.run = async function ({ api, event, args }) {
     api.sendMessage(pollText(poll), threadID, (err, info) => {
       if (!err) {
         poll.postID = info.messageID;
+        cleaners[threadID] = poll;
         saveCleaners(cleaners);
       }
     });
@@ -159,6 +160,7 @@ module.exports.run = async function ({ api, event, args }) {
     api.sendMessage(pollText(poll), threadID, (err, info) => {
       if (!err) {
         poll.postID = info.messageID;
+        cleaners[threadID] = poll;
         saveCleaners(cleaners);
       }
     });
@@ -183,12 +185,12 @@ module.exports.run = async function ({ api, event, args }) {
 };
 
 // handle replies
-module.exports.handleEvent = async function ({ api, event }) {
+module.exports.handleEvent = async function ({ api, event, Users }) {
   const { threadID, senderID, body, messageReply } = event;
   if (!body || !messageReply) return;
 
   let cleaners = loadCleaners();
-  const poll = cleaners[threadID];
+  let poll = cleaners[threadID];
   if (!poll || poll.ended) return;
 
   if (messageReply.messageID !== poll.postID) return;
@@ -197,13 +199,18 @@ module.exports.handleEvent = async function ({ api, event }) {
   if (!poll.activeUsers.includes(senderID)) {
     poll.activeUsers.push(senderID);
 
-    // delete old poll message
+    // feedback sino nag active
+    let name = await Users.getNameUser(senderID);
+    api.sendMessage(`✅ ${name} marked as active! (${poll.activeUsers.length}/${poll.totalUsers.length})`, threadID);
+
+    // delete old poll
     if (poll.postID) api.unsendMessage(poll.postID, () => {});
 
     // send updated poll
     api.sendMessage(pollText(poll), threadID, (err, info) => {
       if (!err) {
         poll.postID = info.messageID;
+        cleaners[threadID] = poll;
         saveCleaners(cleaners);
       }
     });
