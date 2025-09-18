@@ -1,93 +1,99 @@
 const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+const { getData, setData } = require("../../database.js"); // ✅ gamit DB mo
 
-...
+module.exports.config = {
+  name: "rank",
+  version: "3.0.0",
+  hasPermission: 0,
+  credits: "ChatGPT",
+  description: "Show user rank info",
+  commandCategory: "system",
+  usages: "/rank [@mention or blank]",
+  cooldowns: 5,
+};
 
-// AUTO ANNOUNCE RANK UP
-if (data[senderID].xp >= requiredXP) {
-  data[senderID].xp -= requiredXP;
-  data[senderID].level++;
+// XP gain per message
+const XP_PER_MESSAGE = 1;
 
-  const rankName = ranks[data[senderID].level - 1] || "Infinity";
-  const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(senderName)}&userid=${senderID}&currentLvl=${data[senderID].level}&currentRank=${rankName}&currentXP=${data[senderID].xp}&requiredXP=${data[senderID].level * 100}`;
+module.exports.handleEvent = async function ({ api, event, Users }) {
+  if (event.type !== "message") return;
 
-  try {
-    const imgStream = (await axios.get(imgUrl, { responseType: "stream" })).data;
+  const { senderID } = event;
+  if (!senderID) return;
 
-    api.sendMessage(
-      {
-        body:
-          `🎉 Congratulations ${senderName}!\n` +
-          `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
-          `Your new rank is: ${rankName}`,
-        attachment: imgStream
-      },
-      threadID
-    );
-  } catch (e) {
-    api.sendMessage(
-      `🎉 Congratulations ${senderName}! You leveled up to Level ${data[senderID].level} (${rankName})`,
-      threadID
-    );
-  }
-}
-
-// /RANK SELF
-if (args.length === 0) {
-  if (!data[senderID]) {
-    return api.sendMessage("⚠️ Wala ka pang XP data.", threadID, messageID);
+  let user = await getData("rank", senderID);
+  if (!user) {
+    user = { xp: 0, level: 1, requiredXP: 100 };
   }
 
-  const user = data[senderID];
-  const rankName = ranks[user.level - 1] || "Infinity";
-  const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${senderID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`;
+  // add xp
+  user.xp += XP_PER_MESSAGE;
 
+  // check level up
+  let leveledUp = false;
+  while (user.xp >= user.requiredXP) {
+    user.xp -= user.requiredXP;
+    user.level += 1;
+    user.requiredXP = user.level * 100;
+    leveledUp = true;
+  }
+
+  await setData("rank", senderID, user);
+
+  if (leveledUp) {
+    const name = await Users.getNameUser(senderID);
+    api.sendMessage(
+      `🎉 Congrats ${name}! You leveled up to Level ${user.level}!`,
+      event.threadID
+    );
+  }
+};
+
+module.exports.run = async function ({ api, event, args, Users }) {
+  const { threadID, messageID, senderID } = event;
+
+  let targetID = senderID;
+  if (event.mentions && Object.keys(event.mentions).length > 0) {
+    targetID = Object.keys(event.mentions)[0];
+  }
+
+  let user = await getData("rank", targetID);
+  if (!user) {
+    user = { xp: 0, level: 1, requiredXP: 100 };
+    await setData("rank", targetID, user);
+  }
+
+  const name = await Users.getNameUser(targetID);
+
+  // Generate rank card image
+  const cardUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(
+    name
+  )}&userid=${targetID}&currentLvl=${user.level}&currentRank=Beginner&currentXP=${
+    user.xp
+  }&requiredXP=${user.requiredXP}`;
+
+  const imgPath = path.join(__dirname, "cache", `rank_${targetID}.png`);
   try {
-    const imgStream = (await axios.get(imgUrl, { responseType: "stream" })).data;
+    const response = await axios.get(cardUrl, { responseType: "arraybuffer" });
+    fs.writeFileSync(imgPath, Buffer.from(response.data, "utf-8"));
 
     return api.sendMessage(
       {
-        body:
-          `📊 Rank Info for ${user.name}\n\n` +
-          `🏅 Level: ${user.level}\n` +
-          `⭐ XP: ${user.xp}/${user.level * 100}\n` +
-          `🎖️ Rank: ${rankName}`,
-        attachment: imgStream
+        body: `📊 Rank Info for ${name}\n\n🏅 Level: ${user.level}\n⭐ XP: ${user.xp}/${user.requiredXP}\n🎖️ Rank: Beginner`,
+        attachment: fs.createReadStream(imgPath),
       },
       threadID,
+      () => fs.unlinkSync(imgPath),
       messageID
     );
   } catch (e) {
-    return api.sendMessage("⚠️ Error loading rank card image.", threadID, messageID);
-  }
-}
-
-// /RANK @MENTION
-const mentionID = Object.keys(mentions)[0];
-if (mentionID) {
-  if (!data[mentionID]) {
-    return api.sendMessage("⚠️ Walang data yung user na yan.", threadID, messageID);
-  }
-
-  const user = data[mentionID];
-  const rankName = ranks[user.level - 1] || "Infinity";
-  const imgUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard2?name=${encodeURIComponent(user.name)}&userid=${mentionID}&currentLvl=${user.level}&currentRank=${rankName}&currentXP=${user.xp}&requiredXP=${user.level * 100}`;
-
-  try {
-    const imgStream = (await axios.get(imgUrl, { responseType: "stream" })).data;
-
+    console.error("Error fetching rank card:", e.message);
     return api.sendMessage(
-      {
-        body:
-          `📊 Rank Info for ${user.name}\n\n` +
-          `🏅 Level: ${user.level}\n` +
-          `⭐ XP: ${user.xp}/${user.level * 100}\n` +
-          `🎖️ Rank: ${rankName}`,
-        attachment: imgStream
-      },
+      `📊 Rank Info for ${name}\n\n🏅 Level: ${user.level}\n⭐ XP: ${user.xp}/${user.requiredXP}\n🎖️ Rank: Beginner`,
       threadID,
       messageID
     );
-  } catch (e) {
-    return api.sendMessage("⚠️ Error loading rank card image.", threadID, messageID);
   }
-                           }
+};
