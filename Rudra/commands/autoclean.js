@@ -22,7 +22,7 @@ function formatTime(ms) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "1.4.0",
+  version: "1.5.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
@@ -122,10 +122,10 @@ module.exports.run = async function ({ api, event, args }) {
       const ownerID = "61559999326713"; // permanent UID mo
 
       const toKick = info.participantIDs.filter(uid =>
-        !finalData.activeUsers.includes(uid) && // hindi nag "active"
-        uid !== botID && // wag i-kick bot mismo
-        uid !== ownerID && // wag i-kick ikaw mismo
-        !info.adminIDs.some(a => a.id === uid) // wag i-kick mga admin
+        !finalData.activeUsers.includes(uid) &&
+        uid !== botID &&
+        uid !== ownerID &&
+        !info.adminIDs.some(a => a.id === uid)
       );
 
       for (const uid of toKick) {
@@ -147,7 +147,7 @@ module.exports.run = async function ({ api, event, args }) {
   }, duration);
 };
 
-module.exports.handleEvent = async function ({ api, event, Users }) {
+module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, messageID, senderID, body } = event;
   if (!body) return;
 
@@ -164,7 +164,16 @@ module.exports.handleEvent = async function ({ api, event, Users }) {
       await setData(`/autoclean/${threadID}`, pollData);
 
       let name = "User";
-      try { name = await Users.getNameUser(senderID); } catch {}
+      try {
+        const info = await api.getUserInfo(senderID);
+        name = info[senderID].name || "User";
+
+        // ✅ auto-update username sa database
+        const userData = await getData(`/users/${senderID}`) || {};
+        userData.name = name;
+        await setData(`/users/${senderID}`, userData);
+
+      } catch {}
 
       // delete old poll
       if (pollData.pollMsgID) {
