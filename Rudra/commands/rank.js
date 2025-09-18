@@ -1,6 +1,6 @@
 const { getData, setData } = require("../../database.js");
 
-// ✅ 100 Maangas Rank Names
+// ✅ 100 Rank Names
 const ranks = [
   "Newbie", "Rookie", "Apprentice", "Novice", "Scout",
   "Learner", "Adventurer", "Explorer", "Wanderer", "Seeker",
@@ -24,28 +24,28 @@ const ranks = [
   "Starforged", "Dimension Breaker", "Time Weaver", "Infinity", "Godslayer"
 ];
 
-// 📌 Formula: Required XP grows quadratically
+// 📌 Linear formula: required XP = 100 * level
 function getRequiredXP(level) {
-  return 100 * (level ** 2);
+  return 100 * level;
 }
 
 module.exports.config = {
   name: "rank",
-  version: "3.2.0",
+  version: "3.3.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
-  description: "Rank system with XP + auto announce on level up",
+  description: "Rank system with XP, level up auto announce, and leaderboard",
   commandCategory: "fun",
   usages: "/rank | /rank @mention | /rank all",
   cooldowns: 0
 };
 
-// 📌 Handle messages → XP Gain + Auto Announce Level Up
+// 📌 Handle XP gain + auto announce level up
 module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, senderID } = event;
   if (!threadID || !senderID) return;
 
-  // Get fresh username
+  // Fetch name
   const info = await api.getUserInfo(senderID);
   const senderName = info[senderID]?.name || "Facebook User";
 
@@ -55,28 +55,24 @@ module.exports.handleEvent = async function ({ api, event }) {
     data[senderID] = { name: senderName, xp: 0, level: 1 };
   }
 
-  // Always keep updated name
   data[senderID].name = senderName;
 
-  // Add random XP (1–3)
+  // Add XP (1–3 random)
   const xpGain = Math.floor(Math.random() * 3) + 1;
   data[senderID].xp += xpGain;
 
-  // ✅ Check level up (ayusin stuck sa 99 XP)
+  // Level up loop
   let leveledUp = false;
-  while (true) {
-    const required = getRequiredXP(data[senderID].level);
-    if (data[senderID].xp >= required) {
-      data[senderID].xp -= required;
-      data[senderID].level++;
-      leveledUp = true;
-    } else break;
+  while (data[senderID].xp >= getRequiredXP(data[senderID].level)) {
+    data[senderID].xp -= getRequiredXP(data[senderID].level);
+    data[senderID].level++;
+    leveledUp = true;
   }
 
+  // Auto announce if level up
   if (leveledUp) {
     const rankName = ranks[data[senderID].level - 1] || "Infinity";
 
-    // Auto announce rank up with image card
     const imgUrl =
       `https://betadash-api-swordslush-production.up.railway.app/rankcard2` +
       `?name=${encodeURIComponent(senderName)}` +
@@ -89,9 +85,9 @@ module.exports.handleEvent = async function ({ api, event }) {
     api.sendMessage(
       {
         body:
-          `🎉 Congratulations ${senderName}!\n` +
-          `You leveled up to **Level ${data[senderID].level}** 🎖️\n` +
-          `Your new rank is: ${rankName}`,
+          `🎉 Congrats ${senderName}!\n` +
+          `You reached **Level ${data[senderID].level}** 🎖️\n` +
+          `Your new rank: ${rankName}`,
         attachment: await global.utils.getStreamFromURL(imgUrl)
       },
       threadID
