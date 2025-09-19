@@ -5,7 +5,7 @@ module.exports.config = {
     credits: "Jaylord La Peña, ChatGPT",
     description: "Kick mentioned user(s) from the group",
     usePrefix: true,
-    commandCategory: "admin",
+    commandCategory: "group",
     usages: "/kick @user",
     cooldowns: 5
 };
