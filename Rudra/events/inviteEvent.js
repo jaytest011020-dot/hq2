@@ -2,11 +2,14 @@ const { setData, getData } = require("../../database.js");
 
 async function getUserName(uid, api, Users) {
   try {
+    // Try Users.getNameUser first
     const name = await Users.getNameUser(uid);
     if (name) return name;
+
+    // fallback to api.getUserInfo
     const info = await api.getUserInfo(uid);
-    return info[uid]?.name || `FB-User(${uid})`;
-  } catch (err) {
+    return info?.[uid]?.name || `FB-User(${uid})`;
+  } catch {
     return `FB-User(${uid})`;
   }
 }
@@ -14,33 +17,45 @@ async function getUserName(uid, api, Users) {
 module.exports.config = {
   name: "inviteEvent",
   eventType: ["log:subscribe"],
-  version: "1.1.0",
+  version: "1.3.0",
   credits: "ChatGPT + NN",
 };
 
 module.exports.run = async function ({ api, event, Users }) {
-  const { threadID, addedParticipants } = event;
-  if (!addedParticipants || addedParticipants.length === 0) return;
+  try {
+    const { threadID, logMessageData } = event;
+    const addedParticipants = logMessageData.addedParticipants;
+    if (!addedParticipants || addedParticipants.length === 0) return;
 
-  const dbPath = `invite/${threadID}`;
-  let gcData = (await getData(dbPath)) || {};
+    const inviterID = logMessageData.inviterID;
+    if (!inviterID) return;
 
-  for (const newUserID of addedParticipants) {
-    const inviterID = event.inviter || null; // Facebook sends inviter in log
-    if (!inviterID || inviterID === newUserID) continue;
-
-    // initialize inviter data if not exists
+    let gcData = (await getData(`invite/${threadID}`)) || {};
     if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
-    gcData[inviterID].count += 1;
 
-    await setData(dbPath, gcData);
+    for (let newP of addedParticipants) {
+      const newUserID = newP.userFbId;
+      if (newUserID === api.getCurrentUserID()) continue; // skip bot
 
-    // get names
-    const inviterName = await getUserName(inviterID, api, Users);
-    const newUserName = await getUserName(newUserID, api, Users);
+      // ✅ Increase inviter count
+      gcData[inviterID].count += 1;
+      await setData(`invite/${threadID}`, gcData);
 
-    // send announcement
-    const msg = `🎉 ${inviterName} invited ${newUserName}!\n📊 Total invites for ${inviterName}: ${gcData[inviterID].count}`;
-    api.sendMessage(msg, threadID);
+      // ✅ Get names
+      const inviterName = await getUserName(inviterID, api, Users);
+      const newUserName = await getUserName(newUserID, api, Users);
+
+      // ✅ Styled UI message
+      const msg = `╭━[INVITE NOTIF]━╮
+┃ 👤 Inviter: ${inviterName}
+┃ ➕ Invited: ${newUserName}
+┃
+┃ 📊 Total Invites: ${gcData[inviterID].count}
+╰━━━━━━━━━━━━━━━━━━━━╯`;
+
+      api.sendMessage(msg, threadID);
+    }
+  } catch (err) {
+    console.error("❌ ERROR in inviteEvent module:", err);
   }
 };
