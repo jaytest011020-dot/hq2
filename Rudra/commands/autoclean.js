@@ -57,13 +57,13 @@ module.exports.run = async function ({ api, event, args }) {
 
     const remaining = pollData.endTime - Date.now();
     const sent = await api.sendMessage(
-      `╭━━━[AUTO CLEAN ONGOING]━━━╮
+      `╭━[AUTO CLEAN ONGOING]━╮
 
 ┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
-╰━━━━━━━━━━━━━━━━━━━━╯`,
+╰━━━━━━━━━━━━━━━╯`,
       threadID
     );
 
@@ -98,12 +98,12 @@ module.exports.run = async function ({ api, event, args }) {
   };
 
   const sent = await api.sendMessage(
-    `╭━━━[AUTO CLEAN STARTED]━━━╮
+    `╭━[AUTO CLEAN STARTED]━╮
 ┃ 👥 Active: 0 / ${members.length}
 ┃ ⏳ Time left: ${formatTime(duration)}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
-╰━━━━━━━━━━━━━━━━━━━━╯`,
+╰━━━━━━━━━━━━━━━╯`,
     threadID
   );
   pollData.pollMsgID = sent.messageID;
@@ -137,10 +137,10 @@ module.exports.run = async function ({ api, event, args }) {
       await setData(`/autoclean/${threadID}`, null);
 
       api.sendMessage(
-        `╭━━━[✅ AUTO CLEAN FINISHED]━━━╮
+        `╭━[AUTO CLEAN FINISHED]━╮
 ┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
 ┃ 🚫 Kicked: ${toKick.length}
-╰━━━━━━━━━━━━━━━━━━━━╯`,
+╰━━━━━━━━━━━━━━━╯`,
         threadID
       );
     });
@@ -184,13 +184,13 @@ module.exports.handleEvent = async function ({ api, event }) {
       const remaining = pollData.endTime - Date.now();
       const sent = await api.sendMessage(
         {
-          body: `╭━━━[AUTO CLEAN ONGOING]━━━╮
+          body: `╭━[AUTO CLEAN ONGOING]━╮
 
 ┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
-╰━━━━━━━━━━━━━━━━━━━━╯
+╰━━━━━━━━━━━━━━━╯
 
 ✅ Success: @${name}`,
           mentions: [{ tag: `@${name}`, id: senderID }]
