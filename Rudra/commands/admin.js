@@ -6,7 +6,7 @@ module.exports.config = {
     hasPermssion: 0, 
     credits: "Priyansh Rajput, ChatGPT",
     description: "Manage bot admins",
-    commandCategory: "group",
+    commandCategory: "Admin",
     usages: "[list/add/remove] [userID]",
     cooldowns: 5
 };
