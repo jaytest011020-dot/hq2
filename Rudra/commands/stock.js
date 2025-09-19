@@ -23,7 +23,7 @@ function saveGCs() {
 
 module.exports.config = {
   name: "stock",
-  version: "3.2.0",
+  version: "3.2.1",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Check Grow a Garden stock & auto notify when restocked (per GC toggle)",
@@ -45,10 +45,7 @@ function getNextRestockPH(interval = 5) {
     next.setHours(now.getHours() + 1);
     next.setMinutes(0);
   }
-  return {
-    current: now,
-    next
-  };
+  return { current: now, next };
 }
 
 // 🔹 Fetch stock data
@@ -127,20 +124,18 @@ ${seeds}
 🛠️ 𝗚𝗲𝗮𝗿
 ${gear}
 ──────────────────────
-    `;
+    `.trim();
 
-    api.sendMessage(message.trim(), threadID, event.messageID);
+    api.sendMessage(message, threadID, event.messageID);
 
     // ✅ Start auto scanner only once
     if (!started) {
       started = true;
-
-      const { next } = getNextRestockPH();
       const delay = next.getTime() - Date.now();
 
       setTimeout(() => {
         scanAndNotify(api); // unang scan (aligned)
-        setInterval(() => scanAndNotify(api), 5 * 60 * 1000); // every 5 minutes aligned
+        setInterval(() => scanAndNotify(api), 5 * 60 * 1000); // every 5 minutes
       }, delay);
     }
   } catch (err) {
@@ -183,11 +178,11 @@ async function scanAndNotify(api) {
 ──────────────────────
 ${specialList}
 ──────────────────────
-    `;
+    `.trim();
 
-    // 🔹 Send to ALL GCs (kahit off ang auto-stock)
+    // 🔹 Send to ALL GCs (kahit naka-off)
     Object.keys(autoStockStatus).forEach((tid) => {
-      api.sendMessage(notif.trim(), tid);
+      api.sendMessage(notif, tid);
     });
   }
 
@@ -208,9 +203,9 @@ ${seeds}
 🛠️ 𝗚𝗲𝗮𝗿
 ${gear}
 ──────────────────────
-  `;
+  `.trim();
 
   Object.keys(autoStockStatus).forEach((tid) => {
-    if (autoStockStatus[tid]) api.sendMessage(autoMessage.trim(), tid);
+    if (autoStockStatus[tid]) api.sendMessage(autoMessage, tid);
   });
-  }
+}
