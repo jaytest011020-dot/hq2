@@ -1,7 +1,7 @@
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.2.4",
+  version: "1.2.3",
   credits: "Kim Joseph DG Bien (updated by ChatGPT)",
   description: "Join Notification with API-generated welcome photo",
   dependencies: {
@@ -18,12 +18,16 @@ module.exports.run = async function ({ api, event }) {
   const { threadID, logMessageData } = event;
   const addedParticipants = logMessageData.addedParticipants;
 
-  // ✅ If bot was added → nickname lang, no "BOT CONNECTED" message
+  // ✅ If bot was added
   if (addedParticipants.some(i => i.userFbId == api.getCurrentUserID())) {
-    return api.changeNickname(
+    api.changeNickname(
       `𝗕𝗢𝗧 ${global.config.BOTNAME} 【 ${global.config.PREFIX} 】`,
       threadID,
       api.getCurrentUserID()
+    );
+    return api.sendMessage(
+      `BOT CONNECTED!!\n\nThank you for using my BOT\nUse ${global.config.PREFIX}help to see other commands\n\nIf you notice an error in the bot, just report it using: ${global.config.PREFIX}callad or request a command!`,
+      threadID
     );
   }
 
