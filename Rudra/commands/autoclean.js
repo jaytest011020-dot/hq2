@@ -23,7 +23,7 @@ function formatTime(ms) {
 module.exports.config = {
   name: "autoclean",
   version: "1.6.0",
-  hasPermission: 1,
+  hasPermssion: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
   commandCategory: "system",
