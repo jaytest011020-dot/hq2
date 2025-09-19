@@ -6,11 +6,11 @@ const MAX_DISPLAY_ADMINS = 5;
 // List of violations
 const badwords = [
   "tanga", "bobo", "gago", "puta", "pakyu", "inutil", "ulol",
-  "fuck", "shit", "asshole", "bitch", "dumb", "stupid", "motherfucker", "pota", "tangina", "tang ina", "kantot", "jakol", "jakul", "jabol", "puke", "puki", "baliw"
+  "fuck", "shit", "asshole", "bitch", "dumb", "stupid", "motherfucker", "laplap", "pota", "inamo", "tangina", "tang ina", "kantut", "kantot", "jakol", "jakul", "jabol", "supot", "supot", "blow job", "blowjob", "puke", "puki", "baliw"
 ];
 const racistWords = [
   "negro", "nigger", "chimp", "nigga", "baluga",
-  "chink", "indio", "bakla", "niga", "bungal"
+  "chink", "indio", "bakla", "niga", "bungal", "beki", "negra"
 ];
 const allowedLinks = ["facebook.com", "fb.com"];
 
