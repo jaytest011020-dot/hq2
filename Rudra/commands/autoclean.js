@@ -12,7 +12,7 @@ function parseDuration(str) {
 }
 
 function formatTime(ms) {
-  if (!ms || ms <= 0) return "0s";
+  if (ms <= 0) return "0s";
   const sec = Math.floor(ms / 1000) % 60;
   const min = Math.floor(ms / (1000 * 60)) % 60;
   const hr = Math.floor(ms / (1000 * 60 * 60)) % 24;
@@ -22,7 +22,7 @@ function formatTime(ms) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "1.6.1",
+  version: "1.5.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
@@ -34,14 +34,13 @@ module.exports.config = {
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  if (!args || args.length === 0) {
+  if (args.length === 0) {
     return api.sendMessage("❌ Usage: /autoclean 1m|1h|1d | cancel | resend | list", threadID, messageID);
   }
 
   const sub = args[0].toLowerCase();
   let pollData = await getData(`/autoclean/${threadID}`);
 
-  // CANCEL
   if (sub === "cancel") {
     if (pollData?.pollMsgID) {
       try { await api.unsendMessage(pollData.pollMsgID); } catch {}
@@ -50,18 +49,17 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage("🛑 AutoClean canceled.", threadID, messageID);
   }
 
-  // RESEND
   if (sub === "resend") {
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
     if (pollData.pollMsgID) {
       try { await api.unsendMessage(pollData.pollMsgID); } catch {}
     }
 
-    const remaining = (pollData.endTime || Date.now()) - Date.now();
+    const remaining = pollData.endTime - Date.now();
     const sent = await api.sendMessage(
       `╭[AUTO CLEAN ONGOING]╮
 
-┃ 👥 Active: ${Array.isArray(pollData.activeUsers) ? pollData.activeUsers.length : 0} / ${(pollData.totalUsers || []).length}
+┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
@@ -74,74 +72,22 @@ module.exports.run = async function ({ api, event, args }) {
     return;
   }
 
-  // LIST (improved, safe)
   if (sub === "list") {
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
-
-    try {
-      const infoThread = await api.getThreadInfo(threadID);
-      const botID = api.getCurrentUserID();
-      const ownerID = "61559999326713"; // permanent UID mo (palitan kung needed)
-      const adminIDs = Array.isArray(infoThread.adminIDs) ? infoThread.adminIDs.map(a => a.id) : [];
-
-      const active = Array.isArray(pollData.activeUsers) ? pollData.activeUsers : [];
-      const totalUsers = Array.isArray(pollData.totalUsers) ? pollData.totalUsers : [];
-
-      const exempted = [...new Set([botID, ownerID, ...adminIDs])]; // unique exempted
-      const inactive = totalUsers.filter(uid => !active.includes(uid) && !exempted.includes(uid));
-
-      // gather all UIDs we want names for, unique
-      const allUIDs = [...new Set([...active, ...inactive, ...exempted])];
-
-      // Try to get user info (names). If fails, fallback to unknown.
-      let userInfo = {};
-      if (allUIDs.length > 0) {
-        try {
-          // api.getUserInfo may accept array or single id depending on lib
-          userInfo = await api.getUserInfo(allUIDs);
-          // some libs may return array; normalize to object keyed by id if necessary
-          if (Array.isArray(userInfo)) {
-            const tmp = {};
-            for (const u of userInfo) {
-              if (u && u.id) tmp[u.id] = u;
-            }
-            userInfo = tmp;
-          }
-        } catch (err) {
-          userInfo = {}; // fallback
-        }
-      }
-
-      const fmt = (uids) => {
-        if (!uids || uids.length === 0) return "None";
-        return uids.map(uid => `• ${ (userInfo[uid] && (userInfo[uid].name || userInfo[uid].fullName)) || userInfo[uid]?.first_name || "Unknown" } (${uid})`).join("\n");
-      };
-
-      const remaining = pollData.endTime ? formatTime(pollData.endTime - Date.now()) : "N/A";
-
-      return api.sendMessage(
-        `📋 AutoClean List\n\n` +
-        `✅ Active Users (${active.length}):\n${fmt(active)}\n\n` +
-        `🚫 Inactive Users (${inactive.length}):\n${fmt(inactive)}\n` +
-        `➡️ Preview: ${inactive.length} user(s) will be kicked if AutoClean finishes.\n\n` +
-        `🛡 Exempted (${exempted.length}):\n${fmt(exempted)}\n\n` +
-        `⏳ Time left: ${remaining}`,
-        threadID,
-        messageID
-      );
-    } catch (err) {
-      console.error("autoclean list error:", err);
-      return api.sendMessage("⚠️ Error loading usernames for list.", threadID, messageID);
-    }
+    return api.sendMessage(
+      `📋 Active Users:\n${pollData.activeUsers.map(uid => `• ${uid}`).join("\n") || "Wala pa."}`,
+      threadID,
+      messageID
+    );
   }
 
-  // START autoclean
+  // start autoclean
   const duration = parseDuration(sub);
   if (!duration) {
     return api.sendMessage("❌ Invalid duration. Use 1m, 1h, or 1d.", threadID, messageID);
   }
 
-  const members = (await api.getThreadInfo(threadID)).participantIDs || [];
+  const members = (await api.getThreadInfo(threadID)).participantIDs;
   const endTime = Date.now() + duration;
 
   pollData = {
@@ -166,29 +112,25 @@ module.exports.run = async function ({ api, event, args }) {
 
   // schedule kick
   setTimeout(async () => {
-    try {
-      const finalData = await getData(`/autoclean/${threadID}`);
-      if (!finalData) return;
+    const finalData = await getData(`/autoclean/${threadID}`);
+    if (!finalData) return;
 
-      const info = await api.getThreadInfo(threadID);
+    api.getThreadInfo(threadID, async (err, info) => {
+      if (err) return;
+
       const botID = api.getCurrentUserID();
       const ownerID = "61559999326713"; // permanent UID mo
-      const adminIDs = Array.isArray(info.adminIDs) ? info.adminIDs.map(a => a.id) : [];
 
-      const participants = Array.isArray(info.participantIDs) ? info.participantIDs : [];
-
-      const activeFinal = Array.isArray(finalData.activeUsers) ? finalData.activeUsers : [];
-
-      const toKick = participants.filter(uid =>
-        !activeFinal.includes(uid) &&
+      const toKick = info.participantIDs.filter(uid =>
+        !finalData.activeUsers.includes(uid) &&
         uid !== botID &&
         uid !== ownerID &&
-        !adminIDs.includes(uid)
+        !info.adminIDs.some(a => a.id === uid)
       );
 
       for (const uid of toKick) {
         try { await api.removeUserFromGroup(uid, threadID); } catch (e) {
-          console.error("Kick error:", e && e.message ? e.message : e);
+          console.error("Kick error:", e.message);
         }
       }
 
@@ -196,14 +138,12 @@ module.exports.run = async function ({ api, event, args }) {
 
       api.sendMessage(
         `╭[AUTO CLEAN FINISHED]╮
-┃ 👥 Active: ${activeFinal.length} / ${finalData.totalUsers ? finalData.totalUsers.length : 0}
+┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
 ┃ 🚫 Kicked: ${toKick.length}
 ╰━━━━━━━━━━━━━━━╯`,
         threadID
       );
-    } catch (e) {
-      console.error("autoclean schedule error:", e);
-    }
+    });
   }, duration);
 };
 
@@ -226,23 +166,14 @@ module.exports.handleEvent = async function ({ api, event }) {
       let name = "User";
       try {
         const info = await api.getUserInfo(senderID);
-        // normalize possible return shapes
-        if (info && info[senderID]) {
-          name = info[senderID].name || name;
-        } else if (Array.isArray(info) && info[0] && (info[0].name || info[0].fullName)) {
-          name = info[0].name || info[0].fullName || name;
-        } else if (info && (info.name || info.fullName)) {
-          name = info.name || info.fullName || name;
-        }
+        name = info[senderID].name || "User";
 
         // ✅ auto-update username sa database
-        const userData = (await getData(`/users/${senderID}`)) || {};
+        const userData = await getData(`/users/${senderID}`) || {};
         userData.name = name;
         await setData(`/users/${senderID}`, userData);
 
-      } catch (err) {
-        // ignore user info error
-      }
+      } catch {}
 
       // delete old poll
       if (pollData.pollMsgID) {
@@ -250,12 +181,12 @@ module.exports.handleEvent = async function ({ api, event }) {
       }
 
       // resend updated poll
-      const remaining = pollData.endTime ? pollData.endTime - Date.now() : 0;
+      const remaining = pollData.endTime - Date.now();
       const sent = await api.sendMessage(
         {
           body: `╭[AUTO CLEAN ONGOING]╮
 
-┃ 👥 Active: ${pollData.activeUsers.length} / ${(pollData.totalUsers || []).length}
+┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
