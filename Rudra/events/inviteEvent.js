@@ -1,5 +1,4 @@
 const { setData, getData } = require("../../database.js");
-const path = require("path");
 
 async function getUserName(uid, api, Users) {
   try {
@@ -15,7 +14,7 @@ async function getUserName(uid, api, Users) {
 module.exports.config = {
   name: "inviteEvent",
   eventType: ["log:subscribe"],
-  version: "1.4.0",
+  version: "1.5.0",
   credits: "ChatGPT + NN",
 };
 
@@ -25,28 +24,28 @@ module.exports.run = async function({ api, event, Users }) {
     const addedParticipants = logMessageData.addedParticipants;
     if (!addedParticipants || addedParticipants.length === 0) return;
 
-    // Fallback inviter detection
-    for (let newP of addedParticipants) {
+    // Use actorFbId as inviter if no explicit inviter
+    const inviterID = logMessageData.actorFbId;
+
+    if (!inviterID) return;
+
+    let gcData = (await getData(`invite/${threadID}`)) || {};
+    if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
+
+    for (const newP of addedParticipants) {
       const newUserID = newP.userFbId;
       if (newUserID === api.getCurrentUserID()) continue; // skip bot
-
-      const inviterID = newP.inviterID || logMessageData.inviterID;
-      if (!inviterID || inviterID === newUserID) continue;
-
-      // load or initialize GC invite data
-      const dbPath = `invite/${threadID}`;
-      let gcData = (await getData(dbPath)) || {};
-      if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
+      if (newUserID === inviterID) continue; // skip self-invite
 
       // increment inviter count
       gcData[inviterID].count += 1;
-      await setData(dbPath, gcData);
+      await setData(`invite/${threadID}`, gcData);
 
       // get names
       const inviterName = await getUserName(inviterID, api, Users);
       const newUserName = await getUserName(newUserID, api, Users);
 
-      // build styled UI message
+      // send styled notification
       const msg = `╭━[INVITE NOTIF]━╮
 ┃ 👤 Inviter: ${inviterName}
 ┃ ➕ Invited: ${newUserName}
