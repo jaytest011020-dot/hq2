@@ -14,7 +14,7 @@ async function getUserName(uid, api, Users) {
 module.exports.config = {
   name: "inviteEvent",
   eventType: ["log:subscribe"],
-  version: "1.5.0",
+  version: "1.5.1",
   credits: "ChatGPT + NN",
 };
 
@@ -22,30 +22,33 @@ module.exports.run = async function({ api, event, Users }) {
   try {
     const { threadID, logMessageData } = event;
     const addedParticipants = logMessageData.addedParticipants;
+
     if (!addedParticipants || addedParticipants.length === 0) return;
 
-    // Use actorFbId as inviter if no explicit inviter
-    const inviterID = logMessageData.actorFbId;
-
-    if (!inviterID) return;
-
     let gcData = (await getData(`invite/${threadID}`)) || {};
-    if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
 
     for (const newP of addedParticipants) {
       const newUserID = newP.userFbId;
-      if (newUserID === api.getCurrentUserID()) continue; // skip bot
-      if (newUserID === inviterID) continue; // skip self-invite
 
-      // increment inviter count
+      // Skip bot itself
+      if (newUserID === api.getCurrentUserID()) continue;
+
+      // Correct inviter detection
+      const inviterID = newP.inviterID || logMessageData.actorFbId;
+      if (!inviterID || inviterID === newUserID) continue;
+
+      // Initialize inviter data
+      if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
+
+      // Increment inviter count
       gcData[inviterID].count += 1;
       await setData(`invite/${threadID}`, gcData);
 
-      // get names
+      // Get user names
       const inviterName = await getUserName(inviterID, api, Users);
       const newUserName = await getUserName(newUserID, api, Users);
 
-      // send styled notification
+      // Styled notification
       const msg = `╭━[INVITE NOTIF]━╮
 ┃ 👤 Inviter: ${inviterName}
 ┃ ➕ Invited: ${newUserName}
