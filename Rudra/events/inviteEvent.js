@@ -2,11 +2,8 @@ const { setData, getData } = require("../../database.js");
 
 async function getUserName(uid, api, Users) {
   try {
-    // Try Users.getNameUser first
     const name = await Users.getNameUser(uid);
     if (name) return name;
-
-    // fallback to api.getUserInfo
     const info = await api.getUserInfo(uid);
     return info?.[uid]?.name || `FB-User(${uid})`;
   } catch {
@@ -17,7 +14,7 @@ async function getUserName(uid, api, Users) {
 module.exports.config = {
   name: "inviteEvent",
   eventType: ["log:subscribe"],
-  version: "1.3.0",
+  version: "1.4.0",
   credits: "ChatGPT + NN",
 };
 
@@ -27,26 +24,27 @@ module.exports.run = async function ({ api, event, Users }) {
     const addedParticipants = logMessageData.addedParticipants;
     if (!addedParticipants || addedParticipants.length === 0) return;
 
-    const inviterID = logMessageData.inviterID;
-    if (!inviterID) return;
-
-    let gcData = (await getData(`invite/${threadID}`)) || {};
-    if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
-
-    for (let newP of addedParticipants) {
+    for (const newP of addedParticipants) {
       const newUserID = newP.userFbId;
       if (newUserID === api.getCurrentUserID()) continue; // skip bot
 
-      // ✅ Increase inviter count
-      gcData[inviterID].count += 1;
-      await setData(`invite/${threadID}`, gcData);
+      // Try inviterID from participant first, fallback sa logMessageData
+      const inviterID = newP?.inviterID || logMessageData?.inviterID;
+      if (!inviterID || inviterID === newUserID || inviterID === api.getCurrentUserID()) continue;
 
-      // ✅ Get names
+      // Load or init inviter data
+      const dbPath = `invite/${threadID}`;
+      let gcData = (await getData(dbPath)) || {};
+      if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
+      gcData[inviterID].count += 1;
+      await setData(dbPath, gcData);
+
+      // Get names
       const inviterName = await getUserName(inviterID, api, Users);
       const newUserName = await getUserName(newUserID, api, Users);
 
-      // ✅ Styled UI message
-      const msg = `╭━[INVITE NOTIF]━╮
+      // Styled UI message
+      const msg = `╭━[ INVITE NOTIF ]━╮
 ┃ 👤 Inviter: ${inviterName}
 ┃ ➕ Invited: ${newUserName}
 ┃
