@@ -184,7 +184,7 @@ module.exports.handleEvent = async function ({ api, event }) {
       const remaining = pollData.endTime - Date.now();
       const sent = await api.sendMessage(
         {
-          body: `╭━[AUTO CLEAN ONGOING]━╮
+          body: `╭[AUTO CLEAN ONGOING]╮
 
 ┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
