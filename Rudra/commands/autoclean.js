@@ -20,10 +20,31 @@ function formatTime(ms) {
   return `${day > 0 ? day + "d " : ""}${hr > 0 ? hr + "h " : ""}${min > 0 ? min + "m " : ""}${sec}s`;
 }
 
+// ✅ Wrapper para siguradong may pangalan
+async function getUserName(uid, api) {
+  try {
+    const info = await api.getUserInfo(uid);
+    if (info && info[uid]?.name) return info[uid].name;
+    return `FB-User(${uid})`;
+  } catch {
+    return `FB-User(${uid})`;
+  }
+}
+
+async function formatList(uids, api) {
+  if (!uids || uids.length === 0) return "Wala";
+  let lines = [];
+  for (const uid of uids) {
+    const name = await getUserName(uid, api);
+    lines.push(`• ${name} (${uid})`);
+  }
+  return lines.join("\n");
+}
+
 module.exports.config = {
   name: "autoclean",
-  version: "2.0.0",
-  hasPermssion: 1,
+  version: "2.1.0",
+  hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
   commandCategory: "system",
@@ -90,21 +111,22 @@ module.exports.run = async function ({ api, event, args }) {
     const exempted = info.adminIDs.map(a => a.id).concat([botID, ownerID]);
     const inactive = allUsers.filter(uid => !active.includes(uid) && !exempted.includes(uid));
 
-    const userInfo = await api.getUserInfo(allUsers);
-    const formatList = (uids) => uids.map(uid => `• ${userInfo[uid]?.name || "Unknown"} (${uid})`).join("\n") || "Wala";
+    const activeList = await formatList(active, api);
+    const inactiveList = await formatList(inactive, api);
+    const exemptedList = await formatList(exempted, api);
 
     const remaining = pollData.endTime - Date.now();
     return api.sendMessage(
       `📋 AUTO CLEAN STATUS
 
 ✅ Active:
-${formatList(active)}
+${activeList}
 
 🚫 Inactive (pwedeng makick):
-${formatList(inactive)}
+${inactiveList}
 
 🛡 Exempted:
-${formatList(exempted)}
+${exemptedList}
 
 ⏳ Time left: ${formatTime(remaining)}`,
       threadID,
@@ -191,17 +213,12 @@ module.exports.handleEvent = async function ({ api, event }) {
       pollData.activeUsers.push(senderID);
       await setData(`/autoclean/${threadID}`, pollData);
 
-      let name = "User";
-      try {
-        const info = await api.getUserInfo(senderID);
-        name = info[senderID].name || "User";
+      let name = await getUserName(senderID, api);
 
-        // ✅ auto-update username sa database
-        const userData = await getData(`/users/${senderID}`) || {};
-        userData.name = name;
-        await setData(`/users/${senderID}`, userData);
-
-      } catch {}
+      // ✅ auto-update username sa database
+      const userData = await getData(`/users/${senderID}`) || {};
+      userData.name = name;
+      await setData(`/users/${senderID}`, userData);
 
       // delete old poll
       if (pollData.pollMsgID) {
