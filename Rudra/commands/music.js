@@ -26,7 +26,7 @@ module.exports.run = async ({ api, event, args }) => {
   // 🔹 Check 1-minute cooldown
   if (remaining > 0) {
     return api.sendMessage(
-      `⏳ Please wait ${remaining}s before using /music again.`,
+      `❗ Please wait ${remaining}s before using /music again.`,
       threadID,
       messageID
     );
