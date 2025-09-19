@@ -3,12 +3,12 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "rank",
-  version: "3.4.0",
+  version: "3.5.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
-  description: "Rank with card image",
+  description: "Rank with card image + leaderboard",
   commandCategory: "fun",
-  usages: "/rank | /rank @mention",
+  usages: "/rank | /rank @mention | /rank list",
   cooldowns: 5
 };
 
@@ -40,8 +40,9 @@ module.exports.handleEvent = async function({ api, event, Users }) {
   // get user name
   userData.name = await Users.getNameUser(senderID);
 
-  // +1 XP per message
-  userData.xp += 1;
+  // +5 to 20 XP per message
+  const xpGain = Math.floor(Math.random() * 16) + 5; // 5–20
+  userData.xp += xpGain;
 
   let requiredXP = getRequiredXP(userData.level);
   let leveledUp = false;
@@ -59,7 +60,6 @@ module.exports.handleEvent = async function({ api, event, Users }) {
 
     const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard?name=${encodeURIComponent(userData.name)}&userid=${senderID}&currentLvl=${userData.level}&currentRank=${encodeURIComponent(rankName)}&currentXP=${userData.xp}&requiredXP=${requiredXP}`;
 
-    // send text and image together
     try {
       const response = await axios.get(apiUrl, { responseType: "stream" });
       await api.sendMessage(
@@ -70,7 +70,6 @@ module.exports.handleEvent = async function({ api, event, Users }) {
         threadID
       );
     } catch (err) {
-      // fallback text only
       await api.sendMessage(
         `🎉 Congrats ${userData.name}! Level up → Level ${userData.level}\nRank: ${rankName}\n⚠️ (Could not load rank card image)`,
         threadID
@@ -82,9 +81,34 @@ module.exports.handleEvent = async function({ api, event, Users }) {
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, messageID, senderID, mentions } = event;
 
-  // determine target (mention or self)
-  const targetID = Object.keys(mentions)[0] || senderID;
+  // /rank list
+  if (args[0] && args[0].toLowerCase() === "list") {
+    const path = `rank/${threadID}`;
+    const allData = await getData(path) || {};
 
+    let results = Object.values(allData);
+    if (results.length === 0) {
+      return api.sendMessage("⚠️ Walang rank data sa GC na ito.", threadID, messageID);
+    }
+
+    // sort by level then xp
+    results.sort((a, b) => {
+      if (b.level === a.level) return b.xp - a.xp;
+      return b.level - a.level;
+    });
+
+    let msg = `📊 Top ${Math.min(10, results.length)} Leaderboard\n`;
+    for (let i = 0; i < Math.min(10, results.length); i++) {
+      const user = results[i];
+      const rankName = rankNames[user.level - 1] || "Ascended";
+      msg += `\n${i + 1}. ${user.name} — Lv.${user.level} (${user.xp} XP) | ${rankName}`;
+    }
+
+    return api.sendMessage(msg, threadID, messageID);
+  }
+
+  // /rank @mention or self
+  const targetID = Object.keys(mentions)[0] || senderID;
   const path = `rank/${threadID}/${targetID}`;
   let userData = await getData(path);
   if (!userData) {
