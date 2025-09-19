@@ -22,7 +22,7 @@ function formatTime(ms) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "1.5.0",
+  version: "1.6.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
@@ -74,8 +74,31 @@ module.exports.run = async function ({ api, event, args }) {
 
   if (sub === "list") {
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
+
+    const info = await api.getThreadInfo(threadID);
+    const botID = api.getCurrentUserID();
+    const ownerID = "61559999326713"; // permanent UID mo
+    const adminIDs = info.adminIDs.map(a => a.id);
+
+    const active = pollData.activeUsers || [];
+    const exempted = [botID, ownerID, ...adminIDs];
+    const inactive = pollData.totalUsers.filter(uid => !active.includes(uid) && !exempted.includes(uid));
+
+    // kunin names
+    const allUIDs = [...active, ...inactive, ...exempted];
+    const userInfo = await api.getUserInfo(allUIDs);
+
+    const fmt = (uidArr) =>
+      uidArr.map(uid => `• ${userInfo[uid]?.name || "Unknown"} (${uid})`).join("\n") || "None";
+
+    const remaining = pollData.endTime - Date.now();
+
     return api.sendMessage(
-      `📋 Active Users:\n${pollData.activeUsers.map(uid => `• ${uid}`).join("\n") || "Wala pa."}`,
+      `📋 AutoClean List\n\n` +
+      `✅ Active Users (${active.length}):\n${fmt(active)}\n\n` +
+      `🚫 Inactive Users (${inactive.length}):\n${fmt(inactive)}\n\n` +
+      `🛡 Exempted (${exempted.length}):\n${fmt(exempted)}\n\n` +
+      `⏳ Time left: ${formatTime(remaining)}`,
       threadID,
       messageID
     );
