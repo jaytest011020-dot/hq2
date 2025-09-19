@@ -1,15 +1,7 @@
-module.exports.config = {
-  name: "help",
-  version: "1.0.1",
-  hasPermission: 0,
-  credits: "august + edited by ChatGPT",
-  description: "Guide for new users with bot owner contact",
-  commandCategory: "system",
-  usages: "/help",
-  cooldowns: 5
-};
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
 
-// Math Sans Bold mapping
 const mathSansBold = {
   A: "𝗔", B: "𝗕", C: "𝗖", D: "𝗗", E: "𝗘", F: "𝗙", G: "𝗚", H: "𝗛", I: "𝗜",
   J: "𝗝", K: "𝗞", L: "𝗟", M: "𝗠", N: "𝗡", O: "𝗢", P: "𝗣", Q: "𝗤", R: "𝗥",
@@ -19,21 +11,37 @@ const mathSansBold = {
   s: "𝘀", t: "𝘁", u: "𝘂", v: "𝘃", w: "𝘄", x: "𝘅", y: "𝘆", z: "𝘇"
 };
 
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+let lastUsed = {};
+
+module.exports.config = {
+  name: "help",
+  version: "1.0.2",
+  hasPermission: 0,
+  credits: "august + ChatGPT",
+  description: "Guide for new users with attachment",
+  commandCategory: "system",
+  usages: "/help",
+  cooldowns: 5
+};
+
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  // Bot owner info
-  const yourUID = "61559999326713";  
-  const botOwnerBold = "𝗝𝗮𝘆𝗹𝗼𝗿𝗱 𝗟𝗮 𝗣𝗲ñ𝗮";
+  // check cooldown per thread
+  const now = Date.now();
+  if (lastUsed[threadID] && now - lastUsed[threadID] < COOLDOWN_MS) {
+    const remaining = Math.ceil((COOLDOWN_MS - (now - lastUsed[threadID])) / 60000);
+    return api.sendMessage(`⚠️ /help is on cooldown. Please wait ${remaining} minute(s) before using it again.`, threadID, messageID);
+  }
+  lastUsed[threadID] = now;
 
-  // Get global commands
   const { commands } = global.client;
   const prefix = global.config.PREFIX;
 
-  // Categorize commands
+  // categorize commands
   const categories = new Set();
   const categorizedCommands = new Map();
-
   for (const [name, value] of commands) {
     const categoryName = value.config.commandCategory || "Uncategorized";
     if (!categories.has(categoryName)) {
@@ -43,9 +51,8 @@ module.exports.run = async function({ api, event, args }) {
     categorizedCommands.get(categoryName).push(`│ ✧ ${value.config.name}`);
   }
 
-  // Build message
+  // build message
   let msg = `Hey, here are commands that may help your assignments and essays:\n`;
-
   for (const categoryName of categories) {
     const categoryNameSansBold = categoryName
       .split("")
@@ -55,13 +62,24 @@ module.exports.run = async function({ api, event, args }) {
     msg += categorizedCommands.get(categoryName).join("\n");
     msg += "\n╰───────────⟡\n";
   }
-
   msg += `├─────☾⋆\n│ » Total commands: [ ${commands.size} ]\n│「 ☾⋆ PREFIX: ${prefix} 」\n╰──────────⧕\n\n`;
-  msg += `Bot Owner: ${botOwnerBold}`;
 
-  // Send the commands list message
-  await api.sendMessage(msg, threadID, messageID);
+  // download attachment (bot owner profile)
+  const attachmentUrl = "https://betadash-api-swordslush-production.up.railway.app/profile?uid=61559999326713";
+  const filePath = path.join(__dirname, "..", "cache", "bot_profile.png");
+  const writer = fs.createWriteStream(filePath);
 
-  // Share bot owner's contact
-  return api.shareContact(yourUID, threadID);
+  const response = await axios.get(attachmentUrl, { responseType: "stream" });
+  response.data.pipe(writer);
+
+  writer.on("finish", () => {
+    api.sendMessage({ body: msg, attachment: fs.createReadStream(filePath) }, threadID, () => {
+      fs.unlinkSync(filePath); // delete temp file
+    });
+  });
+
+  writer.on("error", (err) => {
+    console.error("Error downloading attachment:", err);
+    api.sendMessage(msg, threadID);
+  });
 };
