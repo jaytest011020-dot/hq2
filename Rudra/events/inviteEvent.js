@@ -1,4 +1,5 @@
 const { setData, getData } = require("../../database.js");
+const path = require("path");
 
 async function getUserName(uid, api, Users) {
   try {
@@ -18,33 +19,35 @@ module.exports.config = {
   credits: "ChatGPT + NN",
 };
 
-module.exports.run = async function ({ api, event, Users }) {
+module.exports.run = async function({ api, event, Users }) {
   try {
     const { threadID, logMessageData } = event;
     const addedParticipants = logMessageData.addedParticipants;
     if (!addedParticipants || addedParticipants.length === 0) return;
 
-    for (const newP of addedParticipants) {
+    // Fallback inviter detection
+    for (let newP of addedParticipants) {
       const newUserID = newP.userFbId;
       if (newUserID === api.getCurrentUserID()) continue; // skip bot
 
-      // Try inviterID from participant first, fallback sa logMessageData
-      const inviterID = newP?.inviterID || logMessageData?.inviterID;
-      if (!inviterID || inviterID === newUserID || inviterID === api.getCurrentUserID()) continue;
+      const inviterID = newP.inviterID || logMessageData.inviterID;
+      if (!inviterID || inviterID === newUserID) continue;
 
-      // Load or init inviter data
+      // load or initialize GC invite data
       const dbPath = `invite/${threadID}`;
       let gcData = (await getData(dbPath)) || {};
       if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
+
+      // increment inviter count
       gcData[inviterID].count += 1;
       await setData(dbPath, gcData);
 
-      // Get names
+      // get names
       const inviterName = await getUserName(inviterID, api, Users);
       const newUserName = await getUserName(newUserID, api, Users);
 
-      // Styled UI message
-      const msg = `╭━[ INVITE NOTIF ]━╮
+      // build styled UI message
+      const msg = `╭━[INVITE NOTIF]━╮
 ┃ 👤 Inviter: ${inviterName}
 ┃ ➕ Invited: ${newUserName}
 ┃
