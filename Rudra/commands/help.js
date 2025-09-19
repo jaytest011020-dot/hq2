@@ -1,14 +1,15 @@
 module.exports.config = {
   name: "help",
-  version: "1.0.0",
-  hasPermssion: 0,
+  version: "1.0.1",
+  hasPermission: 0,
   credits: "august + edited by ChatGPT",
-  description: "Guide for new users",
+  description: "Guide for new users with bot owner contact",
   commandCategory: "system",
   usages: "/help",
   cooldowns: 5
 };
 
+// Math Sans Bold mapping
 const mathSansBold = {
   A: "𝗔", B: "𝗕", C: "𝗖", D: "𝗗", E: "𝗘", F: "𝗙", G: "𝗚", H: "𝗛", I: "𝗜",
   J: "𝗝", K: "𝗞", L: "𝗟", M: "𝗠", N: "𝗡", O: "𝗢", P: "𝗣", Q: "𝗤", R: "𝗥",
@@ -18,17 +19,18 @@ const mathSansBold = {
   s: "𝘀", t: "𝘁", u: "𝘂", v: "𝘃", w: "𝘄", x: "𝘅", y: "𝘆", z: "𝘇"
 };
 
-module.exports.run = async function ({ api, event, args }) {
-  const uid = event.senderID;
-  const userName = (await api.getUserInfo(uid))[uid].name;
-
-  const { commands } = global.client;
+module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
-  const threadSetting = global.data.threadData.get(parseInt(threadID)) || {};
-  const prefix = threadSetting.hasOwnProperty("PREFIX")
-    ? threadSetting.PREFIX
-    : global.config.PREFIX;
 
+  // Bot owner info
+  const yourUID = "61559999326713";  
+  const botOwnerBold = "𝗝𝗮𝘆𝗹𝗼𝗿𝗱 𝗟𝗮 𝗣𝗲ñ𝗮";
+
+  // Get global commands
+  const { commands } = global.client;
+  const prefix = global.config.PREFIX;
+
+  // Categorize commands
   const categories = new Set();
   const categorizedCommands = new Map();
 
@@ -41,7 +43,8 @@ module.exports.run = async function ({ api, event, args }) {
     categorizedCommands.get(categoryName).push(`│ ✧ ${value.config.name}`);
   }
 
-  let msg = `Hey ${userName}, these are commands that may help your assignments and essays:\n`;
+  // Build message
+  let msg = `Hey, here are commands that may help your assignments and essays:\n`;
 
   for (const categoryName of categories) {
     const categoryNameSansBold = categoryName
@@ -54,12 +57,11 @@ module.exports.run = async function ({ api, event, args }) {
   }
 
   msg += `├─────☾⋆\n│ » Total commands: [ ${commands.size} ]\n│「 ☾⋆ PREFIX: ${prefix} 」\n╰──────────⧕\n\n`;
+  msg += `Bot Owner: ${botOwnerBold}`;
 
-  const yourUID = "61559999326713";  
-  const botOwnerBold = "𝗝𝗮𝘆𝗹𝗼𝗿𝗱 𝗟𝗮 𝗣𝗲ñ𝗮"; 
-  msg += `\nBot Owner: ${botOwnerBold}`;
+  // Send the commands list message
+  await api.sendMessage(msg, threadID, messageID);
 
-  api.sendMessage(msg, threadID, messageID);
-
-  return api.shareContact(yourUID, event.senderID, threadID);
+  // Share bot owner's contact
+  return api.shareContact(yourUID, threadID);
 };
