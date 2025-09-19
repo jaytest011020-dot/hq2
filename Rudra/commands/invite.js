@@ -13,8 +13,8 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "invite",
-  version: "1.0.0",
-  hasPermssion: 0,
+  version: "1.1.0",
+  hasPermission: 0,
   credits: "ChatGPT + NN",
   description: "Check your invites or list all inviters",
   commandCategory: "fun",
@@ -33,21 +33,26 @@ module.exports.run = async function({ api, event, args, Users }) {
     const inviters = Object.keys(gcData);
     if (inviters.length === 0) return api.sendMessage("⚠️ Wala pang nag-invite sa thread na ito.", threadID, messageID);
 
-    let msg = `📋 Invite List for this group:\n\n`;
+    let msg = `╭━[ INVITE LIST ]━╮\n`;
 
     for (const uid of inviters) {
       const name = await getUserName(uid, api, Users);
-      msg += `👤 ${name} — Invites: ${gcData[uid].count}\n`;
+      msg += `┃ 👤 ${name} — Invites: ${gcData[uid].count}\n`;
     }
 
+    msg += `╰━━━━━━━━━━━━━━╯`;
     return api.sendMessage(msg, threadID, messageID);
   }
 
   // default: show own invites
   const userData = gcData[senderID];
   const userCount = userData ? userData.count : 0;
-
   const name = await getUserName(senderID, api, Users);
-  const msg = `👤 ${name}\n📊 Your invites in this group: ${userCount}`;
+
+  const msg = `╭━[ YOUR INVITES ]━╮
+┃ 👤 ${name}
+┃ 📊 Total invites: ${userCount}
+╰━━━━━━━━━━━━╯`;
+
   return api.sendMessage(msg, threadID, messageID);
 };
