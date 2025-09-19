@@ -22,8 +22,8 @@ function formatTime(ms) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "1.5.0",
-  hasPermission: 1,
+  version: "2.0.0",
+  hasPermssion: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
   commandCategory: "system",
@@ -32,7 +32,16 @@ module.exports.config = {
 };
 
 module.exports.run = async function ({ api, event, args }) {
-  const { threadID, messageID } = event;
+  const { threadID, messageID, senderID } = event;
+  const ownerID = "61559999326713"; // palitan ng permanent UID mo
+  const botID = api.getCurrentUserID();
+
+  // ✅ Only allow owner + admins
+  const info = await api.getThreadInfo(threadID);
+  const isAdmin = info.adminIDs.some(a => a.id === senderID);
+  if (senderID !== ownerID && !isAdmin) {
+    return api.sendMessage("❌ Only group admins and the bot owner can use this command.", threadID, messageID);
+  }
 
   if (args.length === 0) {
     return api.sendMessage("❌ Usage: /autoclean 1m|1h|1d | cancel | resend | list", threadID, messageID);
@@ -51,6 +60,7 @@ module.exports.run = async function ({ api, event, args }) {
 
   if (sub === "resend") {
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
+
     if (pollData.pollMsgID) {
       try { await api.unsendMessage(pollData.pollMsgID); } catch {}
     }
@@ -59,7 +69,7 @@ module.exports.run = async function ({ api, event, args }) {
     const sent = await api.sendMessage(
       `╭[AUTO CLEAN ONGOING]╮
 
-┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers.length}
+┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers?.length || 0}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
 ┃ 🔔 Reply "active" para hindi makick.
@@ -74,8 +84,29 @@ module.exports.run = async function ({ api, event, args }) {
 
   if (sub === "list") {
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
+
+    const active = pollData.activeUsers || [];
+    const allUsers = pollData.totalUsers || [];
+    const exempted = info.adminIDs.map(a => a.id).concat([botID, ownerID]);
+    const inactive = allUsers.filter(uid => !active.includes(uid) && !exempted.includes(uid));
+
+    const userInfo = await api.getUserInfo(allUsers);
+    const formatList = (uids) => uids.map(uid => `• ${userInfo[uid]?.name || "Unknown"} (${uid})`).join("\n") || "Wala";
+
+    const remaining = pollData.endTime - Date.now();
     return api.sendMessage(
-      `📋 Active Users:\n${pollData.activeUsers.map(uid => `• ${uid}`).join("\n") || "Wala pa."}`,
+      `📋 AUTO CLEAN STATUS
+
+✅ Active:
+${formatList(active)}
+
+🚫 Inactive (pwedeng makick):
+${formatList(inactive)}
+
+🛡 Exempted:
+${formatList(exempted)}
+
+⏳ Time left: ${formatTime(remaining)}`,
       threadID,
       messageID
     );
@@ -87,7 +118,7 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage("❌ Invalid duration. Use 1m, 1h, or 1d.", threadID, messageID);
   }
 
-  const members = (await api.getThreadInfo(threadID)).participantIDs;
+  const members = info.participantIDs;
   const endTime = Date.now() + duration;
 
   pollData = {
@@ -117,9 +148,6 @@ module.exports.run = async function ({ api, event, args }) {
 
     api.getThreadInfo(threadID, async (err, info) => {
       if (err) return;
-
-      const botID = api.getCurrentUserID();
-      const ownerID = "61559999326713"; // permanent UID mo
 
       const toKick = info.participantIDs.filter(uid =>
         !finalData.activeUsers.includes(uid) &&
