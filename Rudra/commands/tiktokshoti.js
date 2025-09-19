@@ -10,7 +10,7 @@ module.exports.config = {
   hasPermssion: 0,
   credits: "ChatGPT",
   description: "Get random TikTok video from API",
-  commandCategory: "fun",
+  commandCategory: "video",
   usages: "/tiktokshoti",
   cooldowns: 0, // handled manually
 };
