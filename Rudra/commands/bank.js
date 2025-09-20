@@ -1,29 +1,24 @@
 const { setData, getData } = require("../../database.js");
-
-// ✅ Load admin list via global.config
 const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "2.4.0",
+  version: "2.6.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
-  description: "Bank system with auto-updated usernames",
+  description: "Bank system fully per group chat with auto-updated usernames",
   usages: "/bank, /bank all, /bank add <uid> <amount>",
   commandCategory: "economy",
   cooldowns: 3,
 };
 
-// 🔑 Always fetch fresh username via api.getUserInfo
+// 🔑 Always fetch fresh username
 async function getUserName(uid, api) {
   try {
     const info = await api.getUserInfo(uid);
-    if (info && info[uid]?.name) {
-      return info[uid].name;
-    }
+    if (info && info[uid]?.name) return info[uid].name;
     return `FB-User(${uid})`;
-  } catch (err) {
-    console.log(`[BANK] Error fetching name for UID: ${uid}`, err);
+  } catch {
     return `FB-User(${uid})`;
   }
 }
@@ -37,19 +32,16 @@ module.exports.run = async ({ api, event, args }) => {
   const { threadID, senderID, messageID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 📋 Show all accounts
+  // 📋 Show all accounts in current group
   if (command === "all") {
-    let allData = (await getData(`bank`)) || {};
+    let allData = (await getData(`bank/${threadID}`)) || {};
     let results = [];
 
     for (let uid in allData) {
-      // ✅ Always fetch fresh username
       let freshName = await getUserName(uid, api);
-
-      // update name in DB if changed
       if (allData[uid].name !== freshName) {
         allData[uid].name = freshName;
-        await setData(`bank/${uid}`, allData[uid]);
+        await setData(`bank/${threadID}/${uid}`, allData[uid]);
       }
 
       results.push({
@@ -59,21 +51,21 @@ module.exports.run = async ({ api, event, args }) => {
       });
     }
 
-    if (results.length === 0) {
-      return api.sendMessage("🏦 No accounts found in the bank.", threadID, messageID);
-    }
+    if (results.length === 0)
+      return api.sendMessage("🏦 No accounts found in this group.", threadID, messageID);
 
     results.sort((a, b) => b.balance - a.balance);
 
-    let msg = `📋 Bank Accounts (Total: ${results.length}) 📋\n`;
+    let msg = `📋 Bank Accounts in this group (Total: ${results.length}) 📋\n`;
     for (let i = 0; i < results.length; i++) {
-      msg += `\n${i + 1}. 👤 ${results[i].name} — 💰 ${results[i].balance.toLocaleString()} coins`;
+      const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+      msg += `\n${medal} 👤 ${results[i].name} — 💰 ${results[i].balance.toLocaleString()} coins`;
     }
 
     return api.sendMessage(msg, threadID, messageID);
   }
 
-  // ➕ Add coins (admin only)
+  // ➕ Add coins (admin only, per group)
   if (command === "add") {
     if (!ADMINBOT.includes(senderID)) {
       return api.sendMessage("❌ Only bot admins can add coins.", threadID, messageID);
@@ -88,20 +80,16 @@ module.exports.run = async ({ api, event, args }) => {
 
     const freshName = await getUserName(targetUID, api);
 
-    let userData = (await getData(`bank/${targetUID}`)) || {
+    let userData = (await getData(`bank/${threadID}/${targetUID}`)) || {
       uid: targetUID,
       name: freshName,
       balance: 0
     };
 
     userData.balance += amount;
+    if (userData.name !== freshName) userData.name = freshName;
 
-    // auto-update name if changed
-    if (userData.name !== freshName) {
-      userData.name = freshName;
-    }
-
-    await setData(`bank/${targetUID}`, userData);
+    await setData(`bank/${threadID}/${targetUID}`, userData);
 
     return api.sendMessage(
       `✅ Added 💰 ${amount.toLocaleString()} coins to ${userData.name}'s account.`,
@@ -110,10 +98,10 @@ module.exports.run = async ({ api, event, args }) => {
     );
   }
 
-  // 👤 Default: Check own balance
+  // 👤 Default: Check own balance in this group
   const freshName = await getUserName(senderID, api);
 
-  let userData = (await getData(`bank/${senderID}`)) || {
+  let userData = (await getData(`bank/${threadID}/${senderID}`)) || {
     uid: senderID,
     name: freshName,
     balance: 0
@@ -121,7 +109,7 @@ module.exports.run = async ({ api, event, args }) => {
 
   if (userData.name !== freshName) {
     userData.name = freshName;
-    await setData(`bank/${senderID}`, userData);
+    await setData(`bank/${threadID}/${senderID}`, userData);
   }
 
   return api.sendMessage(
