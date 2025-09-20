@@ -2,26 +2,26 @@ const { setData, getData } = require("../../database.js");
 
 // ✅ Job definitions
 const JOBS = [
-  { name: "Farmer", min: 50, max: 100, cooldown: 10 * 60 * 1000 },
-  { name: "Miner", min: 80, max: 150, cooldown: 15 * 60 * 1000 },
-  { name: "Teacher", min: 70, max: 120, cooldown: 20 * 60 * 1000 },
-  { name: "Chef", min: 60, max: 110, cooldown: 15 * 60 * 1000 },
-  { name: "Driver", min: 50, max: 100, cooldown: 10 * 60 * 1000 },
-  { name: "Artist", min: 40, max: 90, cooldown: 10 * 60 * 1000 },
-  { name: "Musician", min: 50, max: 100, cooldown: 10 * 60 * 1000 },
-  { name: "Builder", min: 60, max: 120, cooldown: 15 * 60 * 1000 },
-  { name: "Programmer", min: 70, max: 130, cooldown: 15 * 60 * 1000 },
-  { name: "Doctor", min: 80, max: 150, cooldown: 20 * 60 * 1000 },
-  { name: "Nurse", min: 50, max: 100, cooldown: 10 * 60 * 1000 },
-  { name: "Engineer", min: 80, max: 150, cooldown: 20 * 60 * 1000 },
-  { name: "Scientist", min: 100, max: 200, cooldown: 30 * 60 * 1000 },
-  { name: "Lawyer", min: 90, max: 180, cooldown: 25 * 60 * 1000 },
-  { name: "Police", min: 60, max: 120, cooldown: 15 * 60 * 1000 },
-  { name: "Firefighter", min: 50, max: 110, cooldown: 15 * 60 * 1000 },
-  { name: "Pilot", min: 120, max: 250, cooldown: 40 * 60 * 1000 },
-  { name: "Soldier", min: 70, max: 140, cooldown: 20 * 60 * 1000 },
-  { name: "Hacker", min: 300, max: 500, cooldown: 60 * 60 * 1000, rare: true },
-  { name: "CEO", min: 500, max: 1000, cooldown: 24 * 60 * 60 * 1000, rare: true },
+  { name: "Farmer", min: 50, max: 100 },
+  { name: "Miner", min: 80, max: 150 },
+  { name: "Teacher", min: 70, max: 120 },
+  { name: "Chef", min: 60, max: 110 },
+  { name: "Driver", min: 50, max: 100 },
+  { name: "Artist", min: 40, max: 90 },
+  { name: "Musician", min: 50, max: 100 },
+  { name: "Builder", min: 60, max: 120 },
+  { name: "Programmer", min: 70, max: 130 },
+  { name: "Doctor", min: 80, max: 150 },
+  { name: "Nurse", min: 50, max: 100 },
+  { name: "Engineer", min: 80, max: 150 },
+  { name: "Scientist", min: 100, max: 200 },
+  { name: "Lawyer", min: 90, max: 180 },
+  { name: "Police", min: 60, max: 120 },
+  { name: "Firefighter", min: 50, max: 110 },
+  { name: "Pilot", min: 120, max: 250 },
+  { name: "Soldier", min: 70, max: 140 },
+  { name: "Hacker", min: 300, max: 500, rare: true },
+  { name: "CEO", min: 500, max: 1000, rare: true },
 ];
 
 // Job emojis
@@ -40,10 +40,10 @@ const FUN_PHRASES = [
 
 module.exports.config = {
   name: "job",
-  version: "4.1.0",
+  version: "5.1.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
-  description: "Random job system with per-job cooldowns, buffs, rare jobs, critical bonus, emojis, and fun phrases",
+  description: "Random job system with 1-hour cooldown, buffs, rare jobs, critical bonus, and effects",
   commandCategory: "economy",
   usages: "/job",
   cooldowns: 3
@@ -72,32 +72,43 @@ module.exports.run = async function({ api, event }) {
   const inventory = (await getData(`inventory/${threadID}/${senderID}`)) || { items: [] };
   const bankData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0 };
 
-  // Random job selection
-  let job = JOBS[Math.floor(Math.random() * JOBS.length)];
-  let isRare = job.rare || false;
+  // Universal cooldown: 1 hour
+  const COOLDOWN = 60 * 60 * 1000;
+  const lastTime = userJobData.last || 0;
+  const elapsed = now - lastTime;
 
-  // 10% chance for rare job if not rare already
-  if (!isRare && Math.random() <= 0.10) {
-    const rareJobs = JOBS.filter(j => j.rare);
-    job = rareJobs[Math.floor(Math.random() * rareJobs.length)];
-    isRare = true;
-  }
-
-  // Buffs
-  let jobCooldown = job.cooldown;
+  // Buff: Energy Drink halves cooldown
+  let jobCooldown = COOLDOWN;
   let usedItems = [];
-
-  // Energy Drink halves cooldown
   const energyDrink = inventory.items.find(i => i.name === "Energy Drink" && i.quantity > 0);
   if (energyDrink) {
-    jobCooldown = Math.floor(jobCooldown / 2);
+    jobCooldown = Math.floor(COOLDOWN / 2);
     energyDrink.quantity -= 1;
     usedItems.push("🧃 Energy Drink (halved cooldown)");
     if (energyDrink.quantity <= 0) inventory.items = inventory.items.filter(i => i !== energyDrink);
     await setData(`inventory/${threadID}/${senderID}`, inventory);
   }
 
-  // Lucky Charm increases critical chance
+  if (elapsed < jobCooldown) {
+    const remaining = jobCooldown - elapsed;
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    return api.sendMessage(
+      `⏳ Please wait ${mins}m ${secs}s before doing the next job.`,
+      threadID, messageID
+    );
+  }
+
+  // Random job
+  let job = JOBS[Math.floor(Math.random() * JOBS.length)];
+  let isRare = job.rare || false;
+  if (!isRare && Math.random() <= 0.10) {
+    const rareJobs = JOBS.filter(j => j.rare);
+    job = rareJobs[Math.floor(Math.random() * rareJobs.length)];
+    isRare = true;
+  }
+
+  // Buff: Lucky Charm
   let critChance = 0.05;
   const luckyCharm = inventory.items.find(i => i.name === "Lucky Charm");
   if (luckyCharm) {
@@ -105,52 +116,35 @@ module.exports.run = async function({ api, event }) {
     usedItems.push("🍀 Lucky Charm (+5% Critical chance)");
   }
 
-  // Check cooldown for this job
-  const lastTime = userJobData[job.name] || 0;
-  const elapsed = now - lastTime;
-
-  if (elapsed < jobCooldown) {
-    const remaining = jobCooldown - elapsed;
-    const mins = Math.floor(remaining / 60000);
-    const secs = Math.floor((remaining % 60000) / 1000);
-    return api.sendMessage(
-      `⏳ You must wait ${mins}m ${secs}s before doing the ${job.name} job again.`,
-      threadID, messageID
-    );
-  }
-
-  // Random earnings
+  // Earnings
   let earned = randomInt(job.min, job.max);
   let critical = false;
   if (Math.random() <= critChance) {
     earned *= 2;
     critical = true;
   }
-
-  // Update bank
   bankData.balance += earned;
   await setData(`bank/${threadID}/${senderID}`, bankData);
 
-  // Update cooldown
-  userJobData[job.name] = now;
+  // Update last job time
+  userJobData.last = now;
   await setData(`job/${threadID}/${senderID}`, userJobData);
 
-  // Get username
   const userName = await getUserName(senderID, api);
 
-  // Construct used items text
-  const usedItemsText = usedItems.length > 0 ? usedItems.map(u => `✅ Used ${u}`).join("\n") + "\n" : "";
-
   // Construct message
+  const usedItemsText = usedItems.length > 0 ? usedItems.map(u => `✅ Used ${u}`).join("\n") + "\n" : "";
   const emoji = JOB_EMOJIS[job.name] || "💼";
   const funText = FUN_PHRASES[Math.floor(Math.random() * FUN_PHRASES.length)];
 
-  const msg = `${isRare ? "✨ " : ""}${emoji} ${userName} did the ${job.name} job!\n` +
-              `${usedItemsText}` +
-              `💰 Earned: ${earned} coins${critical ? " 💥 Critical!" : ""}\n` +
-              `🏦 New balance: ${bankData.balance.toLocaleString()} coins\n` +
-              `⏳ You need to wait ${Math.floor(jobCooldown/60000)}m ${Math.floor((jobCooldown%60000)/1000)}s before doing the ${job.name} job again.\n\n` +
-              `${funText}`;
-
-  api.sendMessage(msg, threadID, messageID);
+  api.sendMessage(
+    `${isRare ? "✨ " : ""}${emoji} ${userName} did the ${job.name} job!\n` +
+    `${usedItemsText}` +
+    `💰 Earned: ${earned} coins${critical ? " 💥 Critical!" : ""}\n` +
+    `🏦 New balance: ${bankData.balance.toLocaleString()} coins\n` +
+    `⏳ Cooldown: ${Math.floor(jobCooldown/60000)}m ${Math.floor((jobCooldown%60000)/1000)}s\n\n` +
+    `${funText}`,
+    threadID,
+    messageID
+  );
 };
