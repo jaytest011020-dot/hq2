@@ -6,7 +6,7 @@ module.exports.config = {
   permission: 1, // Admin-only permissions
   credits: "ChatGPT + Fixed by NN",
   description: "Adds a user to the premium list using UID or mention",
-  commandCategory: "admin",
+  commandCategory: "Admin",
   usages: "/addpremium <UID or @mention>",
   cooldowns: 5,
 };
