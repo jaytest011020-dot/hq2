@@ -47,7 +47,7 @@ module.exports.config = {
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto clean inactive users using poll + reply",
-  commandCategory: "system",
+  commandCategory: "group",
   usages: "/autoclean 1m|1h|1d | cancel | resend | list",
   cooldowns: 5
 };
