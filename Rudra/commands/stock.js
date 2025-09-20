@@ -1,37 +1,28 @@
 const axios = require("axios");
-const fs = require("fs-extra");
+const { setData, getData } = require("../../database.js"); // ✅ Firebase
 const path = require("path");
-
-// 🔹 JSON file path para sa persistent GC list
-const gcFilePath = path.join(__dirname, "activeGCs.json");
-
-// 🔹 Load saved GC list
-let autoStockStatus = {}; // per GC: true/false
-if (fs.existsSync(gcFilePath)) {
-  try {
-    const saved = fs.readJsonSync(gcFilePath);
-    if (typeof saved === "object" && saved !== null) autoStockStatus = saved;
-  } catch (err) {
-    console.error("Failed to load saved GC list:", err);
-  }
-}
-
-// 🔹 Function to save GC list to file
-function saveGCs() {
-  fs.writeJsonSync(gcFilePath, autoStockStatus);
-}
 
 module.exports.config = {
   name: "stock",
-  version: "3.2.1",
+  version: "5.0.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Check Grow a Garden stock & auto notify when restocked (per GC toggle)",
+  description: "Check Grow a Garden stock & auto notify when restocked (with Firebase storage)",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
   cooldowns: 10,
 };
+
+// 🔹 Special items na idi-detect (case-insensitive)
+const SPECIAL_ITEMS = [
+  "Grandmaster Sprinkler",
+  "Master Sprinkler",
+  "Level-up Lollipop",
+  "Levelup Lollipop",
+  "Medium Treat",
+  "Medium Toy"
+];
 
 // 🔹 Next restock calculation (PH time, aligned to 5 minutes)
 function getNextRestockPH(interval = 5) {
@@ -64,51 +55,41 @@ function formatSection(title, items) {
   return items.map((i) => `• ${i.emoji || ""} ${i.name} (${i.quantity})`).join("\n");
 }
 
-// 🔹 Special items na idi-detect (case-insensitive)
-const SPECIAL_ITEMS = [
-  "Grandmaster Sprinkler",
-  "Master Sprinkler",
-  "Level-up Lollipop",
-  "Levelup Lollipop",
-  "Medium Treat",
-  "Medium Toy"
-];
-
-let started = false;
-
+// 🔹 Command: Toggle & Manual Check
 module.exports.run = async function ({ api, event, args }) {
-  try {
-    const threadID = event.threadID;
-    const option = args[0]?.toLowerCase();
+  global.api = api; // 🟢 save api globally para magamit ng scanner
+  const { threadID, messageID } = event;
+  const option = args[0]?.toLowerCase();
 
-    // 🔹 Toggle per GC
-    if (option === "on") {
-      autoStockStatus[threadID] = true;
-      saveGCs();
-      return api.sendMessage("✅ Auto-stock enabled for this GC.", threadID, event.messageID);
-    }
-    if (option === "off") {
-      autoStockStatus[threadID] = false;
-      saveGCs();
-      return api.sendMessage("❌ Auto-stock disabled for this GC.", threadID, event.messageID);
-    }
-    if (option === "check") {
-      const status = autoStockStatus[threadID] ? "ON ✅" : "OFF ❌";
-      return api.sendMessage(`📊 Auto-stock status for this GC: ${status}`, threadID, event.messageID);
-    }
+  let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
-    // 🔹 Manual stock fetch
-    const resData = await fetchGardenData();
-    if (!resData) return api.sendMessage("⚠️ Failed to fetch data.", threadID);
+  if (option === "on") {
+    gcData.enabled = true;
+    await setData(`stock/${threadID}`, gcData);
+    return api.sendMessage("✅ Auto-stock enabled for this GC.", threadID, messageID);
+  }
+  if (option === "off") {
+    gcData.enabled = false;
+    await setData(`stock/${threadID}`, gcData);
+    return api.sendMessage("❌ Auto-stock disabled for this GC.", threadID, messageID);
+  }
+  if (option === "check") {
+    const status = gcData.enabled ? "ON ✅" : "OFF ❌";
+    return api.sendMessage(`📊 Auto-stock status for this GC: ${status}`, threadID, messageID);
+  }
 
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    const { next } = getNextRestockPH();
+  // 🔹 Manual fetch
+  const resData = await fetchGardenData();
+  if (!resData) return api.sendMessage("⚠️ Failed to fetch data.", threadID);
 
-    const eggs = formatSection("eggs", resData.egg?.items);
-    const seeds = formatSection("seeds", resData.seed?.items);
-    const gear = formatSection("gear", resData.gear?.items);
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const { next } = getNextRestockPH();
 
-    const message = `
+  const eggs = formatSection("eggs", resData.egg?.items);
+  const seeds = formatSection("seeds", resData.seed?.items);
+  const gear = formatSection("gear", resData.gear?.items);
+
+  const message = `
 🌱 𝗚𝗿𝗼𝘄 𝗮 𝗚𝗮𝗿𝗱𝗲𝗻 𝗦𝘁𝗼𝗰𝗸 🌱
 ──────────────────────
 🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
@@ -124,24 +105,9 @@ ${seeds}
 🛠️ 𝗚𝗲𝗮𝗿
 ${gear}
 ──────────────────────
-    `.trim();
+  `.trim();
 
-    api.sendMessage(message, threadID, event.messageID);
-
-    // ✅ Start auto scanner only once
-    if (!started) {
-      started = true;
-      const delay = next.getTime() - Date.now();
-
-      setTimeout(() => {
-        scanAndNotify(api); // unang scan (aligned)
-        setInterval(() => scanAndNotify(api), 5 * 60 * 1000); // every 5 minutes
-      }, delay);
-    }
-  } catch (err) {
-    console.error(err);
-    api.sendMessage("⚠️ Error fetching Grow a Garden stock.", event.threadID);
-  }
+  api.sendMessage(message, threadID, messageID);
 };
 
 // 🔹 Function: Scan and send notifications
@@ -156,7 +122,7 @@ async function scanAndNotify(api) {
   const seeds = formatSection("seeds", data.seed?.items);
   const gear = formatSection("gear", data.gear?.items);
 
-  // 🔎 Check for special items
+  // 🔎 Check for special items (send to ALL GCs kahit naka-off)
   const allItems = [
     ...(data.egg?.items || []),
     ...(data.seed?.items || []),
@@ -180,10 +146,10 @@ ${specialList}
 ──────────────────────
     `.trim();
 
-    // 🔹 Send to ALL GCs (kahit naka-off)
-    Object.keys(autoStockStatus).forEach((tid) => {
+    let allGCs = (await getData(`stock`)) || {};
+    for (let tid in allGCs) {
       api.sendMessage(notif, tid);
-    });
+    }
   }
 
   // 🔹 Normal auto-stock (enabled GCs only)
@@ -205,7 +171,17 @@ ${gear}
 ──────────────────────
   `.trim();
 
-  Object.keys(autoStockStatus).forEach((tid) => {
-    if (autoStockStatus[tid]) api.sendMessage(autoMessage, tid);
-  });
+  let allGCs = (await getData(`stock`)) || {};
+  for (let tid in allGCs) {
+    if (allGCs[tid].enabled) {
+      api.sendMessage(autoMessage, tid);
+    }
+  }
 }
+
+// 🚀 Start global auto scanner (every 5 minutes)
+setInterval(() => {
+  if (global.api) {
+    scanAndNotify(global.api);
+  }
+}, 5 * 60 * 1000);
