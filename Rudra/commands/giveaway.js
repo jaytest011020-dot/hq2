@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "giveaway",
-  version: "5.0.0",
+  version: "5.1.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaz La Peña",
   description: "Giveaway with join by reply, live countdown, auto-end, and resend",
@@ -46,7 +46,7 @@ async function buildMessage(api, data, mentionID = null) {
 ──────────────────────
 ✅ Participants: ${totalParticipants}
 Reply "join" to participate!
-  `.trim();
+`.trim();
 
   const mentions = [];
   if (mentionID) {
@@ -136,10 +136,12 @@ module.exports.handleEvent = async function({ api, event }) {
       data.joined.push(senderID);
       await setData(`giveaway/${ID}`, data);
 
+      // unsend old message
       if (data.messageID) {
         try { await api.unsendMessage(data.messageID); } catch {}
       }
 
+      // send updated message
       const msg = await buildMessage(api, data, senderID);
       const info = await api.sendMessage(msg, threadID);
       data.messageID = info.messageID;
