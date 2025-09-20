@@ -3,24 +3,24 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "2.7.0",
+  version: "2.8.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
-  description: "Bank system fully per group chat with auto-updated usernames + send coins",
+  description: "Bank system per GC with auto-updated usernames + send coins",
   usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>",
   commandCategory: "economy",
   cooldowns: 3,
 };
 
-// 🔑 Always fetch fresh username
+// 🔑 Fetch username via api.getUserInfo
 async function getUserName(uid, api) {
   try {
     const info = await api.getUserInfo(uid);
     if (info && info[uid]?.name) return info[uid].name;
-    return `FB-User(${uid})`;
-  } catch {
-    return `FB-User(${uid})`;
+  } catch (err) {
+    console.log(`[BANK] Error fetching name for UID: ${uid}`, err);
   }
+  return `FB-User(${uid})`;
 }
 
 // 🏦 Format balance message
@@ -67,19 +67,15 @@ module.exports.run = async ({ api, event, args }) => {
 
   // ➕ Add coins (admin only, per group)
   if (command === "add") {
-    if (!ADMINBOT.includes(senderID)) {
+    if (!ADMINBOT.includes(senderID))
       return api.sendMessage("❌ Only bot admins can add coins.", threadID, messageID);
-    }
 
     const targetUID = args[1];
     const amount = parseInt(args[2]);
-
-    if (!targetUID || isNaN(amount) || amount <= 0) {
+    if (!targetUID || isNaN(amount) || amount <= 0)
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID, messageID);
-    }
 
     const freshName = await getUserName(targetUID, api);
-
     let userData = (await getData(`bank/${threadID}/${targetUID}`)) || {
       uid: targetUID,
       name: freshName,
@@ -87,8 +83,7 @@ module.exports.run = async ({ api, event, args }) => {
     };
 
     userData.balance += amount;
-    if (userData.name !== freshName) userData.name = freshName;
-
+    userData.name = freshName;
     await setData(`bank/${threadID}/${targetUID}`, userData);
 
     return api.sendMessage(
@@ -112,18 +107,25 @@ module.exports.run = async ({ api, event, args }) => {
       return api.sendMessage("❌ You cannot send coins to yourself.", threadID, messageID);
 
     // Load sender data
-    let senderData = (await getData(`bank/${threadID}/${senderID}`)) || { uid: senderID, name: await getUserName(senderID, api), balance: 0 };
+    let senderData = (await getData(`bank/${threadID}/${senderID}`)) || {
+      uid: senderID,
+      name: await getUserName(senderID, api),
+      balance: 0
+    };
     if (senderData.balance < amount)
       return api.sendMessage("❌ You don't have enough coins to send.", threadID, messageID);
 
     // Load recipient data
-    let recipientData = (await getData(`bank/${threadID}/${recipientID}`)) || { uid: recipientID, name: await getUserName(recipientID, api), balance: 0 };
+    let recipientData = (await getData(`bank/${threadID}/${recipientID}`)) || {
+      uid: recipientID,
+      name: await getUserName(recipientID, api),
+      balance: 0
+    };
 
     // Update balances
     senderData.balance -= amount;
     recipientData.balance += amount;
 
-    // Save updated data
     await setData(`bank/${threadID}/${senderID}`, senderData);
     await setData(`bank/${threadID}/${recipientID}`, recipientData);
 
@@ -137,17 +139,14 @@ module.exports.run = async ({ api, event, args }) => {
 
   // 👤 Default: Check own balance in this group
   const freshName = await getUserName(senderID, api);
-
   let userData = (await getData(`bank/${threadID}/${senderID}`)) || {
     uid: senderID,
     name: freshName,
     balance: 0
   };
 
-  if (userData.name !== freshName) {
-    userData.name = freshName;
-    await setData(`bank/${threadID}/${senderID}`, userData);
-  }
+  userData.name = freshName;
+  await setData(`bank/${threadID}/${senderID}`, userData);
 
   return api.sendMessage(
     formatBalance(userData.name, userData.balance),
