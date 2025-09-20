@@ -22,6 +22,11 @@ function formatTime(ms) {
   return `${day > 0 ? day + "d " : ""}${hr > 0 ? hr + "h " : ""}${min > 0 ? min + "m " : ""}${sec}s`;
 }
 
+// Generate random giveaway ID
+function genID() {
+  return "G" + Math.floor(1000 + Math.random() * 9000);
+}
+
 // Get user name safely
 async function getUserName(uid, api) {
   try {
@@ -32,9 +37,10 @@ async function getUserName(uid, api) {
   }
 }
 
-// Pick random winner
-async function endGiveaway(api, threadID, force = false) {
-  const giveaway = await getData(`/giveaway/${threadID}`);
+// End giveaway
+async function endGiveaway(api, threadID, id, force = false) {
+  let giveaways = (await getData(`/giveaway/${threadID}`)) || {};
+  const giveaway = giveaways[id];
   if (!giveaway) return;
 
   if (!force && Date.now() < giveaway.endTime) return;
@@ -47,26 +53,29 @@ async function endGiveaway(api, threadID, force = false) {
   }
 
   api.sendMessage(
-`╭━[GIVEAWAY ENDED]━╮
+`╭━🎉[GIVEAWAY ENDED]🎉━╮
 ┃ 🏆 Prize: ${giveaway.prize}
 ┃ 👥 Participants: ${giveaway.participants.length}
+┃ 👑 Host: ${giveaway.hostName} (${giveaway.hostID})
+┃ 🆔 ID: ${id}
 ┃ 
 ┃ ${winnerText}
 ╰━━━━━━━━━━━━━━━╯`,
     threadID
   );
 
-  await setData(`/giveaway/${threadID}`, null);
+  delete giveaways[id];
+  await setData(`/giveaway/${threadID}`, giveaways);
 }
 
 module.exports.config = {
   name: "giveaway",
-  version: "2.1.0",
+  version: "3.0.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Giveaway system with join, list, resend, roll",
+  description: "Multiple giveaways system with join, list, resend, roll",
   commandCategory: "group",
-  usages: "/giveaway <prize> <time> | list | resend | roll",
+  usages: "/giveaway <prize> <time> | list <id> | resend <id> | roll <id>",
   cooldowns: 5
 };
 
@@ -82,25 +91,29 @@ module.exports.run = async function({ api, event, args }) {
   }
 
   if (!args[0]) {
-    return api.sendMessage("❌ Usage: /giveaway <prize> <time> | list | resend | roll", threadID, messageID);
+    return api.sendMessage("❌ Usage: /giveaway <prize> <time> | list <id> | resend <id> | roll <id>", threadID, messageID);
   }
 
   const sub = args[0].toLowerCase();
-  let giveawayData = await getData(`/giveaway/${threadID}`);
+  let giveaways = (await getData(`/giveaway/${threadID}`)) || {};
 
   // LIST participants
   if (sub === "list") {
-    if (!giveawayData) return api.sendMessage("⚠️ Walang active giveaway.", threadID, messageID);
+    const id = args[1];
+    if (!id || !giveaways[id]) return api.sendMessage("⚠️ Invalid or no giveaway ID found.", threadID, messageID);
 
+    const giveaway = giveaways[id];
     let names = [];
-    for (const uid of giveawayData.participants) {
+    for (const uid of giveaway.participants) {
       names.push(await getUserName(uid, api));
     }
 
     return api.sendMessage(
 `╭━[GIVEAWAY PARTICIPANTS]━╮
-┃ 🏆 Prize: ${giveawayData.prize}
-┃ 👥 Total: ${giveawayData.participants.length}
+┃ 🏆 Prize: ${giveaway.prize}
+┃ 👑 Host: ${giveaway.hostName}
+┃ 🆔 ID: ${id}
+┃ 👥 Total: ${giveaway.participants.length}
 ┃ 
 ${names.length ? names.map((n, i) => `┃ ${i+1}. ${n}`).join("\n") : "┃ ⚠️ Wala pang sumasali."}
 ╰━━━━━━━━━━━━━━━╯`,
@@ -111,37 +124,39 @@ ${names.length ? names.map((n, i) => `┃ ${i+1}. ${n}`).join("\n") : "┃ ⚠�
 
   // RESEND giveaway status
   if (sub === "resend") {
-    if (!giveawayData) return api.sendMessage("⚠️ Walang active giveaway.", threadID, messageID);
+    const id = args[1];
+    if (!id || !giveaways[id]) return api.sendMessage("⚠️ Invalid or no giveaway ID found.", threadID, messageID);
 
-    const remaining = giveawayData.endTime - Date.now();
+    const giveaway = giveaways[id];
+    const remaining = giveaway.endTime - Date.now();
     const sent = await api.sendMessage(
 `╭━[GIVEAWAY ONGOING]━╮
-┃ 🏆 Prize: ${giveawayData.prize}
-┃ 👥 Participants: ${giveawayData.participants.length}
+┃ 🏆 Prize: ${giveaway.prize}
+┃ 👥 Participants: ${giveaway.participants.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
+┃ 👑 Host: ${giveaway.hostName}
+┃ 🆔 ID: ${id}
 ┃ 
 ┃ 👉 Reply to this message to join!
 ╰━━━━━━━━━━━━━━━╯`,
       threadID
     );
 
-    giveawayData.msgID = sent.messageID;
-    await setData(`/giveaway/${threadID}`, giveawayData);
+    giveaway.msgID = sent.messageID;
+    giveaways[id] = giveaway;
+    await setData(`/giveaway/${threadID}`, giveaways);
     return;
   }
 
   // ROLL to end early
   if (sub === "roll") {
-    if (!giveawayData) return api.sendMessage("⚠️ Walang active giveaway.", threadID, messageID);
-    await endGiveaway(api, threadID, true);
+    const id = args[1];
+    if (!id || !giveaways[id]) return api.sendMessage("⚠️ Invalid or no giveaway ID found.", threadID, messageID);
+    await endGiveaway(api, threadID, id, true);
     return;
   }
 
   // START giveaway
-  if (giveawayData) {
-    return api.sendMessage("⚠️ May active giveaway pa. Gamitin /giveaway roll para tapusin muna.", threadID, messageID);
-  }
-
   if (args.length < 2) {
     return api.sendMessage("❌ Usage: /giveaway <prize> <time>\nExample: /giveaway 1 Golden Raccoon 1h", threadID, messageID);
   }
@@ -151,30 +166,36 @@ ${names.length ? names.map((n, i) => `┃ ${i+1}. ${n}`).join("\n") : "┃ ⚠�
   if (!duration) return api.sendMessage("❌ Invalid time. Use 1m, 1h, or 1d.", threadID, messageID);
 
   const endTime = Date.now() + duration;
+  const id = genID();
+  const hostName = await getUserName(senderID, api);
 
-  giveawayData = {
+  giveaways[id] = {
     prize,
     endTime,
     participants: [],
-    msgID: null
+    msgID: null,
+    hostID: senderID,
+    hostName
   };
 
   const sent = await api.sendMessage(
-`╭━[GIVEAWAY STARTED]━╮
+`╭━🎉[GIVEAWAY STARTED]🎉━╮
 ┃ 🏆 Prize: ${prize}
 ┃ ⏳ Ends in: ${formatTime(duration)}
 ┃ 👥 Participants: 0
+┃ 👑 Host: ${hostName} (${senderID})
+┃ 🆔 ID: ${id}
 ┃ 
 ┃ 👉 Reply to this message to join!
 ╰━━━━━━━━━━━━━━━╯`,
     threadID
   );
 
-  giveawayData.msgID = sent.messageID;
-  await setData(`/giveaway/${threadID}`, giveawayData);
+  giveaways[id].msgID = sent.messageID;
+  await setData(`/giveaway/${threadID}`, giveaways);
 
   // Auto end
-  setTimeout(() => endGiveaway(api, threadID), duration);
+  setTimeout(() => endGiveaway(api, threadID, id), duration);
 };
 
 // Handle replies to join
@@ -182,24 +203,19 @@ module.exports.handleEvent = async function({ api, event }) {
   const { threadID, senderID, type, messageReply } = event;
   if (type !== "message" || !messageReply) return;
 
-  let giveawayData = await getData(`/giveaway/${threadID}`);
-  if (!giveawayData) return;
+  let giveaways = (await getData(`/giveaway/${threadID}`)) || {};
+  const entry = Object.entries(giveaways).find(([id, g]) => g.msgID === messageReply.messageID);
+  if (!entry) return;
 
-  // Only if reply to giveaway message
-  if (messageReply.messageID !== giveawayData.msgID) return;
+  const [id, giveaway] = entry;
 
-  if (!giveawayData.participants.includes(senderID)) {
-    giveawayData.participants.push(senderID);
-    await setData(`/giveaway/${threadID}`, giveawayData);
+  if (!giveaway.participants.includes(senderID)) {
+    giveaway.participants.push(senderID);
+    giveaways[id] = giveaway;
+    await setData(`/giveaway/${threadID}`, giveaways);
 
     const name = await getUserName(senderID, api);
-    api.sendMessage(
-`✅ Nakajoin ka na sa giveaway, ${name}! 🎉`,
-      threadID,
-      undefined,
-      undefined,
-      senderID
-    );
+    api.sendMessage(`✅ Nakajoin ka na sa giveaway **${id}**, ${name}! 🎉`, threadID);
   } else {
     api.sendMessage("⚠️ Nakajoin ka na dati dito!", threadID);
   }
