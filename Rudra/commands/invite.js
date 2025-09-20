@@ -2,8 +2,11 @@ const { setData, getData } = require("../../database.js");
 
 async function getUserName(uid, api, Users) {
   try {
+    // ✅ Unahin sa local Users module
     const name = await Users.getNameUser(uid);
     if (name) return name;
+
+    // ✅ Fallback sa api.getUserInfo
     const info = await api.getUserInfo(uid);
     return info?.[uid]?.name || `FB-User(${uid})`;
   } catch {
@@ -14,7 +17,7 @@ async function getUserName(uid, api, Users) {
 module.exports.config = {
   name: "inviteEvent",
   eventType: ["log:subscribe"],
-  version: "2.0.0",
+  version: "2.1.0",
   credits: "ChatGPT + NN",
 };
 
@@ -30,12 +33,12 @@ module.exports.run = async function ({ api, event, Users }) {
     for (const newP of addedParticipants) {
       const newUserID = newP.userFbId;
 
-      // ⛔ skip bot
+      // ⛔ Skip bot mismo
       if (newUserID === api.getCurrentUserID()) continue;
 
       const actorID = logMessageData.actorFbId; // laging may laman
-
       let msg = "";
+      let mentions = [];
 
       if (actorID !== newUserID) {
         // ✅ Case: may nag-add (actor ≠ new user)
@@ -47,21 +50,28 @@ module.exports.run = async function ({ api, event, Users }) {
         const newUserName = await getUserName(newUserID, api, Users);
 
         msg = `╭━[INVITE NOTIF]━╮
-┃ 👤 Inviter: ${inviterName}
-┃ ➕ Invited: ${newUserName}
+┃ 👤 Inviter: @${inviterName}
+┃ ➕ Invited: @${newUserName}
 ┃ 📊 Total Invites: ${gcData[actorID].count}
 ╰━━━━━━━━━━━━━━━╯`;
+
+        mentions = [
+          { tag: inviterName, id: actorID },
+          { tag: newUserName, id: newUserID }
+        ];
 
       } else {
         // ✅ Case: siya mismo ang sumali (via link)
         const joinerName = await getUserName(newUserID, api, Users);
 
         msg = `╭━[JOIN NOTIF]━╮
-┃ 🚪 ${joinerName} joined the group via link.
+┃ 🚪 @${joinerName} joined the group via link.
 ╰━━━━━━━━━━━━━━━╯`;
+
+        mentions = [{ tag: joinerName, id: newUserID }];
       }
 
-      api.sendMessage(msg, threadID);
+      api.sendMessage({ body: msg, mentions }, threadID);
     }
   } catch (err) {
     console.error("❌ ERROR in inviteEvent module:", err);
