@@ -50,7 +50,7 @@ module.exports.run = async function ({ api, event, Users }) {
 ┃ 👤 Inviter: ${inviterName}
 ┃ ➕ Invited: ${newUserName}
 ┃ 📊 Total Invites: ${gcData[actorID].count}
-╰━━━━━━━━━━━━━━━━━━━━╯`;
+╰━━━━━━━━━━━━━━━╯`;
 
       } else {
         // ✅ Case: siya mismo ang sumali (via link)
@@ -58,7 +58,7 @@ module.exports.run = async function ({ api, event, Users }) {
 
         msg = `╭━[JOIN NOTIF]━╮
 ┃ 🚪 ${joinerName} joined the group via link.
-╰━━━━━━━━━━━━━━━━━━━━╯`;
+╰━━━━━━━━━━━━━━━╯`;
       }
 
       api.sendMessage(msg, threadID);
