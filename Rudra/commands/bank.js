@@ -3,7 +3,7 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "2.8.0",
+  version: "2.9.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
   description: "Bank system per GC with auto-updated usernames + send coins",
@@ -12,23 +12,25 @@ module.exports.config = {
   cooldowns: 3,
 };
 
-// 🔑 Fetch username via api.getUserInfo
-async function getUserName(uid, api) {
+// 🔑 Fetch username via Users.getName
+async function getUserName(uid, Users) {
   try {
-    const info = await api.getUserInfo(uid);
-    if (info && info[uid]?.name) return info[uid].name;
+    const name = await Users.getName(uid);
+    return name || "Unknown User";
   } catch (err) {
     console.log(`[BANK] Error fetching name for UID: ${uid}`, err);
+    return "Unknown User";
   }
-  return `FB-User(${uid})`;
 }
 
 // 🏦 Format balance message
 function formatBalance(user, balance) {
-  return `🏦 Bank Account 🏦\n\n👤 ${user}\n💰 Balance: ${balance.toLocaleString()} coins`;
+  return `🏦 𝗕𝗮𝗻𝗸 𝗔𝗰𝗰𝗼𝘂𝗻𝘁 🏦\n\n` +
+         `👤 𝗨𝘀𝗲𝗿: ${user}\n` +
+         `💰 𝗕𝗮𝗹𝗮𝗻𝗰𝗲: ${balance.toLocaleString()} coins`;
 }
 
-module.exports.run = async ({ api, event, args }) => {
+module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID, mentions } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
@@ -38,17 +40,12 @@ module.exports.run = async ({ api, event, args }) => {
     let results = [];
 
     for (let uid in allData) {
-      let freshName = await getUserName(uid, api);
+      const freshName = await getUserName(uid, Users);
       if (allData[uid].name !== freshName) {
         allData[uid].name = freshName;
         await setData(`bank/${threadID}/${uid}`, allData[uid]);
       }
-
-      results.push({
-        uid,
-        name: freshName,
-        balance: allData[uid].balance || 0
-      });
+      results.push({ uid, name: freshName, balance: allData[uid].balance || 0 });
     }
 
     if (results.length === 0)
@@ -56,16 +53,16 @@ module.exports.run = async ({ api, event, args }) => {
 
     results.sort((a, b) => b.balance - a.balance);
 
-    let msg = `📋 Bank Accounts in this group (Total: ${results.length}) 📋\n`;
+    let msg = `📋 𝗕𝗮𝗻𝗸 𝗔𝗰𝗰𝗼𝘂𝗻𝘁𝘀 (Total: ${results.length}) 📋\n\n`;
     for (let i = 0; i < results.length; i++) {
       const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
-      msg += `\n${medal} 👤 ${results[i].name} — 💰 ${results[i].balance.toLocaleString()} coins`;
+      msg += `${medal} ${results[i].name} — 💰 ${results[i].balance.toLocaleString()} coins\n`;
     }
 
     return api.sendMessage(msg, threadID, messageID);
   }
 
-  // ➕ Add coins (admin only, per group)
+  // ➕ Add coins (admin only)
   if (command === "add") {
     if (!ADMINBOT.includes(senderID))
       return api.sendMessage("❌ Only bot admins can add coins.", threadID, messageID);
@@ -75,9 +72,8 @@ module.exports.run = async ({ api, event, args }) => {
     if (!targetUID || isNaN(amount) || amount <= 0)
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID, messageID);
 
-    const freshName = await getUserName(targetUID, api);
+    const freshName = await getUserName(targetUID, Users);
     let userData = (await getData(`bank/${threadID}/${targetUID}`)) || {
-      uid: targetUID,
       name: freshName,
       balance: 0
     };
@@ -93,36 +89,31 @@ module.exports.run = async ({ api, event, args }) => {
     );
   }
 
-  // 💸 Send coins to mentioned user
+  // 💸 Send coins
   if (command === "send") {
     if (!mentions || Object.keys(mentions).length === 0)
       return api.sendMessage("❌ Please mention a user to send coins.", threadID, messageID);
 
     const amount = parseInt(args[2]);
     if (isNaN(amount) || amount <= 0)
-      return api.sendMessage("❌ Please specify a valid number of coins to send.", threadID, messageID);
+      return api.sendMessage("❌ Please specify a valid number of coins.", threadID, messageID);
 
     const recipientID = Object.keys(mentions)[0];
     if (recipientID === senderID)
       return api.sendMessage("❌ You cannot send coins to yourself.", threadID, messageID);
 
-    // Load sender data
     let senderData = (await getData(`bank/${threadID}/${senderID}`)) || {
-      uid: senderID,
-      name: await getUserName(senderID, api),
+      name: await getUserName(senderID, Users),
       balance: 0
     };
     if (senderData.balance < amount)
-      return api.sendMessage("❌ You don't have enough coins to send.", threadID, messageID);
+      return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
 
-    // Load recipient data
     let recipientData = (await getData(`bank/${threadID}/${recipientID}`)) || {
-      uid: recipientID,
-      name: await getUserName(recipientID, api),
+      name: await getUserName(recipientID, Users),
       balance: 0
     };
 
-    // Update balances
     senderData.balance -= amount;
     recipientData.balance += amount;
 
@@ -130,17 +121,16 @@ module.exports.run = async ({ api, event, args }) => {
     await setData(`bank/${threadID}/${recipientID}`, recipientData);
 
     return api.sendMessage(
-      `✅ Successfully sent 💰 ${amount.toLocaleString()} coins to ${recipientData.name}.\n` +
+      `✅ You sent 💰 ${amount.toLocaleString()} coins to ${recipientData.name}.\n` +
       `Your new balance: 💰 ${senderData.balance.toLocaleString()} coins`,
       threadID,
       messageID
     );
   }
 
-  // 👤 Default: Check own balance in this group
-  const freshName = await getUserName(senderID, api);
+  // 👤 Default: show own balance
+  const freshName = await getUserName(senderID, Users);
   let userData = (await getData(`bank/${threadID}/${senderID}`)) || {
-    uid: senderID,
     name: freshName,
     balance: 0
   };
@@ -148,9 +138,5 @@ module.exports.run = async ({ api, event, args }) => {
   userData.name = freshName;
   await setData(`bank/${threadID}/${senderID}`, userData);
 
-  return api.sendMessage(
-    formatBalance(userData.name, userData.balance),
-    threadID,
-    messageID
-  );
+  return api.sendMessage(formatBalance(userData.name, userData.balance), threadID, messageID);
 };
