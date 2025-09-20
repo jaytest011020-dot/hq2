@@ -2,12 +2,12 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "giveaway",
-  version: "3.5.0",
+  version: "4.1.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaz La Peña",
   description: "Giveaway with reactions, Firebase persistence, and auto-end",
   commandCategory: "group",
-  usages: "/giveaway <prize> <end time>",
+  usages: "/giveaway <prize> <end time> | /giveaway resend <ID>",
   cooldowns: 5,
 };
 
@@ -37,8 +37,19 @@ async function buildMessage(api, threadID, data, mentionID = null) {
 ⏰ Ends: ${new Date(data.end).toLocaleString("en-PH", { hour12: false })}
 ──────────────────────
 ✅ Participants: ${progress}
-(React 👍 to join)
+(React to this message to join)
   `.trim();
+
+  // List joined users
+  if (data.joined.length > 0) {
+    const infos = await api.getUserInfo(data.joined);
+    let list = "";
+    for (const uid of data.joined) {
+      const name = infos[uid]?.name || "User";
+      list += `\n• ${name}`;
+    }
+    msg += `\n\n👥 Joined:${list}`;
+  }
 
   const mentions = [];
   if (mentionID) {
@@ -76,27 +87,76 @@ async function endGiveaway(api, threadID, data) {
   await rollWinners(api, threadID, data);
 }
 
-// Handle reactions
+// Handle reactions (add/remove)
 module.exports.handleReaction = async ({ api, event, handleReaction }) => {
-  const { threadID, userID } = event;
+  const { threadID, userID, reaction } = event;
   const ID = handleReaction.ID;
 
   let data = await getData(`giveaway/${ID}`);
   if (!data || data.status !== "open") return;
-  if (data.joined.includes(userID)) return;
 
-  data.joined.push(userID);
-  await setData(`giveaway/${ID}`, data);
+  // Case 1: Add reaction
+  if (reaction) {
+    if (data.joined.includes(userID)) return; // already joined
+    data.joined.push(userID);
+    await setData(`giveaway/${ID}`, data);
 
-  // Auto-resend updated giveaway with mention
-  const msg = await buildMessage(api, threadID, data, userID);
-  await api.sendMessage(msg, threadID);
+    const msg = await buildMessage(api, threadID, data, userID);
+    await api.sendMessage(msg, threadID, (err, info) => {
+      if (!err) {
+        global.client.handleReaction.push({
+          name: module.exports.config.name,
+          messageID: info.messageID,
+          ID
+        });
+      }
+    });
+  }
+
+  // Case 2: Remove reaction
+  else {
+    if (!data.joined.includes(userID)) return; // not joined
+    data.joined = data.joined.filter(id => id !== userID);
+    await setData(`giveaway/${ID}`, data);
+
+    const msg = await buildMessage(api, threadID, data);
+    await api.sendMessage(msg, threadID, (err, info) => {
+      if (!err) {
+        global.client.handleReaction.push({
+          name: module.exports.config.name,
+          messageID: info.messageID,
+          ID
+        });
+      }
+    });
+  }
 };
 
 // Run command
 module.exports.run = async ({ api, event, args }) => {
   const { threadID, senderID } = event;
 
+  // RESEND
+  if (args[0] === "resend") {
+    const ID = args[1];
+    if (!ID) return api.sendMessage("❌ Usage: /giveaway resend <ID>", threadID);
+
+    let data = await getData(`giveaway/${ID}`);
+    if (!data) return api.sendMessage("❌ Giveaway not found.", threadID);
+
+    const msg = await buildMessage(api, threadID, data);
+    return api.sendMessage(msg, threadID, (err, info) => {
+      if (!err) {
+        global.client.handleReaction.push({
+          name: module.exports.config.name,
+          messageID: info.messageID,
+          ID
+        });
+      }
+    });
+  }
+
+  // CREATE
   if (args.length < 2) {
     return api.sendMessage("❌ Usage: /giveaway <prize> <time>\nExample: /giveaway 1 Golden Raccoon 1d", threadID);
   }
