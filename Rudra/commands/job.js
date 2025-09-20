@@ -40,7 +40,7 @@ const FUN_PHRASES = [
 
 module.exports.config = {
   name: "job",
-  version: "3.3.0",
+  version: "3.4.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
   description: "Random job system per GC with buffs, rare jobs, critical bonus, emojis, and fun phrases",
@@ -53,18 +53,12 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// 🔑 Fetch username
-async function getUserName(uid, api, Users) {
+// 🔑 Fetch username via Users.getName
+async function getUserName(uid, Users) {
   try {
-    const info = await api.getUserInfo(uid);
-    return info[uid]?.name || `FB-User(${uid})`;
+    return await Users.getName(uid) || "Unknown User";
   } catch {
-    try {
-      const info2 = await Users.getInfo(uid);
-      return info2[uid]?.name || `FB-User(${uid})`;
-    } catch {
-      return `FB-User(${uid})`;
-    }
+    return "Unknown User";
   }
 }
 
@@ -99,10 +93,10 @@ module.exports.run = async function({ api, event, Users }) {
 
   // Check cooldown
   const lastTime = userJobData[job.name] || 0;
-  if (now - lastTime < jobCooldown) {
-    const remaining = jobCooldown - (now - lastTime);
-    const mins = Math.floor(remaining / 60000);
-    const secs = Math.floor((remaining % 60000) / 1000);
+  const remainingTime = jobCooldown - (now - lastTime);
+  if (remainingTime > 0) {
+    const mins = Math.floor(remainingTime / 60000);
+    const secs = Math.floor((remainingTime % 60000) / 1000);
     return api.sendMessage(`⏳ You must wait ${mins}m ${secs}s before doing the ${job.name} job again.`, threadID, messageID);
   }
 
@@ -121,11 +115,11 @@ module.exports.run = async function({ api, event, Users }) {
   }
 
   // Update bank
-  let bankData = (await getData(`bank/${threadID}/${senderID}`)) || { uid: senderID, name: `FB-User(${senderID})`, balance: 0 };
+  let bankData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0 };
   bankData.balance += earned;
 
   // Get fresh username
-  const userName = await getUserName(senderID, api, Users);
+  const userName = await getUserName(senderID, Users);
   bankData.name = userName;
   await setData(`bank/${threadID}/${senderID}`, bankData);
 
