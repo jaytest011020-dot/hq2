@@ -3,24 +3,32 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "2.9.0",
+  version: "3.0.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
-  description: "Bank system per GC with auto-updated usernames + send coins",
+  description: "Bank system per group chat with auto-updated usernames + send coins",
   usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>",
   commandCategory: "economy",
   cooldowns: 3,
 };
 
-// 🔑 Fetch username via Users.getName
-async function getUserName(uid, Users) {
+// 🔑 Fetch username via api.getUserInfo, fallback to Users.getName
+async function getUserName(uid, api, Users) {
+  try {
+    const info = await api.getUserInfo(uid);
+    if (info && info[uid]?.name) return info[uid].name;
+  } catch (err) {
+    console.log(`[BANK] api.getUserInfo failed for UID ${uid}:`, err);
+  }
+
   try {
     const name = await Users.getName(uid);
-    return name || "Unknown User";
+    if (name) return name;
   } catch (err) {
-    console.log(`[BANK] Error fetching name for UID: ${uid}`, err);
-    return "Unknown User";
+    console.log(`[BANK] Users.getName failed for UID ${uid}:`, err);
   }
+
+  return `FB-User(${uid})`;
 }
 
 // 🏦 Format balance message
@@ -34,30 +42,37 @@ module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID, mentions } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 📋 Show all accounts in current group
+  // 📋 Show all accounts in the current group
   if (command === "all") {
-    let allData = (await getData(`bank/${threadID}`)) || {};
-    let results = [];
+    const allData = (await getData(`bank/${threadID}`)) || {};
+    const results = [];
 
-    for (let uid in allData) {
-      const freshName = await getUserName(uid, Users);
+    for (const uid in allData) {
+      const freshName = await getUserName(uid, api, Users);
+
+      // Auto-update name in database
       if (allData[uid].name !== freshName) {
         allData[uid].name = freshName;
         await setData(`bank/${threadID}/${uid}`, allData[uid]);
       }
-      results.push({ uid, name: freshName, balance: allData[uid].balance || 0 });
+
+      results.push({
+        uid,
+        name: freshName,
+        balance: allData[uid].balance || 0
+      });
     }
 
-    if (results.length === 0)
-      return api.sendMessage("🏦 No accounts found in this group.", threadID, messageID);
+    if (!results.length) return api.sendMessage("🏦 No accounts found in this group.", threadID, messageID);
 
+    // Sort by balance descending
     results.sort((a, b) => b.balance - a.balance);
 
     let msg = `📋 𝗕𝗮𝗻𝗸 𝗔𝗰𝗰𝗼𝘂𝗻𝘁𝘀 (Total: ${results.length}) 📋\n\n`;
-    for (let i = 0; i < results.length; i++) {
+    results.forEach((user, i) => {
       const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
-      msg += `${medal} ${results[i].name} — 💰 ${results[i].balance.toLocaleString()} coins\n`;
-    }
+      msg += `${medal} ${user.name} — 💰 ${user.balance.toLocaleString()} coins\n`;
+    });
 
     return api.sendMessage(msg, threadID, messageID);
   }
@@ -72,7 +87,7 @@ module.exports.run = async function({ api, event, args, Users }) {
     if (!targetUID || isNaN(amount) || amount <= 0)
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID, messageID);
 
-    const freshName = await getUserName(targetUID, Users);
+    const freshName = await getUserName(targetUID, api, Users);
     let userData = (await getData(`bank/${threadID}/${targetUID}`)) || {
       name: freshName,
       balance: 0
@@ -91,7 +106,7 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   // 💸 Send coins
   if (command === "send") {
-    if (!mentions || Object.keys(mentions).length === 0)
+    if (!mentions || !Object.keys(mentions).length)
       return api.sendMessage("❌ Please mention a user to send coins.", threadID, messageID);
 
     const amount = parseInt(args[2]);
@@ -103,14 +118,15 @@ module.exports.run = async function({ api, event, args, Users }) {
       return api.sendMessage("❌ You cannot send coins to yourself.", threadID, messageID);
 
     let senderData = (await getData(`bank/${threadID}/${senderID}`)) || {
-      name: await getUserName(senderID, Users),
+      name: await getUserName(senderID, api, Users),
       balance: 0
     };
+
     if (senderData.balance < amount)
       return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
 
     let recipientData = (await getData(`bank/${threadID}/${recipientID}`)) || {
-      name: await getUserName(recipientID, Users),
+      name: await getUserName(recipientID, api, Users),
       balance: 0
     };
 
@@ -129,7 +145,7 @@ module.exports.run = async function({ api, event, args, Users }) {
   }
 
   // 👤 Default: show own balance
-  const freshName = await getUserName(senderID, Users);
+  const freshName = await getUserName(senderID, api, Users);
   let userData = (await getData(`bank/${threadID}/${senderID}`)) || {
     name: freshName,
     balance: 0
