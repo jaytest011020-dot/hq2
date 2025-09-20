@@ -6,14 +6,14 @@ module.exports.config = {
   description: "Calculate pet weights (Age 1 → Age 100, linear growth up to 10× Age 1)",
   usePrefix: true,
   commandCategory: "gag tools",
-  usages: "/petcalc <ageLevel> <weightKgAtThatAge>",
+  usages: "/petcal <ageLevel> <weightKgAtThatAge>",
   cooldowns: 5
 };
 
 // 📌 Helper: Usage Example
 function usageExample(api, threadID, messageID) {
   return api.sendMessage(
-    "❌ Wrong usage!\n\n📌 Correct Usage:\n/petcalc <ageLevel> <weightKgAtThatAge>\n\n💡 Example:\n/petcalc 5 2.7",
+    "❌ Wrong usage!\n\n📌 Correct Usage:\n/petcal <ageLevel> <weightKgAtThatAge>\n\n💡 Example:\n/petcal 1 2.7",
     threadID,
     { messageID }
   );
