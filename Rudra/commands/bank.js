@@ -3,11 +3,11 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "2.6.0",
+  version: "2.7.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
-  description: "Bank system fully per group chat with auto-updated usernames",
-  usages: "/bank, /bank all, /bank add <uid> <amount>",
+  description: "Bank system fully per group chat with auto-updated usernames + send coins",
+  usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>",
   commandCategory: "economy",
   cooldowns: 3,
 };
@@ -29,7 +29,7 @@ function formatBalance(user, balance) {
 }
 
 module.exports.run = async ({ api, event, args }) => {
-  const { threadID, senderID, messageID } = event;
+  const { threadID, senderID, messageID, mentions } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
   // 📋 Show all accounts in current group
@@ -93,6 +93,43 @@ module.exports.run = async ({ api, event, args }) => {
 
     return api.sendMessage(
       `✅ Added 💰 ${amount.toLocaleString()} coins to ${userData.name}'s account.`,
+      threadID,
+      messageID
+    );
+  }
+
+  // 💸 Send coins to mentioned user
+  if (command === "send") {
+    if (!mentions || Object.keys(mentions).length === 0)
+      return api.sendMessage("❌ Please mention a user to send coins.", threadID, messageID);
+
+    const amount = parseInt(args[2]);
+    if (isNaN(amount) || amount <= 0)
+      return api.sendMessage("❌ Please specify a valid number of coins to send.", threadID, messageID);
+
+    const recipientID = Object.keys(mentions)[0];
+    if (recipientID === senderID)
+      return api.sendMessage("❌ You cannot send coins to yourself.", threadID, messageID);
+
+    // Load sender data
+    let senderData = (await getData(`bank/${threadID}/${senderID}`)) || { uid: senderID, name: await getUserName(senderID, api), balance: 0 };
+    if (senderData.balance < amount)
+      return api.sendMessage("❌ You don't have enough coins to send.", threadID, messageID);
+
+    // Load recipient data
+    let recipientData = (await getData(`bank/${threadID}/${recipientID}`)) || { uid: recipientID, name: await getUserName(recipientID, api), balance: 0 };
+
+    // Update balances
+    senderData.balance -= amount;
+    recipientData.balance += amount;
+
+    // Save updated data
+    await setData(`bank/${threadID}/${senderID}`, senderData);
+    await setData(`bank/${threadID}/${recipientID}`, recipientData);
+
+    return api.sendMessage(
+      `✅ Successfully sent 💰 ${amount.toLocaleString()} coins to ${recipientData.name}.\n` +
+      `Your new balance: 💰 ${senderData.balance.toLocaleString()} coins`,
       threadID,
       messageID
     );
