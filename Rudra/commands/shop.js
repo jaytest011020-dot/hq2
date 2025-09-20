@@ -8,11 +8,11 @@ const SHOP_ITEMS = [
 
 module.exports.config = {
   name: "shop",
-  version: "1.2.0",
+  version: "1.3.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
   description: "Buy items to use as buffs",
-  usages: "/shop, /shop buy <item number|name> <qty>",
+  usages: "/shop, /shop buy <item number> <quantity>",
   commandCategory: "economy",
   cooldowns: 3
 };
@@ -20,29 +20,33 @@ module.exports.config = {
 module.exports.run = async function({ api, event, args }) {
   const { senderID, threadID, messageID } = event;
 
+  // Show shop list
   if (!args[0]) {
-    // Show shop items with spaces
-    let msg = "🛒 Shop Items:\n\n";
+    let msg = "🛒 𝗦𝗵𝗼𝗽 𝗜𝘁𝗲𝗺𝘀 🛒\n\n";
     SHOP_ITEMS.forEach((item, idx) => {
-      msg += `${idx + 1}. ${item.name} - 💰 ${item.price} coins\n   ${item.description}\n\n`;
+      msg += `====================\n`;
+      msg += `📦 ${idx + 1}. ${item.name}\n`;
+      msg += `💰 Price: ${item.price} coins\n`;
+      msg += `📝 ${item.description}\n`;
     });
-    msg += `Usage: /shop buy <item number|name> <quantity>`;
+    msg += `====================\n`;
+    msg += `Usage: /shop buy <item number> <quantity>`;
     return api.sendMessage(msg, threadID, messageID);
   }
 
+  // Buy item
   if (args[0].toLowerCase() === "buy") {
     const itemArg = args[1];
     const quantity = parseInt(args[2]) || 1;
 
     if (!itemArg) {
       return api.sendMessage(
-        `❌ Usage: /shop buy <item number|name> <quantity>\nExample: /shop buy 1 2 or /shop buy "Energy Drink" 2`,
+        `❌ Usage: /shop buy <item number> <quantity>\nExample: /shop buy 1 2 or /shop buy "Energy Drink" 2`,
         threadID,
         messageID
       );
     }
 
-    // Check if itemArg is a number (item index) or name
     let shopItem;
     const itemIndex = parseInt(itemArg);
     if (!isNaN(itemIndex)) {
@@ -59,7 +63,6 @@ module.exports.run = async function({ api, event, args }) {
       );
     }
 
-    // Load user's bank
     const bankData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0 };
     const totalCost = shopItem.price * quantity;
 
@@ -69,7 +72,7 @@ module.exports.run = async function({ api, event, args }) {
     bankData.balance -= totalCost;
     await setData(`bank/${threadID}/${senderID}`, bankData);
 
-    // Add item to inventory
+    // Add to inventory
     let inventory = (await getData(`inventory/${threadID}/${senderID}`)) || { items: [] };
     const invItem = inventory.items.find(i => i.name === shopItem.name);
 
@@ -78,17 +81,23 @@ module.exports.run = async function({ api, event, args }) {
 
     await setData(`inventory/${threadID}/${senderID}`, inventory);
 
-    return api.sendMessage(
-      `✅ You bought ${quantity} x ${shopItem.name} for ${totalCost} coins.\n` +
-      `Your new balance: 💰 ${bankData.balance.toLocaleString()} coins`,
-      threadID,
-      messageID
-    );
+    const msg = `
+✅ Purchase Successful!
+====================
+📦 Item: ${shopItem.name}
+🔢 Quantity: ${quantity}
+💰 Total Cost: ${totalCost.toLocaleString()} coins
+💵 New Balance: ${bankData.balance.toLocaleString()} coins
+📝 Effect: ${shopItem.description}
+====================
+`;
+
+    return api.sendMessage(msg, threadID, messageID);
   }
 
   // Invalid command
   return api.sendMessage(
-    `❌ Invalid command.\nUsage: /shop buy <item number|name> <quantity>\nExample: /shop buy 1 2 or /shop buy "Energy Drink" 2`,
+    `❌ Invalid command.\nUsage: /shop buy <item number> <quantity>\nExample: /shop buy 1 2 or /shop buy "Energy Drink" 2`,
     threadID,
     messageID
   );
