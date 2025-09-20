@@ -45,10 +45,10 @@ async function formatList(uids, api) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "4.0.0",
+  version: "5.0.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Automatically track active members by seen & kick inactive users after deadline",
+  description: "Automatically track active members by seen/chat & kick inactive users after deadline",
   commandCategory: "group",
   usages: "/autoclean 1m|1h|1d | cancel | resend | list",
   cooldowns: 5
@@ -96,7 +96,7 @@ module.exports.run = async function({ api, event, args }) {
 ┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers?.length || 0}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
-┃ 🔔 Activity is automatically tracked when members see messages.
+┃ 🔔 Activity is automatically tracked when members see or send a message.
 ╰━━━━━━━━━━━━━━━╯`,
       threadID
     );
@@ -148,7 +148,7 @@ ${inactiveList}
 ┃ 👥 Active: 0 / ${members.length}
 ┃ ⏳ Time left: ${formatTime(duration)}
 ┃
-┃ 🔔 Activity will be automatically tracked when members see messages.
+┃ 🔔 Activity will be automatically tracked when members see or send a message.
 ╰━━━━━━━━━━━━━━━╯`,
     threadID
   );
@@ -189,17 +189,19 @@ ${inactiveList}
   }, duration);
 };
 
-// Handle "seen" events
+// Handle seen/chat events
 module.exports.handleEvent = async function({ api, event }) {
-  const { threadID, senderID } = event;
-  if (event.type !== "message_seen") return;
+  const { threadID, senderID, type } = event;
+
+  // Only check message_seen or message (chat text)
+  if (type !== "message_seen" && type !== "message") return;
 
   let pollData = await getData(`/autoclean/${threadID}`);
   if (!pollData) return;
 
   if (!Array.isArray(pollData.activeUsers)) pollData.activeUsers = [];
 
-  // If sender is not active yet, mark as active
+  // If not yet active, register now
   if (!pollData.activeUsers.includes(senderID)) {
     pollData.activeUsers.push(senderID);
     await setData(`/autoclean/${threadID}`, pollData);
@@ -210,7 +212,7 @@ module.exports.handleEvent = async function({ api, event }) {
       mentions: [{ tag: `@${name}`, id: senderID }]
     });
 
-    // Update ongoing poll
+    // Update ongoing message
     if (pollData.pollMsgID) {
       try { await api.unsendMessage(pollData.pollMsgID); } catch {}
     }
@@ -222,7 +224,7 @@ module.exports.handleEvent = async function({ api, event }) {
 ┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
-┃ 🔔 Activity is automatically tracked when members see messages.
+┃ 🔔 Activity is automatically tracked when members see or send a message.
 ╰━━━━━━━━━━━━━━━╯`
       },
       threadID
