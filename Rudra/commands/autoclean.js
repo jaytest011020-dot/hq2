@@ -1,5 +1,6 @@
 const { setData, getData } = require("../../database.js");
 
+// Helper to parse duration like "1m", "2h", "1d"
 function parseDuration(str) {
   const match = str.match(/(\d+)([mhd])/);
   if (!match) return null;
@@ -11,6 +12,7 @@ function parseDuration(str) {
   return null;
 }
 
+// Format milliseconds to readable string
 function formatTime(ms) {
   if (ms <= 0) return "0s";
   const sec = Math.floor(ms / 1000) % 60;
@@ -20,17 +22,17 @@ function formatTime(ms) {
   return `${day > 0 ? day + "d " : ""}${hr > 0 ? hr + "h " : ""}${min > 0 ? min + "m " : ""}${sec}s`;
 }
 
-// ✅ Wrapper to get user name
+// Get user name safely
 async function getUserName(uid, api) {
   try {
     const info = await api.getUserInfo(uid);
-    if (info && info[uid]?.name) return info[uid].name;
-    return `FB-User(${uid})`;
+    return info?.[uid]?.name || `FB-User(${uid})`;
   } catch {
     return `FB-User(${uid})`;
   }
 }
 
+// Format user list
 async function formatList(uids, api) {
   if (!uids || uids.length === 0) return "None";
   let lines = [];
@@ -43,34 +45,35 @@ async function formatList(uids, api) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "4.1.0",
+  version: "4.0.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Auto kick inactive users using seen only",
+  description: "Automatically track active members by seen & kick inactive users after deadline",
   commandCategory: "group",
   usages: "/autoclean 1m|1h|1d | cancel | resend | list",
   cooldowns: 5
 };
 
-module.exports.run = async function ({ api, event, args }) {
+// Run command
+module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
-  const ownerID = "61559999326713"; // replace with your permanent UID
+  const ownerID = "61559999326713"; // bot owner UID
   const botID = api.getCurrentUserID();
 
-  // ✅ Only allow owner + admins
   const info = await api.getThreadInfo(threadID);
   const isAdmin = info.adminIDs.some(a => a.id === senderID);
   if (senderID !== ownerID && !isAdmin) {
-    return api.sendMessage("❌ Only group admins or bot owner can use this command.", threadID, messageID);
+    return api.sendMessage("❌ Only group admins or the bot owner can use this command.", threadID, messageID);
   }
 
-  if (args.length === 0) {
+  if (!args[0]) {
     return api.sendMessage("❌ Usage: /autoclean 1m|1h|1d | cancel | resend | list", threadID, messageID);
   }
 
   const sub = args[0].toLowerCase();
   let pollData = await getData(`/autoclean/${threadID}`);
 
+  // Cancel autoclean
   if (sub === "cancel") {
     if (pollData?.pollMsgID) {
       try { await api.unsendMessage(pollData.pollMsgID); } catch {}
@@ -79,6 +82,7 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage("🛑 AutoClean canceled.", threadID, messageID);
   }
 
+  // Resend ongoing status
   if (sub === "resend") {
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
 
@@ -92,7 +96,7 @@ module.exports.run = async function ({ api, event, args }) {
 ┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers?.length || 0}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
-┃ 🔔 Seen messages to mark as active. Bot will auto-kick inactive users after deadline.
+┃ 🔔 Activity is automatically tracked when members see messages.
 ╰━━━━━━━━━━━━━━━╯`,
       threadID
     );
@@ -102,42 +106,32 @@ module.exports.run = async function ({ api, event, args }) {
     return;
   }
 
+  // List active & inactive users
   if (sub === "list") {
     if (!pollData) return api.sendMessage("⚠️ No active autoclean.", threadID, messageID);
 
-    const active = pollData.activeUsers || [];
-    const allUsers = pollData.totalUsers || [];
-    const exempted = info.adminIDs.map(a => a.id).concat([botID, ownerID]);
-    const inactive = allUsers.filter(uid => !active.includes(uid) && !exempted.includes(uid));
-
-    const activeList = await formatList(active, api);
-    const inactiveList = await formatList(inactive, api);
-    const exemptedList = await formatList(exempted, api);
+    const activeList = await formatList(pollData.activeUsers, api);
+    const inactiveList = await formatList(
+      pollData.totalUsers.filter(uid => !pollData.activeUsers.includes(uid)),
+      api
+    );
 
     const remaining = pollData.endTime - Date.now();
     return api.sendMessage(
       `📋 AUTO CLEAN STATUS
-
 ✅ Active:
 ${activeList}
-
-🚫 Inactive (will be auto-kicked):
+🚫 Inactive (will be kicked):
 ${inactiveList}
-
-🛡 Exempted:
-${exemptedList}
-
 ⏳ Time left: ${formatTime(remaining)}`,
       threadID,
       messageID
     );
   }
 
-  // start autoclean
+  // Start autoclean
   const duration = parseDuration(sub);
-  if (!duration) {
-    return api.sendMessage("❌ Invalid duration. Use 1m, 1h, or 1d.", threadID, messageID);
-  }
+  if (!duration) return api.sendMessage("❌ Invalid duration. Use 1m, 1h, or 1d.", threadID, messageID);
 
   const members = info.participantIDs;
   const endTime = Date.now() + duration;
@@ -154,15 +148,14 @@ ${exemptedList}
 ┃ 👥 Active: 0 / ${members.length}
 ┃ ⏳ Time left: ${formatTime(duration)}
 ┃
-┃ 🔔 Seen messages to mark yourself as active. Bot will auto-kick inactive users after the deadline.
+┃ 🔔 Activity will be automatically tracked when members see messages.
 ╰━━━━━━━━━━━━━━━╯`,
     threadID
   );
   pollData.pollMsgID = sent.messageID;
-
   await setData(`/autoclean/${threadID}`, pollData);
 
-  // schedule auto-kick
+  // Schedule auto-kick
   setTimeout(async () => {
     const finalData = await getData(`/autoclean/${threadID}`);
     if (!finalData) return;
@@ -188,7 +181,7 @@ ${exemptedList}
       api.sendMessage(
         `╭[AUTO CLEAN FINISHED]╮
 ┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
-┃ 🚫 Kicked: ${toKick.length} (inactive users)
+┃ 🚫 Kicked: ${toKick.length}
 ╰━━━━━━━━━━━━━━━╯`,
         threadID
       );
@@ -196,8 +189,8 @@ ${exemptedList}
   }, duration);
 };
 
-// ✅ Handle only seen events
-module.exports.handleEvent = async function ({ api, event }) {
+// Handle "seen" events
+module.exports.handleEvent = async function({ api, event }) {
   const { threadID, senderID } = event;
   if (event.type !== "message_seen") return;
 
@@ -206,23 +199,18 @@ module.exports.handleEvent = async function ({ api, event }) {
 
   if (!Array.isArray(pollData.activeUsers)) pollData.activeUsers = [];
 
+  // If sender is not active yet, mark as active
   if (!pollData.activeUsers.includes(senderID)) {
     pollData.activeUsers.push(senderID);
     await setData(`/autoclean/${threadID}`, pollData);
 
     const name = await getUserName(senderID, api);
 
-    // Update users database
-    const userData = (await getData(`/users/${senderID}`)) || {};
-    userData.name = name;
-    await setData(`/users/${senderID}`, userData);
-
-    // Notify only the new active user
-    api.sendMessage(`✅ You are now marked as active: @${name}`, threadID, null, {
+    api.sendMessage(`✅ You are now registered as active: @${name}`, threadID, null, {
       mentions: [{ tag: `@${name}`, id: senderID }]
     });
 
-    // Resend updated poll
+    // Update ongoing poll
     if (pollData.pollMsgID) {
       try { await api.unsendMessage(pollData.pollMsgID); } catch {}
     }
@@ -234,11 +222,12 @@ module.exports.handleEvent = async function ({ api, event }) {
 ┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
-┃ 🔔 Seen messages to mark yourself as active. Bot will auto-kick inactive users after the deadline.
+┃ 🔔 Activity is automatically tracked when members see messages.
 ╰━━━━━━━━━━━━━━━╯`
       },
       threadID
     );
+
     pollData.pollMsgID = sent.messageID;
     await setData(`/autoclean/${threadID}`, pollData);
   }
