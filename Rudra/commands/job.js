@@ -21,7 +21,7 @@ const JOBS = [
   { name: "Pilot", min: 120, max: 250, cooldown: 40 * 60 * 1000 },
   { name: "Soldier", min: 70, max: 140, cooldown: 20 * 60 * 1000 },
   { name: "Hacker", min: 300, max: 500, cooldown: 60 * 60 * 1000, rare: true },
-  { name: "CEO", min: 500, max: 1000, cooldown: 2 * 60 * 60 * 1000, rare: true },
+  { name: "CEO", min: 500, max: 1000, cooldown: 24 * 60 * 60 * 1000, rare: true },
 ];
 
 // Job emojis
@@ -40,10 +40,10 @@ const FUN_PHRASES = [
 
 module.exports.config = {
   name: "job",
-  version: "3.4.0",
+  version: "4.0.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
-  description: "Random job system per GC with buffs, rare jobs, critical bonus, emojis, and fun phrases",
+  description: "Random job system with per-job cooldowns, buffs, rare jobs, critical bonus, emojis, and fun phrases",
   commandCategory: "economy",
   usages: "/job",
   cooldowns: 3
@@ -53,12 +53,12 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// 🔑 Fetch username via Users.getName
+// 🔑 Get username
 async function getUserName(uid, Users) {
   try {
-    return await Users.getName(uid) || "Unknown User";
+    return await Users.getName(uid) || `FB-User(${uid})`;
   } catch {
-    return "Unknown User";
+    return `FB-User(${uid})`;
   }
 }
 
@@ -66,9 +66,10 @@ module.exports.run = async function({ api, event, Users }) {
   const { senderID, threadID, messageID } = event;
   const now = Date.now();
 
-  // Load user data
+  // Load data
   const userJobData = (await getData(`job/${threadID}/${senderID}`)) || {};
   const inventory = (await getData(`inventory/${threadID}/${senderID}`)) || { items: [] };
+  const bankData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0 };
 
   // Random job selection
   let job = JOBS[Math.floor(Math.random() * JOBS.length)];
@@ -83,15 +84,25 @@ module.exports.run = async function({ api, event, Users }) {
 
   // Buff: Energy Drink halves cooldown
   let jobCooldown = job.cooldown;
+  let usedItems = [];
   const energyDrink = inventory.items.find(i => i.name === "Energy Drink" && i.quantity > 0);
   if (energyDrink) {
     jobCooldown = Math.floor(jobCooldown / 2);
     energyDrink.quantity -= 1;
+    usedItems.push("🧃 Energy Drink (halved cooldown)");
     if (energyDrink.quantity <= 0) inventory.items = inventory.items.filter(i => i !== energyDrink);
     await setData(`inventory/${threadID}/${senderID}`, inventory);
   }
 
-  // Check cooldown
+  // Buff: Lucky Charm
+  let critChance = 0.05;
+  const luckyCharm = inventory.items.find(i => i.name === "Lucky Charm");
+  if (luckyCharm) {
+    critChance += 0.05;
+    usedItems.push("🍀 Lucky Charm (+5% Critical chance)");
+  }
+
+  // Check cooldown for this job
   const lastTime = userJobData[job.name] || 0;
   const remainingTime = jobCooldown - (now - lastTime);
   if (remainingTime > 0) {
@@ -102,12 +113,6 @@ module.exports.run = async function({ api, event, Users }) {
 
   // Random earnings
   let earned = randomInt(job.min, job.max);
-
-  // Buff: Lucky Charm increases critical chance by 5%
-  let critChance = 0.05;
-  const luckyCharm = inventory.items.find(i => i.name === "Lucky Charm");
-  if (luckyCharm) critChance += 0.05;
-
   let critical = false;
   if (Math.random() <= critChance) {
     earned *= 2;
@@ -115,24 +120,28 @@ module.exports.run = async function({ api, event, Users }) {
   }
 
   // Update bank
-  let bankData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0 };
   bankData.balance += earned;
-
-  // Get fresh username
-  const userName = await getUserName(senderID, Users);
-  bankData.name = userName;
   await setData(`bank/${threadID}/${senderID}`, bankData);
 
   // Update job cooldown
   userJobData[job.name] = now;
   await setData(`job/${threadID}/${senderID}`, userJobData);
 
+  // Username
+  const userName = await getUserName(senderID, Users);
+
+  // Construct used items text
+  const usedItemsText = usedItems.length > 0 ? usedItems.map(u => `✅ Used ${u}`).join("\n") + "\n" : "";
+
   // Construct message
   const emoji = JOB_EMOJIS[job.name] || "💼";
   const funText = FUN_PHRASES[Math.floor(Math.random() * FUN_PHRASES.length)];
   const msg = `${isRare ? "✨ " : ""}${emoji} ${userName} did the ${job.name} job!\n` +
+              `${usedItemsText}` +
               `💰 Earned: ${earned} coins${critical ? " 💥 Critical!" : ""}\n` +
-              `🏦 New balance: ${bankData.balance.toLocaleString()} coins\n\n${funText}`;
+              `🏦 New balance: ${bankData.balance.toLocaleString()} coins\n` +
+              `⏳ Cooldown for this job: ${Math.floor(jobCooldown/60000)}m 0s\n\n` +
+              `${funText}`;
 
   api.sendMessage(msg, threadID, messageID);
 };
