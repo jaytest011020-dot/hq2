@@ -22,18 +22,27 @@ function formatTime(ms) {
   return `${day > 0 ? day + "d " : ""}${hr > 0 ? hr + "h " : ""}${min > 0 ? min + "m " : ""}${sec}s`;
 }
 
-// Get username safely
-async function getUserName(uid, api) {
+// 🔍 Get username with fallback
+async function getUserName(uid, api, Users) {
   try {
     const info = await api.getUserInfo(uid);
-    return info?.[uid]?.name || `FB-User(${uid})`;
-  } catch {
-    return `FB-User(${uid})`;
-  }
+    if (info && info[uid] && info[uid].name) {
+      return info[uid].name;
+    }
+  } catch (e) {}
+
+  try {
+    if (Users) {
+      const user = await Users.getInfo(uid);
+      if (user?.name) return user.name;
+    }
+  } catch (e) {}
+
+  return `User(${uid})`;
 }
 
-// End giveaway and pick winner
-async function endGiveaway(api, threadID, gid, force = false) {
+// End giveaway & pick winner
+async function endGiveaway(api, threadID, gid, Users, force = false) {
   let data = await getData(`/giveaway/${threadID}`);
   if (!data || !data[gid]) return;
 
@@ -43,7 +52,7 @@ async function endGiveaway(api, threadID, gid, force = false) {
   let winnerText = "⚠️ Walang sumali sa giveaway.";
   if (g.participants.length > 0) {
     const winner = g.participants[Math.floor(Math.random() * g.participants.length)];
-    const winnerName = await getUserName(winner, api);
+    const winnerName = await getUserName(winner, api, Users);
     winnerText = `🏆 Winner: ${winnerName}\n👤 UID: ${winner}`;
   }
 
@@ -52,7 +61,7 @@ async function endGiveaway(api, threadID, gid, force = false) {
   }
 
   api.sendMessage(
-    `🎉 [GIVEAWAY ENDED] 🎉
+    `🎉[GIVEAWAY ENDED]🎉
 ┏━━━━━━━━━━━━━━━┓
 🏆 Prize: ${g.prize}
 👑 Host: ${g.hostName}
@@ -70,7 +79,7 @@ ${winnerText}`,
 
 module.exports.config = {
   name: "giveaway",
-  version: "4.1.0",
+  version: "5.0.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Giveaway system with join, resend, roll",
@@ -80,9 +89,9 @@ module.exports.config = {
 };
 
 // Main command
-module.exports.run = async function({ api, event, args }) {
+module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, messageID, senderID } = event;
-  const ownerID = "your_owner_uid_here"; // palitan ng tunay mong UID
+  const ownerID = "your_owner_uid_here"; // palitan mo ng tunay na UID mo
   const info = await api.getThreadInfo(threadID);
   const isAdmin = info.adminIDs.some(a => a.id === senderID);
 
@@ -109,7 +118,7 @@ module.exports.run = async function({ api, event, args }) {
 
     const remaining = g.endTime - Date.now();
     const sent = await api.sendMessage(
-      `🎉 [GIVEAWAY ONGOING] 🎉
+      `🎉[GIVEAWAY ONGOING]🎉
 ┏━━━━━━━━━━━━━━━┓
 🏆 Prize: ${g.prize}
 👑 Host: ${g.hostName}
@@ -118,7 +127,7 @@ module.exports.run = async function({ api, event, args }) {
 🆔 ID: ${gid}
 ┗━━━━━━━━━━━━━━━┛
 
-👉 Reply to this message to join!`,
+👉 Reply to this message with "join" to enter!`,
       threadID
     );
 
@@ -132,7 +141,7 @@ module.exports.run = async function({ api, event, args }) {
   if (sub === "roll") {
     const gid = args[1];
     if (!gid || !data[gid]) return api.sendMessage("⚠️ Invalid giveaway ID.", threadID, messageID);
-    await endGiveaway(api, threadID, gid, true);
+    await endGiveaway(api, threadID, gid, Users, true);
     return;
   }
 
@@ -148,7 +157,7 @@ module.exports.run = async function({ api, event, args }) {
 
   const endTime = Date.now() + duration;
   const gid = "G" + Math.floor(1000 + Math.random() * 9000);
-  const hostName = await getUserName(senderID, api);
+  const hostName = await getUserName(senderID, api, Users);
 
   const giveaway = {
     prize,
@@ -160,7 +169,7 @@ module.exports.run = async function({ api, event, args }) {
   };
 
   const sent = await api.sendMessage(
-    `🎉 [GIVEAWAY STARTED] 🎉
+    `🎉[GIVEAWAY STARTED]🎉
 ┏━━━━━━━━━━━━━━━┓
 🏆 Prize: ${prize}
 👑 Host: ${hostName}
@@ -169,7 +178,7 @@ module.exports.run = async function({ api, event, args }) {
 🆔 ID: ${gid}
 ┗━━━━━━━━━━━━━━━┛
 
-👉 Reply to this message to join!`,
+👉 Reply to this message with "join" to enter!`,
     threadID
   );
 
@@ -177,15 +186,13 @@ module.exports.run = async function({ api, event, args }) {
   data[gid] = giveaway;
   await setData(`/giveaway/${threadID}`, data);
 
-  setTimeout(() => endGiveaway(api, threadID, gid), duration);
+  setTimeout(() => endGiveaway(api, threadID, gid, Users), duration);
 };
 
 // Handle replies to join
-module.exports.handleEvent = async function({ api, event }) {
-  const { threadID, senderID, messageReply } = event;
-
-  // siguraduhin na may reply object
-  if (!messageReply) return;
+module.exports.handleEvent = async function({ api, event, Users }) {
+  const { threadID, senderID, type, messageReply, body } = event;
+  if (type !== "message_reply" || !messageReply) return;
 
   let data = await getData(`/giveaway/${threadID}`);
   if (!data) return;
@@ -194,9 +201,12 @@ module.exports.handleEvent = async function({ api, event }) {
     const g = data[gid];
     if (messageReply.messageID !== g.currentMsgID) continue;
 
+    // dapat "join" yung reply
+    if (!body || body.toLowerCase() !== "join") return;
+
     if (!g.participants.includes(senderID)) {
       g.participants.push(senderID);
-      const name = await getUserName(senderID, api);
+      const name = await getUserName(senderID, api, Users);
 
       if (g.currentMsgID) {
         try { await api.unsendMessage(g.currentMsgID); } catch {}
@@ -204,7 +214,7 @@ module.exports.handleEvent = async function({ api, event }) {
 
       const remaining = g.endTime - Date.now();
       const sent = await api.sendMessage(
-        `🎉 [GIVEAWAY ONGOING] 🎉
+        `🎉[GIVEAWAY ONGOING]🎉
 ┏━━━━━━━━━━━━━━━┓
 🏆 Prize: ${g.prize}
 👑 Host: ${g.hostName}
@@ -213,7 +223,7 @@ module.exports.handleEvent = async function({ api, event }) {
 🆔 ID: ${gid}
 ┗━━━━━━━━━━━━━━━┛
 
-👉 Reply to this message to join!`,
+👉 Reply to this message with "join" to enter!`,
         threadID
       );
 
