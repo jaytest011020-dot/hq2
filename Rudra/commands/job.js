@@ -26,43 +26,24 @@ const JOBS = [
 
 // Job-specific emojis
 const JOB_EMOJIS = {
-  Farmer: "🌾",
-  Miner: "⛏️",
-  Teacher: "📚",
-  Chef: "👨‍🍳",
-  Driver: "🚗",
-  Artist: "🎨",
-  Musician: "🎵",
-  Builder: "🏗️",
-  Programmer: "💻",
-  Doctor: "🩺",
-  Nurse: "🩹",
-  Engineer: "⚙️",
-  Scientist: "🔬",
-  Lawyer: "⚖️",
-  Police: "👮",
-  Firefighter: "🔥",
-  Pilot: "✈️",
-  Soldier: "🪖",
-  Hacker: "💻",
-  CEO: "💼",
+  Farmer: "🌾", Miner: "⛏️", Teacher: "📚", Chef: "👨‍🍳", Driver: "🚗",
+  Artist: "🎨", Musician: "🎵", Builder: "🏗️", Programmer: "💻", Doctor: "🩺",
+  Nurse: "🩹", Engineer: "⚙️", Scientist: "🔬", Lawyer: "⚖️", Police: "👮",
+  Firefighter: "🔥", Pilot: "✈️", Soldier: "🪖", Hacker: "💻", CEO: "💼",
 };
 
 // Fun phrases
 const FUN_PHRASES = [
-  "You worked hard today!",
-  "Luck is on your side!",
-  "Great job!",
-  "Keep it up!",
-  "You're unstoppable!"
+  "You worked hard today!", "Luck is on your side!", "Great job!",
+  "Keep it up!", "You're unstoppable!"
 ];
 
 module.exports.config = {
   name: "job",
-  version: "3.0.0",
+  version: "3.1.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
-  description: "Random job system with rare jobs, critical bonus, emojis, and fun phrases",
+  description: "Random job system per GC with rare jobs, critical bonus, emojis, and fun phrases",
   commandCategory: "economy",
   usages: "/job",
   cooldowns: 3
@@ -76,8 +57,8 @@ module.exports.run = async function({ api, event, Users }) {
   const { senderID, threadID, messageID } = event;
   const now = Date.now();
 
-  // Load user's job data
-  const userJobData = (await getData(`job/${senderID}`)) || {};
+  // Load user's job data per thread
+  const userJobData = (await getData(`job/${threadID}/${senderID}`)) || {};
 
   // Random job selection
   let job = JOBS[Math.floor(Math.random() * JOBS.length)];
@@ -113,8 +94,8 @@ module.exports.run = async function({ api, event, Users }) {
     critical = true;
   }
 
-  // Update bank
-  let bankData = (await getData(`bank/${senderID}`)) || {
+  // Update bank per thread
+  let bankData = (await getData(`bank/${threadID}/${senderID}`)) || {
     uid: senderID,
     name: `FB-User(${senderID})`,
     balance: 0
@@ -135,16 +116,18 @@ module.exports.run = async function({ api, event, Users }) {
     }
   }
   bankData.name = userName;
-  await setData(`bank/${senderID}`, bankData);
+  await setData(`bank/${threadID}/${senderID}`, bankData);
 
   // Update job cooldown
   userJobData[job.name] = now;
-  await setData(`job/${senderID}`, userJobData);
+  await setData(`job/${threadID}/${senderID}`, userJobData);
 
-  // Construct message with emojis and fun phrase
+  // Construct message
   let emoji = JOB_EMOJIS[job.name] || "💼";
   let funText = FUN_PHRASES[Math.floor(Math.random() * FUN_PHRASES.length)];
-  let msg = `${isRare ? "✨ " : ""}${emoji} ${userName} did the ${job.name} job!\n💰 Earned: ${earned} coins${critical ? " 💥 Critical!" : ""}\n🏦 New balance: ${bankData.balance.toLocaleString()} coins\n\n${funText}`;
+  let msg = `${isRare ? "✨ " : ""}${emoji} ${userName} did the ${job.name} job!\n` +
+            `💰 Earned: ${earned} coins${critical ? " 💥 Critical!" : ""}\n` +
+            `🏦 New balance: ${bankData.balance.toLocaleString()} coins\n\n${funText}`;
 
   // Bot replies to user's message
   api.sendMessage(msg, threadID, messageID);
