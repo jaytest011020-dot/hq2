@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "giveaway",
-  version: "5.1.0",
+  version: "5.2.0",
   hasPermssion: 0,
   credits: "ChatGPT + Jaz La Peña",
   description: "Giveaway with join by reply, live countdown, auto-end, and resend",
@@ -132,16 +132,17 @@ module.exports.handleEvent = async function({ api, event }) {
     const data = giveaways[ID];
     if (data.threadID !== threadID || data.status !== "open") continue;
 
+    // Add new joiner if not already
     if (!data.joined.includes(senderID)) {
       data.joined.push(senderID);
-      await setData(`giveaway/${ID}`, data);
+      await setData(`giveaway/${ID}`, data); // update DB
 
-      // unsend old message
+      // Unsend old message
       if (data.messageID) {
         try { await api.unsendMessage(data.messageID); } catch {}
       }
 
-      // send updated message
+      // Send updated message with mention of new joiner only
       const msg = await buildMessage(api, data, senderID);
       const info = await api.sendMessage(msg, threadID);
       data.messageID = info.messageID;
@@ -175,14 +176,14 @@ module.exports.run = async ({ api, event, args }) => {
     return;
   }
 
-  // Create
+  // Create new giveaway
   if (args.length < 2) return api.sendMessage("❌ Usage: /giveaway <prize> <time>", threadID);
   const timeStr = args[args.length - 1];
   const prize = args.slice(0, -1).join(" ");
   const duration = parseDuration(timeStr);
   if (!duration) return api.sendMessage("❌ Invalid time. Use m/h/d (e.g., 2m, 1h).", threadID);
 
-  const ID = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit ID
+  const ID = Math.floor(1000 + Math.random() * 9000).toString();
   const end = Date.now() + duration;
 
   const data = {
