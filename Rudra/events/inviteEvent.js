@@ -59,7 +59,7 @@ module.exports.run = async function ({ api, event, Users }) {
 ┃ 👤 Inviter: @${inviterName}
 ┃ ➕ Invited: @${newUserName}
 ┃ 📊 Total Invites: ${gcData[inviterID].count}
-╰━━━━━━━━━━━━━━━━━━━━╯`;
+╰━━━━━━━━━━━━━━━╯`;
 
         mentions = [
           { tag: inviterName, id: inviterID },
@@ -70,7 +70,7 @@ module.exports.run = async function ({ api, event, Users }) {
         const joinerName = await getUserName(newUserID, api, Users);
         msg = `╭━[JOIN NOTIF]━╮
 ┃ 🚪 @${joinerName} joined the group via link.
-╰━━━━━━━━━━━━━━━━━━━━╯`;
+╰━━━━━━━━━━━━━━━╯`;
 
         mentions = [{ tag: joinerName, id: newUserID }];
       }
