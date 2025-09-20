@@ -3,17 +3,17 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stock",
-  version: "5.1.0",
+  version: "6.0.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Auto notify Grow a Garden stock aligned to 5-minute intervals with Firebase",
+  description: "Grow a Garden auto-stock with correct 5-min alignment",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
   cooldowns: 10,
 };
 
-// 🔹 Special items na idi-detect (case-insensitive)
+// Special items
 const SPECIAL_ITEMS = [
   "Grandmaster Sprinkler",
   "Master Sprinkler",
@@ -23,7 +23,7 @@ const SPECIAL_ITEMS = [
   "Medium Toy"
 ];
 
-// 🔹 Fetch stock data
+// Fetch stock
 async function fetchGardenData() {
   try {
     const res = await axios.get("https://gagstock.gleeze.com/grow-a-garden");
@@ -33,55 +33,47 @@ async function fetchGardenData() {
   }
 }
 
-// 🔹 Format sections
+// Format items
 function formatSection(title, items) {
   if (!items || items.length === 0) return `❌ No ${title}`;
   return items.map(i => `• ${i.emoji || ""} ${i.name} (${i.quantity})`).join("\n");
 }
 
-// 🔹 Send stock message
+// 🔹 Get next 5-minute mark after current time
+function getNext5Min(date = null) {
+  const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  let minutes = now.getMinutes();
+  let nextMinutes = minutes - (minutes % 5) + 5; // next multiple of 5 strictly after now
+
+  const next = new Date(now);
+  next.setMinutes(nextMinutes);
+  next.setSeconds(0, 0);
+
+  if (nextMinutes >= 60) {
+    next.setHours(now.getHours() + 1);
+    next.setMinutes(0);
+  }
+
+  return next;
+}
+
+// 🔹 Send stock to a GC
 async function sendStock(threadID, api) {
   const data = await fetchGardenData();
   if (!data) return;
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const next = getNext5Min();
 
   const eggs = formatSection("eggs", data.egg?.items);
   const seeds = formatSection("seeds", data.seed?.items);
   const gear = formatSection("gear", data.gear?.items);
 
-  // 🔎 Special items notification
-  const allItems = [
-    ...(data.egg?.items || []),
-    ...(data.seed?.items || []),
-    ...(data.gear?.items || [])
-  ];
-
-  const foundSpecial = allItems.filter(item =>
-    SPECIAL_ITEMS.some(si => item.name.toLowerCase().includes(si.toLowerCase()))
-  );
-
-  if (foundSpecial.length > 0) {
-    const specialList = foundSpecial.map(i => `✨ ${i.name} (${i.quantity})`).join("\n");
-    const notif = `
-🚨 𝗡𝗲𝘄 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 𝗗𝗲𝘁𝗲𝗰𝘁𝗲𝗱 🚨
-──────────────────────
-🕒 ${now.toLocaleTimeString("en-PH", { hour12: false })}
-──────────────────────
-${specialList}
-──────────────────────
-    `.trim();
-
-    const allGCs = (await getData(`stock`)) || {};
-    for (let tid in allGCs) {
-      api.sendMessage(notif, tid);
-    }
-  }
-
   const msg = `
 🌱 𝗚𝗿𝗼𝘄 𝗮 𝗚𝗮𝗿𝗱𝗲𝗻 𝗦𝘁𝗼𝗰𝗸 🌱
 ──────────────────────
-🕒 ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
 ──────────────────────
 
 🥚 𝗘𝗴𝗴𝘀
@@ -95,53 +87,77 @@ ${gear}
 ──────────────────────
   `.trim();
 
-  // 🔹 Send to enabled GCs
-  const allGCs = (await getData(`stock`)) || {};
-  for (let tid in allGCs) {
-    if (allGCs[tid]?.enabled) api.sendMessage(msg, tid);
+  api.sendMessage(msg, threadID);
+}
+
+// 🔹 Scan for auto-stock
+async function scanAndNotify(api) {
+  const allGCs = (await getData("stock")) || {};
+  for (const tid in allGCs) {
+    if (!allGCs[tid].enabled) continue;
+
+    const data = await fetchGardenData();
+    if (!data) continue;
+
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const next = getNext5Min();
+
+    const eggs = formatSection("eggs", data.egg?.items);
+    const seeds = formatSection("seeds", data.seed?.items);
+    const gear = formatSection("gear", data.gear?.items);
+
+    // Special items alert
+    const allItems = [...(data.egg?.items || []), ...(data.seed?.items || []), ...(data.gear?.items || [])];
+    const foundSpecial = allItems.filter(i => SPECIAL_ITEMS.some(si => i.name.toLowerCase().includes(si.toLowerCase())));
+    if (foundSpecial.length > 0) {
+      const specialMsg = `
+🚨 𝗡𝗲𝘄 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 🚨
+──────────────────────
+🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
+──────────────────────
+${foundSpecial.map(i => `✨ ${i.name} (${i.quantity})`).join("\n")}
+──────────────────────
+      `.trim();
+
+      api.sendMessage(specialMsg, tid);
+    }
+
+    // Normal stock
+    const stockMsg = `
+🌱 𝗔𝘂𝘁𝗼 𝗥𝗲𝘀𝘁𝗼𝗰𝗸 🌱
+──────────────────────
+🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
+──────────────────────
+
+🥚 𝗘𝗴𝗴𝘀
+${eggs}
+
+🌾 𝗦𝗲𝗲𝗱𝘀
+${seeds}
+
+🛠️ 𝗚𝗲𝗮𝗿
+${gear}
+──────────────────────
+    `.trim();
+
+    api.sendMessage(stockMsg, tid);
   }
 }
 
-// 🔹 Command: toggle & check
-module.exports.run = async function({ api, event, args }) {
-  global.api = api;
+// 🔹 Command: toggle
+module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
 
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
-  if (gcData.enabled && option && option !== "off") {
-    return api.sendMessage("⚠️ Auto-stock already enabled. Manual /stock is disabled.", threadID, messageID);
-  }
-
   if (option === "on") {
+    if (gcData.enabled) return api.sendMessage("⚠️ Auto-stock already enabled. Automatic notifications active.", threadID, messageID);
     gcData.enabled = true;
     await setData(`stock/${threadID}`, gcData);
-
-    api.sendMessage("✅ Auto-stock enabled. Stock will be sent aligned to 5-minute marks automatically.", threadID, messageID);
-
-    // 🔹 Align first send to nearest 5-minute mark
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    let minutes = now.getMinutes();
-    let nextMinutes = Math.ceil(minutes / 5) * 5;
-    let firstSend = new Date(now);
-    firstSend.setMinutes(nextMinutes);
-    firstSend.setSeconds(0, 0);
-    if (nextMinutes >= 60) {
-      firstSend.setHours(now.getHours() + 1);
-      firstSend.setMinutes(0);
-    }
-
-    const delay = firstSend - now;
-
-    setTimeout(async function firstSendFunc() {
-      if (gcData.enabled) await sendStock(threadID, api);
-      setInterval(async () => {
-        const gcDataNow = (await getData(`stock/${threadID}`)) || { enabled: false };
-        if (gcDataNow.enabled) await sendStock(threadID, api);
-      }, 5 * 60 * 1000);
-    }, delay);
-
+    api.sendMessage("✅ Auto-stock enabled. Automatic updates every 5 minutes aligned to next restock.", threadID, messageID);
     return;
   }
 
@@ -153,34 +169,25 @@ module.exports.run = async function({ api, event, args }) {
 
   if (option === "check") {
     const status = gcData.enabled ? "ON ✅" : "OFF ❌";
-    return api.sendMessage(`📊 Auto-stock status for this GC: ${status}`, threadID, messageID);
+    return api.sendMessage(`📊 Auto-stock status: ${status}`, threadID, messageID);
   }
 
-  // 🔹 Manual fetch (if auto-stock is off)
-  const resData = await fetchGardenData();
-  if (!resData) return api.sendMessage("⚠️ Failed to fetch data.", threadID, messageID);
-
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const eggs = formatSection("eggs", resData.egg?.items);
-  const seeds = formatSection("seeds", resData.seed?.items);
-  const gear = formatSection("gear", resData.gear?.items);
-
-  const msg = `
-🌱 𝗚𝗿𝗼𝘄 𝗮 𝗚𝗮𝗿𝗱𝗲𝗻 𝗦𝘁𝗼𝗰𝗸 🌱
-──────────────────────
-🕒 ${now.toLocaleTimeString("en-PH", { hour12: false })}
-──────────────────────
-
-🥚 𝗘𝗴𝗴𝘀
-${eggs}
-
-🌾 𝗦𝗲𝗲𝗱𝘀
-${seeds}
-
-🛠️ 𝗚𝗲𝗮𝗿
-${gear}
-──────────────────────
-  `.trim();
-
-  api.sendMessage(msg, threadID, messageID);
+  api.sendMessage("⚠️ Use: /stock on|off|check", threadID, messageID);
 };
+
+// 🚀 Start auto-scan aligned to next 5-min mark
+async function startAutoScan(api) {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const next = getNext5Min(now);
+  const delay = next.getTime() - now.getTime();
+
+  setTimeout(() => {
+    scanAndNotify(api); // first send
+    setInterval(() => scanAndNotify(api), 5 * 60 * 1000); // then every 5 minutes
+  }, delay);
+}
+
+// Initialize on bot load
+setTimeout(() => {
+  if (global.api) startAutoScan(global.api);
+}, 5000);
