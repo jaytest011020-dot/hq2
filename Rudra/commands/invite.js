@@ -1,58 +1,22 @@
-const { getData } = require("../../database.js");
+const inviterID = newP.inviterID || actorID; // fallback sa actor
+// ✅ Check if valid inviter (hindi sarili niya)
+if (inviterID && inviterID !== newUserID) {
+  if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
+  gcData[inviterID].count += 1;
+  await setData(`invite/${threadID}`, gcData);
 
-async function getUserName(uid, api, Users) {
-  try {
-    const name = await Users.getNameUser(uid);
-    if (name) return name;
-    const info = await api.getUserInfo(uid);
-    return info[uid]?.name || `FB-User(${uid})`;
-  } catch (err) {
-    return `FB-User(${uid})`;
-  }
+  const inviterName = await getUserName(inviterID, api, Users);
+  const newUserName = await getUserName(newUserID, api, Users);
+
+  msg = `╭━[INVITE NOTIF]━╮
+┃ 👤 Inviter: ${inviterName}
+┃ ➕ Invited: ${newUserName}
+┃ 📊 Total Invites: ${gcData[inviterID].count}
+╰━━━━━━━━━━━━━━━━━━━━╯`;
+} else {
+  // ✅ True join via link
+  const joinerName = await getUserName(newUserID, api, Users);
+  msg = `╭━[JOIN NOTIF]━╮
+┃ 🚪 ${joinerName} joined the group via link.
+╰━━━━━━━━━━━━━━━━━━━━╯`;
 }
-
-module.exports.config = {
-  name: "invite",
-  version: "1.1.0",
-  hasPermission: 0,
-  credits: "ChatGPT + NN",
-  description: "Check your invites or list all inviters",
-  commandCategory: "group",
-  usages: "/invite | /invite list",
-  cooldowns: 3,
-};
-
-module.exports.run = async function({ api, event, args, Users }) {
-  const { threadID, senderID, messageID } = event;
-  const sub = args[0]?.toLowerCase();
-
-  const dbPath = `invite/${threadID}`;
-  const gcData = (await getData(dbPath)) || {};
-
-  if (sub === "list") {
-    const inviters = Object.keys(gcData);
-    if (inviters.length === 0) return api.sendMessage("⚠️ Wala pang nag-invite sa thread na ito.", threadID, messageID);
-
-    let msg = `╭━[ INVITE LIST ]━╮\n`;
-
-    for (const uid of inviters) {
-      const name = await getUserName(uid, api, Users);
-      msg += `┃ 👤 ${name} — Invites: ${gcData[uid].count}\n`;
-    }
-
-    msg += `╰━━━━━━━━━━━━━━╯`;
-    return api.sendMessage(msg, threadID, messageID);
-  }
-
-  // default: show own invites
-  const userData = gcData[senderID];
-  const userCount = userData ? userData.count : 0;
-  const name = await getUserName(senderID, api, Users);
-
-  const msg = `╭━[ YOUR INVITES ]━╮
-┃ 👤 ${name}
-┃ 📊 Total invites: ${userCount}
-╰━━━━━━━━━━━━╯`;
-
-  return api.sendMessage(msg, threadID, messageID);
-};
