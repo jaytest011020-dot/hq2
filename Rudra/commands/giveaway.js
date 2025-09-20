@@ -1,123 +1,160 @@
+const { getData, setData } = require("../../database.js");
+
 module.exports.config = {
   name: "giveaway",
-  version: "1.0.0",
+  version: "3.5.0",
   hasPermssion: 0,
-  credits: "ChatGPT (fix from Priyansh Rajput)",
-  description: "Create and manage giveaways",
+  credits: "ChatGPT + Jaz La Peña",
+  description: "Giveaway with reactions, Firebase persistence, and auto-end",
   commandCategory: "group",
-  usages: "[create/details/join/roll/end] [IDGiveAway]",
-  cooldowns: 5
+  usages: "/giveaway <prize> <end time>",
+  cooldowns: 5,
 };
 
-module.exports.handleReaction = async ({ api, event, handleReaction, Users }) => {
-  let data = global.data.GiveAway.get(handleReaction.ID);
+if (!global.giveaways) global.giveaways = {};
+
+// Parse time string (1m, 1h, 1d)
+function parseTime(str) {
+  const match = str.match(/(\d+)([smhd])/);
+  if (!match) return null;
+  const val = parseInt(match[1]);
+  const unit = match[2];
+  const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+  return val * multipliers[unit];
+}
+
+// Build giveaway message
+async function buildMessage(api, threadID, data, mentionID = null) {
+  const total = (await api.getThreadInfo(threadID)).participantIDs.length;
+  const progress = `${data.joined.length} / ${total}`;
+
+  let msg = `
+🎁 GIVEAWAY 🎁
+──────────────────────
+🏆 Prize: ${data.prize}
+🆔 ID: #${data.ID}
+📌 Status: ${data.status.toUpperCase()}
+⏰ Ends: ${new Date(data.end).toLocaleString("en-PH", { hour12: false })}
+──────────────────────
+✅ Participants: ${progress}
+(React 👍 to join)
+  `.trim();
+
+  const mentions = [];
+  if (mentionID) {
+    const info = await api.getUserInfo(mentionID);
+    const name = info[mentionID]?.name || "User";
+    mentions.push({ tag: name, id: mentionID });
+    msg += `\n\n✨ ${name} has joined the giveaway!`;
+  }
+
+  return { body: msg, mentions };
+}
+
+// Roll winners
+async function rollWinners(api, threadID, data) {
+  if (data.joined.length === 0) {
+    return api.sendMessage(`❌ No participants joined giveaway #${data.ID}.`, threadID);
+  }
+
+  const winner = data.joined[Math.floor(Math.random() * data.joined.length)];
+  const info = await api.getUserInfo(winner);
+  const name = info[winner]?.name || "User";
+
+  return api.sendMessage({
+    body: `🎉 Congratulations ${name}!\n\n🏆 You won giveaway #${data.ID}\nPrize: ${data.prize}`,
+    mentions: [{ tag: name, id: winner }]
+  }, threadID);
+}
+
+// End giveaway
+async function endGiveaway(api, threadID, data) {
+  data.status = "ended";
+  await setData(`giveaway/${data.ID}`, data);
+
+  await api.sendMessage(`⏰ Giveaway #${data.ID} has ended! Rolling winner...`, threadID);
+  await rollWinners(api, threadID, data);
+}
+
+// Handle reactions
+module.exports.handleReaction = async ({ api, event, handleReaction }) => {
+  const { threadID, userID } = event;
+  const ID = handleReaction.ID;
+
+  let data = await getData(`giveaway/${ID}`);
   if (!data || data.status !== "open") return;
+  if (data.joined.includes(userID)) return;
 
-  // if already joined, ignore
-  if (data.joined.includes(event.userID)) return;
+  data.joined.push(userID);
+  await setData(`giveaway/${ID}`, data);
 
-  data.joined.push(event.userID);
-  global.data.GiveAway.set(handleReaction.ID, data);
-
-  const userInfo = await Users.getInfo(event.userID);
-  const name = userInfo.name;
-
-  return api.sendMessage(
-    `✅ ${name} joined giveaway #${handleReaction.ID}`,
-    event.userID
-  );
+  // Auto-resend updated giveaway with mention
+  const msg = await buildMessage(api, threadID, data, userID);
+  await api.sendMessage(msg, threadID);
 };
 
-module.exports.run = async ({ api, event, args, Users }) => {
-  if (!global.data.GiveAway) global.data.GiveAway = new Map();
+// Run command
+module.exports.run = async ({ api, event, args }) => {
+  const { threadID, senderID } = event;
 
-  // CREATE
-  if (args[0] === "create") {
-    let reward = args.slice(1).join(" ");
-    if (!reward) return api.sendMessage("❌ Please specify a reward.", event.threadID);
+  if (args.length < 2) {
+    return api.sendMessage("❌ Usage: /giveaway <prize> <time>\nExample: /giveaway 1 Golden Raccoon 1d", threadID);
+  }
 
-    let ID = (Math.floor(Math.random() * 100000) + 100000).toString().substring(1);
-    let creatorName = (await Users.getInfo(event.senderID)).name;
+  const timeStr = args[args.length - 1];
+  const prize = args.slice(0, -1).join(" ");
+  const duration = parseTime(timeStr);
 
-    api.sendMessage(
-      `🎁 GIVEAWAY STARTED 🎁\n\n👤 Created by: ${creatorName}\n🏆 Reward: ${reward}\n🆔 ID: #${ID}\n\n📌 React to this message to join!`,
-      event.threadID,
-      (err, info) => {
-        if (err) return;
+  if (!duration) return api.sendMessage("❌ Invalid time format. Use s, m, h, or d (e.g. 1h, 30m, 2d).", threadID);
 
-        let dataGA = {
-          ID,
-          author: creatorName,
-          authorID: event.senderID,
-          messageID: info.messageID,
-          reward,
-          joined: [],
-          status: "open"
-        };
+  const ID = Date.now().toString(36);
+  const end = Date.now() + duration;
 
-        global.data.GiveAway.set(ID, dataGA);
-        client.handleReaction.push({
-          name: module.exports.config.name,
-          messageID: info.messageID,
-          author: event.senderID,
-          ID
-        });
+  const data = {
+    ID,
+    prize,
+    author: senderID,
+    joined: [],
+    status: "open",
+    end,
+    threadID
+  };
+
+  await setData(`giveaway/${ID}`, data);
+  global.giveaways[ID] = data;
+
+  // Schedule auto-end
+  setTimeout(() => endGiveaway(api, threadID, data), duration);
+
+  // First post
+  const msg = await buildMessage(api, threadID, data);
+  api.sendMessage(msg, threadID, (err, info) => {
+    if (!err) {
+      global.client.handleReaction.push({
+        name: module.exports.config.name,
+        messageID: info.messageID,
+        ID
+      });
+    }
+  });
+};
+
+// Restart recovery
+setTimeout(async () => {
+  if (!global.api) return;
+  const all = await getData("giveaway");
+  if (!all) return;
+
+  for (const ID in all) {
+    const data = all[ID];
+    if (data.status === "open") {
+      global.giveaways[ID] = data;
+      const remaining = data.end - Date.now();
+      if (remaining > 0) {
+        setTimeout(() => endGiveaway(global.api, data.threadID, data), remaining);
+      } else {
+        endGiveaway(global.api, data.threadID, data);
       }
-    );
+    }
   }
-
-  // DETAILS
-  else if (args[0] === "details") {
-    let ID = args[1]?.replace("#", "");
-    if (!ID) return api.sendMessage("❌ Please provide a giveaway ID.", event.threadID);
-
-    let data = global.data.GiveAway.get(ID);
-    if (!data) return api.sendMessage("❌ Giveaway not found.", event.threadID);
-
-    return api.sendMessage(
-      `🎁 GIVEAWAY DETAILS 🎁\n\n👤 Created by: ${data.author}\n🏆 Reward: ${data.reward}\n🆔 ID: #${data.ID}\n👥 Participants: ${data.joined.length}\n📌 Status: ${data.status}`,
-      event.threadID
-    );
-  }
-
-  // ROLL (pick random winner)
-  else if (args[0] === "roll") {
-    let ID = args[1]?.replace("#", "");
-    if (!ID) return api.sendMessage("❌ Please provide a giveaway ID.", event.threadID);
-
-    let data = global.data.GiveAway.get(ID);
-    if (!data) return api.sendMessage("❌ Giveaway not found.", event.threadID);
-    if (data.authorID !== event.senderID) return api.sendMessage("❌ Only the creator can roll this giveaway.", event.threadID);
-    if (data.joined.length === 0) return api.sendMessage("❌ No participants in this giveaway.", event.threadID);
-
-    let winner = data.joined[Math.floor(Math.random() * data.joined.length)];
-    let userInfo = await Users.getInfo(winner);
-    let name = userInfo.name;
-
-    return api.sendMessage({
-      body: `🎉 Congratulations ${name}!\n\n🏆 You won the giveaway #${data.ID}\nReward: ${data.reward}\n\n📌 Contact: ${data.author} (https://fb.me/${data.authorID})`,
-      mentions: [{ tag: name, id: winner }]
-    }, event.threadID);
-  }
-
-  // END
-  else if (args[0] === "end") {
-    let ID = args[1]?.replace("#", "");
-    if (!ID) return api.sendMessage("❌ Please provide a giveaway ID.", event.threadID);
-
-    let data = global.data.GiveAway.get(ID);
-    if (!data) return api.sendMessage("❌ Giveaway not found.", event.threadID);
-    if (data.authorID !== event.senderID) return api.sendMessage("❌ Only the creator can end this giveaway.", event.threadID);
-
-    data.status = "ended";
-    global.data.GiveAway.set(ID, data);
-
-    api.unsendMessage(data.messageID);
-    return api.sendMessage(`✅ Giveaway #${data.ID} ended by ${data.author}`, event.threadID);
-  }
-
-  // ERROR
-  else {
-    return api.sendMessage("❌ Invalid option. Use: create/details/roll/end", event.threadID);
-  }
-};
+}, 5000);
