@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stock",
-  version: "6.1.0",
+  version: "6.2.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Grow a Garden auto-stock with correct 5-min alignment & Firebase",
@@ -46,7 +46,7 @@ function formatSection(title, items) {
 function getNext5Min(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
-  let nextMinutes = minutes - (minutes % 5) + 5; // next multiple of 5 strictly after now
+  let nextMinutes = minutes - (minutes % 5) + 5;
 
   const next = new Date(now);
   next.setMinutes(nextMinutes);
@@ -70,7 +70,6 @@ async function sendStock(threadID, api) {
   const seeds = formatSection("seeds", data.seed?.items);
   const gear = formatSection("gear", data.gear?.items);
 
-  // Normal stock message
   const stockMsg = `
 🌱 𝗔𝘂𝘁𝗼 𝗥𝗲𝘀𝘁𝗼𝗰𝗸 🌱
 ──────────────────────
@@ -93,7 +92,10 @@ ${gear}
 
   // Special items alert
   const allItems = [...(data.egg?.items || []), ...(data.seed?.items || []), ...(data.gear?.items || [])];
-  const foundSpecial = allItems.filter(i => SPECIAL_ITEMS.some(si => i.name.toLowerCase().includes(si.toLowerCase())));
+  const foundSpecial = allItems.filter(i =>
+    SPECIAL_ITEMS.some(si => i.name.toLowerCase().includes(si.toLowerCase()))
+  );
+
   if (foundSpecial.length > 0) {
     const specialMsg = `
 🚨 𝗡𝗲𝘄 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 🚨
@@ -110,13 +112,15 @@ ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity})`).join("\n")}
 
 // Start auto-stock for a GC
 async function startAutoStock(threadID, api) {
+  if (autoStockTimers[threadID]) return; // prevent duplicate timers
+
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min(now);
   const delay = next.getTime() - now.getTime();
 
   setTimeout(() => {
     sendStock(threadID, api); // first send
-    autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000); // every 5 mins
+    autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
 }
 
@@ -126,19 +130,19 @@ module.exports.run = async function({ api, event, args }) {
   const option = args[0]?.toLowerCase();
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
-  // If already ON and user types any /stock command besides off/check
+  // Prevent duplicate manual usage
   if (gcData.enabled && option && option !== "off" && option !== "check") {
-    return api.sendMessage("⚠️ Auto-stock is active. Hindi na kailangan mag /stock manually.", threadID, messageID);
+    return api.sendMessage("⚠️ Auto-stock is already active. No need to use /stock manually.", threadID, messageID);
   }
 
   if (option === "on") {
-    if (gcData.enabled) return api.sendMessage("⚠️ Auto-stock already enabled. Automatic updates active.", threadID, messageID);
+    if (gcData.enabled) return api.sendMessage("⚠️ Auto-stock already enabled.", threadID, messageID);
 
     gcData.enabled = true;
     await setData(`stock/${threadID}`, gcData);
 
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ Auto-stock enabled. Automatic updates every 5 minutes aligned to next restock.", threadID, messageID);
+    return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes aligned to the next restock.", threadID, messageID);
   }
 
   if (option === "off") {
@@ -158,14 +162,16 @@ module.exports.run = async function({ api, event, args }) {
     return api.sendMessage(`📊 Auto-stock status: ${status}`, threadID, messageID);
   }
 
-  api.sendMessage("⚠️ Use: /stock on|off|check", threadID, messageID);
+  api.sendMessage("⚠️ Usage: /stock on|off|check", threadID, messageID);
 };
 
-// Initialize auto-stock for all enabled GCs on bot load
-setTimeout(async () => {
-  if (!global.api) return;
+// Auto-resume all enabled GCs on bot restart
+module.exports.onLoad = async function({ api }) {
   const allGCs = (await getData("stock")) || {};
   for (const tid in allGCs) {
-    if (allGCs[tid].enabled) startAutoStock(tid, global.api);
+    if (allGCs[tid].enabled) {
+      startAutoStock(tid, api);
+      api.sendMessage("♻️ Bot restarted — Auto-stock resumed.", tid);
+    }
   }
-}, 5000);
+};
