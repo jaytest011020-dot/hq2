@@ -2,13 +2,14 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "petredeem",
-  version: "1.1.0",
-  hasPermision: 1, // admin only for adding pets
-  description: "Add pets and redeem using coins",
+  version: "1.2.0",
+  hasPermsion: 0,
+  description: "Add pets (admin only) and redeem using coins",
   usages: "/petredeem add <name> <age> <weight> <price>\n/petredeem\n/petredeem <number>",
   commandCategory: "economy",
 };
 
+// Generate random code
 function generateCode(length = 8) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";
@@ -21,16 +22,21 @@ function generateCode(length = 8) {
 module.exports.run = async function({ api, event, args }) {
   const { threadID, senderID, messageID } = event;
 
+  // Load pets and codes
   const petsData = (await getData(`petredeem/${threadID}/pets`)) || [];
+  const codes = (await getData(`petredeem/${threadID}/codes`)) || {};
 
-  // ---------------- ADD PET ----------------
+  // ---------------- ADD PET (Admin Only) ----------------
   if (args[0]?.toLowerCase() === "add") {
+    const threadInfo = await api.getThreadInfo(threadID);
+    const adminIDs = threadInfo.adminIDs.map(a => a.id);
+
+    if (!adminIDs.includes(senderID)) {
+      return api.sendMessage("❌ Only group admins can add new pets.", threadID, messageID);
+    }
+
     if (!args[1] || !args[2] || !args[3] || !args[4]) {
-      return api.sendMessage(
-        "❌ Usage: /petredeem add <name> <age> <weight> <price>",
-        threadID,
-        messageID
-      );
+      return api.sendMessage("❌ Usage: /petredeem add <name> <age> <weight> <price>", threadID, messageID);
     }
 
     const name = args.slice(1, -3).join(" ");
@@ -56,7 +62,7 @@ module.exports.run = async function({ api, event, args }) {
   if (!args[0]) {
     if (petsData.length === 0) return api.sendMessage("📋 No pets available for redemption.", threadID, messageID);
 
-    let msg = "📋 **Available Pets for Redemption** 📋\n\n";
+    let msg = "📋 Available Pets for Redemption 📋\n\n";
     petsData.forEach((pet, i) => {
       msg += `✨ ${i + 1}. ${pet.name}\n` +
              `   🎂 Age: ${pet.age} years\n` +
@@ -70,7 +76,7 @@ module.exports.run = async function({ api, event, args }) {
   // ---------------- REDEEM PET ----------------
   const index = parseInt(args[0]);
   if (isNaN(index) || index < 1 || index > petsData.length) {
-    return api.sendMessage("❌ Invalid selection. Please use the number of the pet from the list.", threadID, messageID);
+    return api.sendMessage("❌ Invalid selection. Use the number of the pet from the list.", threadID, messageID);
   }
 
   const pet = petsData[index - 1];
@@ -84,15 +90,14 @@ module.exports.run = async function({ api, event, args }) {
   bankData.balance -= pet.price;
   await setData(`bank/${threadID}/${senderID}`, bankData);
 
-  // Generate code
+  // Generate unique code
   const code = generateCode();
-  const codes = (await getData(`petredeem/${threadID}/codes`)) || {};
   codes[code] = { petName: pet.name, userID: senderID, used: false };
   await setData(`petredeem/${threadID}/codes`, codes);
 
   return api.sendMessage(
     `🎉 Successfully redeemed your pet!\n\n🐾 Name: ${pet.name}\n🎂 Age: ${pet.age} years\n⚖️ Weight: ${pet.weight} kg\n` +
-    `🔑 Your code: ${code}\n💰 Remaining balance: ${bankData.balance} coins`,
+    `🔑 Your redemption code: ${code}\n💰 Remaining balance: ${bankData.balance} coins`,
     threadID,
     messageID
   );
