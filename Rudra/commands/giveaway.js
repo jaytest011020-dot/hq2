@@ -2,10 +2,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
     name: "giveaway",
-    version: "2.2.0",
+    version: "2.3.0",
     hasPermission: 1,
     credits: "ChatGPT + NN",
-    description: "Giveaway system with join, list, resend, roll, auto-roll",
+    description: "Giveaway system with reply-to-join, resend, roll, auto-roll",
     commandCategory: "group",
     usages: "/giveaway <prize> <endtime> | resend <id> | roll <id>",
     cooldowns: 5
@@ -26,10 +26,9 @@ function parseTime(input) {
 }
 
 module.exports.run = async function({ api, event, args, Users }) {
-    const { threadID, senderID } = event;
+    const { threadID } = event;
 
     let giveaways = await getData("giveaways") || [];
-
     const subCommand = args[0]?.toLowerCase();
 
     // SUBCOMMAND: resend
@@ -38,7 +37,7 @@ module.exports.run = async function({ api, event, args, Users }) {
         const giveawayToResend = giveaways.find(g => g.id == args[1]);
         if(!giveawayToResend) return api.sendMessage("Giveaway not found.", threadID);
 
-        const message = `🎉 Giveaway Resend!\nPrize: ${giveawayToResend.prize}\nEnds: ${new Date(giveawayToResend.endTime).toLocaleString()}\nParticipants: ${giveawayToResend.entries.length}\nReact with any emoji to join!`;
+        const message = `🎉 Giveaway Resend!\nPrize: ${giveawayToResend.prize}\nEnds: ${new Date(giveawayToResend.endTime).toLocaleString()}\nParticipants: ${giveawayToResend.entries.length}\nReply with "join" to enter!`;
         const sentMsg = await api.sendMessage(message, threadID);
         giveawayToResend.messageID = sentMsg.messageID;
         await setData("giveaways", giveaways);
@@ -95,42 +94,48 @@ module.exports.run = async function({ api, event, args, Users }) {
     giveaways.push(newGiveaway);
     await setData("giveaways", giveaways);
 
-    const message = `🎉 New Giveaway Started!\nPrize: ${prize}\nEnds at: ${new Date(newGiveaway.endTime).toLocaleString()}\nReact with any emoji to join!`;
+    const message = `🎉 New Giveaway Started!\nPrize: ${prize}\nEnds at: ${new Date(newGiveaway.endTime).toLocaleString()}\nReply with "join" to enter!`;
     const sentMsg = await api.sendMessage(message, threadID);
     newGiveaway.messageID = sentMsg.messageID;
     await setData("giveaways", giveaways);
 };
 
-// Reaction handler
-module.exports.handleReaction = async function({ api, event }) {
-    const { userID, threadID } = event;
+// Handle replies to join giveaway
+module.exports.handleMessageReply = async function({ api, event }) {
+    const { messageReply, senderID, threadID, body } = event;
+
+    if (!messageReply) return;
+    const replyText = (body || "").toLowerCase();
+    if (replyText !== "join") return;
 
     let giveaways = await getData("giveaways") || [];
-    const giveaway = giveaways.find(g => g.threadID === threadID && g.endTime > Date.now());
-    if(!giveaway) return;
+    const giveaway = giveaways.find(g => g.messageID === messageReply.messageID && g.endTime > Date.now());
+    if (!giveaway) return;
 
-    if(!giveaway.entries.includes(userID)){
-        giveaway.entries.push(userID);
+    if (!giveaway.entries.includes(senderID)) {
+        giveaway.entries.push(senderID);
         await setData("giveaways", giveaways);
     }
 
     // Delete old message
-    if(giveaway.messageID){
+    if (giveaway.messageID) {
         try { await api.unsendMessage(giveaway.messageID); } catch(e){}
     }
 
+    // Get participant name
     let userName;
     try {
-        const user = await api.getUser(userID);
-        userName = user.name || userID;
+        const user = await api.getUser(senderID);
+        userName = user.name || senderID;
     } catch {
-        userName = userID;
+        userName = senderID;
     }
 
+    // Send updated message
     const message = `🎉 Giveaway: ${giveaway.prize}\n` +
                     `Ends at: ${new Date(giveaway.endTime).toLocaleString()}\n` +
                     `Participants: ${giveaway.entries.length}\n\n` +
-                    `React with any emoji to join!\n` +
+                    `Reply with "join" to enter!\n` +
                     `Last joined: ${userName}`;
 
     const sentMsg = await api.sendMessage(message, threadID);
@@ -143,11 +148,11 @@ setInterval(async () => {
     let giveaways = await getData("giveaways") || [];
     const now = Date.now();
 
-    for(let giveaway of giveaways){
-        if(giveaway.endTime <= now){
+    for (let giveaway of giveaways) {
+        if (giveaway.endTime <= now) {
             const { threadID, prize, entries } = giveaway;
 
-            if(!entries || entries.length === 0){
+            if (!entries || entries.length === 0) {
                 api.sendMessage(`😢 Giveaway for "${prize}" ended with no participants.`, threadID);
             } else {
                 const winnerIndex = Math.floor(Math.random() * entries.length);
@@ -164,8 +169,8 @@ setInterval(async () => {
                 api.sendMessage(`🏆 Giveaway ended!\nPrize: "${prize}"\nWinner: ${winnerName}`, threadID);
             }
 
-            if(giveaway.messageID){
-                try { await api.unsendMessage(giveaway.messageID); } catch(e){}
+            if (giveaway.messageID) {
+                try { await api.unsendMessage(giveaway.messageID); } catch(e) {}
             }
 
             giveaways = giveaways.filter(g => g.id !== giveaway.id);
@@ -173,4 +178,4 @@ setInterval(async () => {
     }
 
     await setData("giveaways", giveaways);
-}, 30000); // check every 30s
+}, 30000);
