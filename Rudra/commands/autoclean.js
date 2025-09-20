@@ -45,7 +45,7 @@ async function formatList(uids, api) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "5.0.0",
+  version: "5.1.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Automatically track active members by seen/chat & kick inactive users after deadline",
@@ -208,11 +208,7 @@ module.exports.handleEvent = async function({ api, event }) {
 
     const name = await getUserName(senderID, api);
 
-    api.sendMessage(`✅ You are now registered as active: @${name}`, threadID, null, {
-      mentions: [{ tag: `@${name}`, id: senderID }]
-    });
-
-    // Update ongoing message
+    // Update ongoing message first
     if (pollData.pollMsgID) {
       try { await api.unsendMessage(pollData.pollMsgID); } catch {}
     }
@@ -232,5 +228,14 @@ module.exports.handleEvent = async function({ api, event }) {
 
     pollData.pollMsgID = sent.messageID;
     await setData(`/autoclean/${threadID}`, pollData);
+
+    // Then send confirmation below
+    api.sendMessage(
+      {
+        body: `✅ Registered as active: ${name}`,
+        mentions: [{ tag: name, id: senderID }]
+      },
+      threadID
+    );
   }
 };
