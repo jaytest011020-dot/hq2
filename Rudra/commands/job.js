@@ -40,7 +40,7 @@ const FUN_PHRASES = [
 
 module.exports.config = {
   name: "job",
-  version: "4.0.0",
+  version: "4.1.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
   description: "Random job system with per-job cooldowns, buffs, rare jobs, critical bonus, emojis, and fun phrases",
@@ -53,20 +53,21 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// 🔑 Get username
-async function getUserName(uid, Users) {
+// 🔑 Get username via API
+async function getUserName(uid, api) {
   try {
-    return await Users.getName(uid) || `FB-User(${uid})`;
+    const info = await api.getUserInfo(uid);
+    return info[uid]?.name || `FB-User(${uid})`;
   } catch {
     return `FB-User(${uid})`;
   }
 }
 
-module.exports.run = async function({ api, event, Users }) {
+module.exports.run = async function({ api, event }) {
   const { senderID, threadID, messageID } = event;
   const now = Date.now();
 
-  // Load data
+  // Load user data
   const userJobData = (await getData(`job/${threadID}/${senderID}`)) || {};
   const inventory = (await getData(`inventory/${threadID}/${senderID}`)) || { items: [] };
   const bankData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0 };
@@ -75,16 +76,18 @@ module.exports.run = async function({ api, event, Users }) {
   let job = JOBS[Math.floor(Math.random() * JOBS.length)];
   let isRare = job.rare || false;
 
-  // 10% chance for rare job
+  // 10% chance for rare job if not rare already
   if (!isRare && Math.random() <= 0.10) {
     const rareJobs = JOBS.filter(j => j.rare);
     job = rareJobs[Math.floor(Math.random() * rareJobs.length)];
     isRare = true;
   }
 
-  // Buff: Energy Drink halves cooldown
+  // Buffs
   let jobCooldown = job.cooldown;
   let usedItems = [];
+
+  // Energy Drink halves cooldown
   const energyDrink = inventory.items.find(i => i.name === "Energy Drink" && i.quantity > 0);
   if (energyDrink) {
     jobCooldown = Math.floor(jobCooldown / 2);
@@ -94,7 +97,7 @@ module.exports.run = async function({ api, event, Users }) {
     await setData(`inventory/${threadID}/${senderID}`, inventory);
   }
 
-  // Buff: Lucky Charm
+  // Lucky Charm increases critical chance
   let critChance = 0.05;
   const luckyCharm = inventory.items.find(i => i.name === "Lucky Charm");
   if (luckyCharm) {
@@ -104,11 +107,16 @@ module.exports.run = async function({ api, event, Users }) {
 
   // Check cooldown for this job
   const lastTime = userJobData[job.name] || 0;
-  const remainingTime = jobCooldown - (now - lastTime);
-  if (remainingTime > 0) {
-    const mins = Math.floor(remainingTime / 60000);
-    const secs = Math.floor((remainingTime % 60000) / 1000);
-    return api.sendMessage(`⏳ You must wait ${mins}m ${secs}s before doing the ${job.name} job again.`, threadID, messageID);
+  const elapsed = now - lastTime;
+
+  if (elapsed < jobCooldown) {
+    const remaining = jobCooldown - elapsed;
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    return api.sendMessage(
+      `⏳ You must wait ${mins}m ${secs}s before doing the ${job.name} job again.`,
+      threadID, messageID
+    );
   }
 
   // Random earnings
@@ -123,12 +131,12 @@ module.exports.run = async function({ api, event, Users }) {
   bankData.balance += earned;
   await setData(`bank/${threadID}/${senderID}`, bankData);
 
-  // Update job cooldown
+  // Update cooldown
   userJobData[job.name] = now;
   await setData(`job/${threadID}/${senderID}`, userJobData);
 
-  // Username
-  const userName = await getUserName(senderID, Users);
+  // Get username
+  const userName = await getUserName(senderID, api);
 
   // Construct used items text
   const usedItemsText = usedItems.length > 0 ? usedItems.map(u => `✅ Used ${u}`).join("\n") + "\n" : "";
@@ -136,11 +144,12 @@ module.exports.run = async function({ api, event, Users }) {
   // Construct message
   const emoji = JOB_EMOJIS[job.name] || "💼";
   const funText = FUN_PHRASES[Math.floor(Math.random() * FUN_PHRASES.length)];
+
   const msg = `${isRare ? "✨ " : ""}${emoji} ${userName} did the ${job.name} job!\n` +
               `${usedItemsText}` +
               `💰 Earned: ${earned} coins${critical ? " 💥 Critical!" : ""}\n` +
               `🏦 New balance: ${bankData.balance.toLocaleString()} coins\n` +
-              `⏳ Cooldown for this job: ${Math.floor(jobCooldown/60000)}m 0s\n\n` +
+              `⏳ You need to wait ${Math.floor(jobCooldown/60000)}m ${Math.floor((jobCooldown%60000)/1000)}s before doing the ${job.name} job again.\n\n` +
               `${funText}`;
 
   api.sendMessage(msg, threadID, messageID);
