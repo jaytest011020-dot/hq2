@@ -14,11 +14,11 @@ async function getUserName(uid, api, Users) {
 module.exports.config = {
   name: "inviteEvent",
   eventType: ["log:subscribe"],
-  version: "1.5.1",
+  version: "1.6.0",
   credits: "ChatGPT + NN",
 };
 
-module.exports.run = async function({ api, event, Users }) {
+module.exports.run = async function ({ api, event, Users }) {
   try {
     const { threadID, logMessageData } = event;
     const addedParticipants = logMessageData.addedParticipants;
@@ -30,31 +30,37 @@ module.exports.run = async function({ api, event, Users }) {
     for (const newP of addedParticipants) {
       const newUserID = newP.userFbId;
 
-      // Skip bot itself
+      // Skip bot mismo
       if (newUserID === api.getCurrentUserID()) continue;
 
-      // Correct inviter detection
-      const inviterID = newP.inviterID || logMessageData.actorFbId;
-      if (!inviterID || inviterID === newUserID) continue;
+      const inviterID = newP.inviterID; // real inviter kung meron
+      const actorID = logMessageData.actorFbId; // sino ang nag-trigger
 
-      // Initialize inviter data
-      if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
+      let msg = "";
 
-      // Increment inviter count
-      gcData[inviterID].count += 1;
-      await setData(`invite/${threadID}`, gcData);
+      if (inviterID && inviterID !== newUserID) {
+        // ✅ Case A: may nag-invite
+        if (!gcData[inviterID]) gcData[inviterID] = { count: 0 };
+        gcData[inviterID].count += 1;
+        await setData(`invite/${threadID}`, gcData);
 
-      // Get user names
-      const inviterName = await getUserName(inviterID, api, Users);
-      const newUserName = await getUserName(newUserID, api, Users);
+        const inviterName = await getUserName(inviterID, api, Users);
+        const newUserName = await getUserName(newUserID, api, Users);
 
-      // Styled notification
-      const msg = `╭━[INVITE NOTIF]━╮
+        msg = `╭━[INVITE NOTIF]━╮
 ┃ 👤 Inviter: ${inviterName}
 ┃ ➕ Invited: ${newUserName}
-┃
 ┃ 📊 Total Invites: ${gcData[inviterID].count}
 ╰━━━━━━━━━━━━━━━━━━━━╯`;
+
+      } else {
+        // ✅ Case B: sumali via link (walang inviter)
+        const joinerName = await getUserName(newUserID, api, Users);
+
+        msg = `╭━[JOIN NOTIF]━╮
+┃ 🚪 ${joinerName} joined the group via link.
+╰━━━━━━━━━━━━━━━━━━━━╯`;
+      }
 
       api.sendMessage(msg, threadID);
     }
