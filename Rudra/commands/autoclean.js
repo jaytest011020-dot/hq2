@@ -20,7 +20,7 @@ function formatTime(ms) {
   return `${day > 0 ? day + "d " : ""}${hr > 0 ? hr + "h " : ""}${min > 0 ? min + "m " : ""}${sec}s`;
 }
 
-// ✅ Wrapper para siguradong may pangalan
+// ✅ Wrapper to get user name
 async function getUserName(uid, api) {
   try {
     const info = await api.getUserInfo(uid);
@@ -32,7 +32,7 @@ async function getUserName(uid, api) {
 }
 
 async function formatList(uids, api) {
-  if (!uids || uids.length === 0) return "Wala";
+  if (!uids || uids.length === 0) return "None";
   let lines = [];
   for (const uid of uids) {
     const name = await getUserName(uid, api);
@@ -43,10 +43,10 @@ async function formatList(uids, api) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "2.1.0",
+  version: "4.1.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Auto clean inactive users using poll + reply",
+  description: "Auto kick inactive users using seen only",
   commandCategory: "group",
   usages: "/autoclean 1m|1h|1d | cancel | resend | list",
   cooldowns: 5
@@ -54,14 +54,14 @@ module.exports.config = {
 
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
-  const ownerID = "61559999326713"; // palitan ng permanent UID mo
+  const ownerID = "61559999326713"; // replace with your permanent UID
   const botID = api.getCurrentUserID();
 
   // ✅ Only allow owner + admins
   const info = await api.getThreadInfo(threadID);
   const isAdmin = info.adminIDs.some(a => a.id === senderID);
   if (senderID !== ownerID && !isAdmin) {
-    return api.sendMessage("❌ Only group admins and the bot owner can use this command.", threadID, messageID);
+    return api.sendMessage("❌ Only group admins or bot owner can use this command.", threadID, messageID);
   }
 
   if (args.length === 0) {
@@ -89,11 +89,10 @@ module.exports.run = async function ({ api, event, args }) {
     const remaining = pollData.endTime - Date.now();
     const sent = await api.sendMessage(
       `╭[AUTO CLEAN ONGOING]╮
-
 ┃ 👥 Active: ${pollData.activeUsers?.length || 0} / ${pollData.totalUsers?.length || 0}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
-┃ 🔔 Reply "active" para hindi makick.
+┃ 🔔 Seen messages to mark as active. Bot will auto-kick inactive users after deadline.
 ╰━━━━━━━━━━━━━━━╯`,
       threadID
     );
@@ -122,7 +121,7 @@ module.exports.run = async function ({ api, event, args }) {
 ✅ Active:
 ${activeList}
 
-🚫 Inactive (pwedeng makick):
+🚫 Inactive (will be auto-kicked):
 ${inactiveList}
 
 🛡 Exempted:
@@ -155,7 +154,7 @@ ${exemptedList}
 ┃ 👥 Active: 0 / ${members.length}
 ┃ ⏳ Time left: ${formatTime(duration)}
 ┃
-┃ 🔔 Reply "active" para hindi makick.
+┃ 🔔 Seen messages to mark yourself as active. Bot will auto-kick inactive users after the deadline.
 ╰━━━━━━━━━━━━━━━╯`,
     threadID
   );
@@ -163,7 +162,7 @@ ${exemptedList}
 
   await setData(`/autoclean/${threadID}`, pollData);
 
-  // schedule kick
+  // schedule auto-kick
   setTimeout(async () => {
     const finalData = await getData(`/autoclean/${threadID}`);
     if (!finalData) return;
@@ -189,7 +188,7 @@ ${exemptedList}
       api.sendMessage(
         `╭[AUTO CLEAN FINISHED]╮
 ┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
-┃ 🚫 Kicked: ${toKick.length}
+┃ 🚫 Kicked: ${toKick.length} (inactive users)
 ╰━━━━━━━━━━━━━━━╯`,
         threadID
       );
@@ -197,56 +196,50 @@ ${exemptedList}
   }, duration);
 };
 
+// ✅ Handle only seen events
 module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, messageID, senderID, body } = event;
-  if (!body) return;
+  const { threadID, senderID } = event;
+  if (event.type !== "message_seen") return;
 
   let pollData = await getData(`/autoclean/${threadID}`);
   if (!pollData) return;
 
-  if (!Array.isArray(pollData.activeUsers)) {
-    pollData.activeUsers = [];
-  }
+  if (!Array.isArray(pollData.activeUsers)) pollData.activeUsers = [];
 
-  if (body.trim().toLowerCase() === "active") {
-    if (!pollData.activeUsers.includes(senderID)) {
-      pollData.activeUsers.push(senderID);
-      await setData(`/autoclean/${threadID}`, pollData);
+  if (!pollData.activeUsers.includes(senderID)) {
+    pollData.activeUsers.push(senderID);
+    await setData(`/autoclean/${threadID}`, pollData);
 
-      let name = await getUserName(senderID, api);
+    const name = await getUserName(senderID, api);
 
-      // ✅ auto-update username sa database
-      const userData = await getData(`/users/${senderID}`) || {};
-      userData.name = name;
-      await setData(`/users/${senderID}`, userData);
+    // Update users database
+    const userData = (await getData(`/users/${senderID}`)) || {};
+    userData.name = name;
+    await setData(`/users/${senderID}`, userData);
 
-      // delete old poll
-      if (pollData.pollMsgID) {
-        try { await api.unsendMessage(pollData.pollMsgID); } catch {}
-      }
+    // Notify only the new active user
+    api.sendMessage(`✅ You are now marked as active: @${name}`, threadID, null, {
+      mentions: [{ tag: `@${name}`, id: senderID }]
+    });
 
-      // resend updated poll
-      const remaining = pollData.endTime - Date.now();
-      const sent = await api.sendMessage(
-        {
-          body: `╭[AUTO CLEAN ONGOING]╮
+    // Resend updated poll
+    if (pollData.pollMsgID) {
+      try { await api.unsendMessage(pollData.pollMsgID); } catch {}
+    }
 
+    const remaining = pollData.endTime - Date.now();
+    const sent = await api.sendMessage(
+      {
+        body: `╭[AUTO CLEAN ONGOING]╮
 ┃ 👥 Active: ${pollData.activeUsers.length} / ${pollData.totalUsers.length}
 ┃ ⏳ Time left: ${formatTime(remaining)}
 ┃
-┃ 🔔 Reply "active" para hindi makick.
-╰━━━━━━━━━━━━━━━╯
-
-✅ Success: @${name}`,
-          mentions: [{ tag: `@${name}`, id: senderID }]
-        },
-        threadID
-      );
-
-      pollData.pollMsgID = sent.messageID;
-      await setData(`/autoclean/${threadID}`, pollData);
-    } else {
-      api.sendMessage("✅ Nakaregister ka na bilang active.", threadID, messageID);
-    }
+┃ 🔔 Seen messages to mark yourself as active. Bot will auto-kick inactive users after the deadline.
+╰━━━━━━━━━━━━━━━╯`
+      },
+      threadID
+    );
+    pollData.pollMsgID = sent.messageID;
+    await setData(`/autoclean/${threadID}`, pollData);
   }
 };
