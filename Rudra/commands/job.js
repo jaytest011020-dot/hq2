@@ -40,10 +40,10 @@ const FUN_PHRASES = [
 
 module.exports.config = {
   name: "job",
-  version: "3.1.0",
+  version: "3.2.0",
   hasPermission: 0,
   credits: "ChatGPT + NN",
-  description: "Random job system per GC with rare jobs, critical bonus, emojis, and fun phrases",
+  description: "Random job system per GC with buffs, rare jobs, critical bonus, emojis, and fun phrases",
   commandCategory: "economy",
   usages: "/job",
   cooldowns: 3
@@ -59,22 +59,32 @@ module.exports.run = async function({ api, event, Users }) {
 
   // Load user's job data per thread
   const userJobData = (await getData(`job/${threadID}/${senderID}`)) || {};
+  const inventory = (await getData(`inventory/${threadID}/${senderID}`)) || { items: [] };
 
   // Random job selection
   let job = JOBS[Math.floor(Math.random() * JOBS.length)];
   let isRare = job.rare || false;
 
-  // 10% chance to force a rare job if not already rare
   if (!isRare && Math.random() <= 0.10) {
     const rareJobs = JOBS.filter(j => j.rare);
     job = rareJobs[Math.floor(Math.random() * rareJobs.length)];
     isRare = true;
   }
 
+  // Calculate cooldown with buffs
+  let jobCooldown = job.cooldown;
+  const energyDrink = inventory.items.find(i => i.name === "Energy Drink" && i.quantity > 0);
+  if (energyDrink) {
+    jobCooldown = Math.floor(jobCooldown / 2); // halve cooldown
+    energyDrink.quantity -= 1;
+    if (energyDrink.quantity <= 0) inventory.items = inventory.items.filter(i => i !== energyDrink);
+    await setData(`inventory/${threadID}/${senderID}`, inventory);
+  }
+
   // Check cooldown
   const lastTime = userJobData[job.name] || 0;
-  if (now - lastTime < job.cooldown) {
-    const remaining = job.cooldown - (now - lastTime);
+  if (now - lastTime < jobCooldown) {
+    const remaining = jobCooldown - (now - lastTime);
     const mins = Math.floor(remaining / 60000);
     const secs = Math.floor((remaining % 60000) / 1000);
     return api.sendMessage(
@@ -87,9 +97,13 @@ module.exports.run = async function({ api, event, Users }) {
   // Random earnings
   let earned = randomInt(job.min, job.max);
 
-  // Critical bonus 5%
+  // Critical bonus with Lucky Charm
+  let critChance = 0.05;
+  const luckyCharm = inventory.items.find(i => i.name === "Lucky Charm");
+  if (luckyCharm) critChance += 0.05;
+
   let critical = false;
-  if (Math.random() <= 0.05) {
+  if (Math.random() <= critChance) {
     earned *= 2;
     critical = true;
   }
@@ -104,17 +118,10 @@ module.exports.run = async function({ api, event, Users }) {
 
   // Get user name with fallback
   let userName;
-  try {
-    const info = await api.getUser(senderID);
-    userName = info.name || bankData.name;
-  } catch {
-    try {
-      const info2 = await Users.getInfo(senderID);
-      userName = info2[senderID]?.name || bankData.name;
-    } catch {
-      userName = bankData.name;
-    }
-  }
+  try { const info = await api.getUser(senderID); userName = info.name || bankData.name; }
+  catch { try { const info2 = await Users.getInfo(senderID); userName = info2[senderID]?.name || bankData.name; }
+  catch { userName = bankData.name; } }
+
   bankData.name = userName;
   await setData(`bank/${threadID}/${senderID}`, bankData);
 
@@ -129,6 +136,5 @@ module.exports.run = async function({ api, event, Users }) {
             `💰 Earned: ${earned} coins${critical ? " 💥 Critical!" : ""}\n` +
             `🏦 New balance: ${bankData.balance.toLocaleString()} coins\n\n${funText}`;
 
-  // Bot replies to user's message
   api.sendMessage(msg, threadID, messageID);
 };
