@@ -2,11 +2,11 @@ const { setData, getData } = require("../../database.js");
 
 async function getUserName(uid, api, Users) {
   try {
-    // ✅ una sa API
+    // 🔹 Una: kuha sa API
     const info = await api.getUserInfo(uid);
     if (info?.[uid]?.name) return info[uid].name;
 
-    // ✅ fallback sa local Users module
+    // 🔹 Fallback sa local Users module
     const name = await Users.getNameUser(uid);
     if (name) return name;
 
@@ -19,7 +19,7 @@ async function getUserName(uid, api, Users) {
 module.exports.config = {
   name: "inviteEvent",
   eventType: ["log:subscribe"],
-  version: "3.0.0",
+  version: "3.1.0",
   credits: "ChatGPT + NN",
 };
 
@@ -41,12 +41,14 @@ module.exports.run = async function ({ api, event, Users }) {
       let msg = "";
       let mentions = [];
 
+      // 🔹 Kung may ibang nag-add (actor ≠ new user)
       if (actorID !== newUserID) {
-        // ✅ may nag-add → increment invite count
+        // ✅ Increment invite count
         if (!gcData[actorID]) gcData[actorID] = { count: 0 };
         gcData[actorID].count += 1;
         await setData(`invite/${threadID}`, gcData);
 
+        // 🔹 Kumuha ng username: API muna, fallback sa Users
         const inviterName = await getUserName(actorID, api, Users);
         const newUserName = await getUserName(newUserID, api, Users);
 
@@ -61,7 +63,7 @@ module.exports.run = async function ({ api, event, Users }) {
           { tag: newUserName, id: newUserID }
         ];
       } else {
-        // ✅ nag-join via link / self-join
+        // 🔹 Nag-join via link / self-join
         const joinerName = await getUserName(newUserID, api, Users);
 
         msg = `╭━[JOIN NOTIF]━╮
