@@ -52,7 +52,7 @@ async function endGiveaway(api, threadID, gid, force = false) {
   }
 
   api.sendMessage(
-    `🎉[GIVEAWAY ENDED]🎉
+    `🎉 [GIVEAWAY ENDED] 🎉
 ┏━━━━━━━━━━━━━━━┓
 🏆 Prize: ${g.prize}
 👑 Host: ${g.hostName}
@@ -70,7 +70,7 @@ ${winnerText}`,
 
 module.exports.config = {
   name: "giveaway",
-  version: "4.0.0",
+  version: "4.1.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Giveaway system with join, resend, roll",
@@ -82,7 +82,7 @@ module.exports.config = {
 // Main command
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
-  const ownerID = "your_owner_uid_here"; // palitan mo ng tunay na UID mo
+  const ownerID = "your_owner_uid_here"; // palitan ng tunay mong UID
   const info = await api.getThreadInfo(threadID);
   const isAdmin = info.adminIDs.some(a => a.id === senderID);
 
@@ -109,7 +109,7 @@ module.exports.run = async function({ api, event, args }) {
 
     const remaining = g.endTime - Date.now();
     const sent = await api.sendMessage(
-      `🎉[GIVEAWAY ONGOING]🎉
+      `🎉 [GIVEAWAY ONGOING] 🎉
 ┏━━━━━━━━━━━━━━━┓
 🏆 Prize: ${g.prize}
 👑 Host: ${g.hostName}
@@ -160,7 +160,7 @@ module.exports.run = async function({ api, event, args }) {
   };
 
   const sent = await api.sendMessage(
-    `🎉[GIVEAWAY STARTED]🎉
+    `🎉 [GIVEAWAY STARTED] 🎉
 ┏━━━━━━━━━━━━━━━┓
 🏆 Prize: ${prize}
 👑 Host: ${hostName}
@@ -182,8 +182,10 @@ module.exports.run = async function({ api, event, args }) {
 
 // Handle replies to join
 module.exports.handleEvent = async function({ api, event }) {
-  const { threadID, senderID, type, messageReply } = event;
-  if (type !== "message_reply" || !messageReply) return;
+  const { threadID, senderID, messageReply } = event;
+
+  // siguraduhin na may reply object
+  if (!messageReply) return;
 
   let data = await getData(`/giveaway/${threadID}`);
   if (!data) return;
@@ -202,7 +204,7 @@ module.exports.handleEvent = async function({ api, event }) {
 
       const remaining = g.endTime - Date.now();
       const sent = await api.sendMessage(
-        `🎉[GIVEAWAY ONGOING]🎉
+        `🎉 [GIVEAWAY ONGOING] 🎉
 ┏━━━━━━━━━━━━━━━┓
 🏆 Prize: ${g.prize}
 👑 Host: ${g.hostName}
