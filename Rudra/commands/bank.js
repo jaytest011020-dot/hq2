@@ -3,7 +3,7 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "3.0.0",
+  version: "3.1.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
   description: "Bank system per group chat with auto-updated usernames + send coins",
@@ -12,23 +12,34 @@ module.exports.config = {
   cooldowns: 3,
 };
 
-// 🔑 Fetch username via api.getUserInfo, fallback to Users.getName
+// 🔑 Fetch username with global cache
 async function getUserName(uid, api, Users) {
+  // Check cache
+  let cachedName = global.data.userName.get(uid);
+  if (cachedName) return cachedName;
+
+  // Try api.getUserInfo
   try {
-    const info = await api.getUserInfo(uid);
-    if (info && info[uid]?.name) return info[uid].name;
+    const userInfo = await api.getUserInfo(uid);
+    const name = Object.values(userInfo)[0]?.name || `FB-User(${uid})`;
+    global.data.userName.set(uid, name);
+    return name;
   } catch (err) {
     console.log(`[BANK] api.getUserInfo failed for UID ${uid}:`, err);
   }
 
+  // Fallback to Users.getName
   try {
-    const name = await Users.getName(uid);
-    if (name) return name;
+    const name = await Users.getName(uid) || `FB-User(${uid})`;
+    global.data.userName.set(uid, name);
+    return name;
   } catch (err) {
     console.log(`[BANK] Users.getName failed for UID ${uid}:`, err);
   }
 
-  return `FB-User(${uid})`;
+  const fallbackName = `FB-User(${uid})`;
+  global.data.userName.set(uid, fallbackName);
+  return fallbackName;
 }
 
 // 🏦 Format balance message
