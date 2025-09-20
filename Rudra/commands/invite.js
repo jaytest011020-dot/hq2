@@ -17,7 +17,7 @@ module.exports.config = {
   hasPermission: 0,
   credits: "ChatGPT + NN",
   description: "Check your invites or list all inviters",
-  commandCategory: "fun",
+  commandCategory: "group",
   usages: "/invite | /invite list",
   cooldowns: 3,
 };
