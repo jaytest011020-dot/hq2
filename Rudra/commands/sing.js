@@ -9,7 +9,7 @@ module.exports.config = {
     credits: "owner",
     description: "Send Youtube Music",
     usePrefix: false,
-    category: "without prefix",
+    commandCategory: "without prefix",
     usages: `ytmp3 [music title]`,
     cooldowns: 5,
     dependencies: {
