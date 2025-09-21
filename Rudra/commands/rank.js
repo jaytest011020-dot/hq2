@@ -1,14 +1,14 @@
-const { getData, setData } = require("../../database.js");
+const { getValue, setValue } = require("../../firebase.js");
 const axios = require("axios");
 
 module.exports.config = {
   name: "rank",
-  version: "3.5.0",
+  version: "4.0.0",
   hasPermission: 0,
-  credits: "ChatGPT + NN",
-  description: "Rank with card image + leaderboard",
+  credits: "ChatGPT + NN + Jaylord La Peña",
+  description: "Rank with card image + leaderboard (with on/off toggle)",
   commandCategory: "fun",
-  usages: "/rank | /rank @mention | /rank list",
+  usages: "/rank | /rank @mention | /rank list | /rank on | /rank off",
   cooldowns: 5
 };
 
@@ -27,21 +27,25 @@ const rankNames = [
 ];
 
 function getRequiredXP(level) {
-  return level * 200;  // linear scaling example
+  return level * 200; // linear scaling
 }
 
 module.exports.handleEvent = async function({ api, event, Users }) {
   if (!event.body) return;
   const { threadID, senderID } = event;
 
-  const path = `rank/${threadID}/${senderID}`;
-  let userData = await getData(path) || { level: 1, xp: 0, name: "" };
+  // 🔹 check if rank system is enabled
+  const status = await getValue(`rank/status/${threadID}`);
+  if (!status || !status.enabled) return;
+
+  const path = `rank/data/${threadID}/${senderID}`;
+  let userData = await getValue(path) || { level: 1, xp: 0, name: "" };
 
   // get user name
   userData.name = await Users.getNameUser(senderID);
 
   // +5 to 20 XP per message
-  const xpGain = Math.floor(Math.random() * 16) + 5; // 5–20
+  const xpGain = Math.floor(Math.random() * 16) + 5;
   userData.xp += xpGain;
 
   let requiredXP = getRequiredXP(userData.level);
@@ -53,7 +57,7 @@ module.exports.handleEvent = async function({ api, event, Users }) {
     requiredXP = getRequiredXP(userData.level);
   }
 
-  await setData(path, userData);
+  await setValue(path, userData);
 
   if (leveledUp) {
     const rankName = rankNames[userData.level - 1] || "Ascended";
@@ -69,7 +73,7 @@ module.exports.handleEvent = async function({ api, event, Users }) {
         },
         threadID
       );
-    } catch (err) {
+    } catch {
       await api.sendMessage(
         `🎉 Congrats ${userData.name}! Level up → Level ${userData.level}\nRank: ${rankName}\n⚠️ (Could not load rank card image)`,
         threadID
@@ -81,10 +85,26 @@ module.exports.handleEvent = async function({ api, event, Users }) {
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, messageID, senderID, mentions } = event;
 
-  // /rank list
+  // 🔹 toggle on/off
+  if (args[0] === "on" || args[0] === "off") {
+    const threadInfo = await api.getThreadInfo(threadID);
+    const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+    if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle rank system.", threadID, messageID);
+
+    const enabled = args[0] === "on";
+    await setValue(`rank/status/${threadID}`, { enabled });
+
+    return api.sendMessage(
+      `📊 Rank system is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+      threadID,
+      messageID
+    );
+  }
+
+  // 🔹 /rank list
   if (args[0] && args[0].toLowerCase() === "list") {
-    const path = `rank/${threadID}`;
-    const allData = await getData(path) || {};
+    const path = `rank/data/${threadID}`;
+    const allData = await getValue(path) || {};
 
     let results = Object.values(allData);
     if (results.length === 0) {
@@ -107,10 +127,10 @@ module.exports.run = async function({ api, event, args, Users }) {
     return api.sendMessage(msg, threadID, messageID);
   }
 
-  // /rank @mention or self
+  // 🔹 /rank @mention or self
   const targetID = Object.keys(mentions)[0] || senderID;
-  const path = `rank/${threadID}/${targetID}`;
-  let userData = await getData(path);
+  const path = `rank/data/${threadID}/${targetID}`;
+  let userData = await getValue(path);
   if (!userData) {
     return api.sendMessage("⚠️ Walang rank data ang user na ito.", threadID, messageID);
   }
@@ -130,7 +150,7 @@ module.exports.run = async function({ api, event, args, Users }) {
       threadID,
       messageID
     );
-  } catch (err) {
+  } catch {
     await api.sendMessage(
       `📊 Rank Info for ${userData.name}\nLevel: ${userData.level}\nXP: ${userData.xp}/${requiredXP}\nRank: ${rankName}\n⚠️ (Rank card image failed to load)`,
       threadID,
