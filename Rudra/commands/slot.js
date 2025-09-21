@@ -3,7 +3,7 @@ const { getData, setData } = require("../../database.js");
 // Slot symbols
 const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎"];
 
-// 🔑 Fetch username (same logic as bank.js)
+// 🔑 Fetch username
 async function getUserName(uid, api, Users) {
   let cachedName = global.data.userName.get(uid);
   if (cachedName) return cachedName;
@@ -28,12 +28,12 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "slot",
-  version: "2.1.0",
+  version: "2.2.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Play slot machine with coins (per GC bank system) with admin toggle",
   commandCategory: "Games",
-  usages: "/slot <amount> | /slot toggle",
+  usages: "/slot <amount> | /slot on | /slot off",
   cooldowns: 5,
 };
 
@@ -41,20 +41,18 @@ module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 🔹 Check if GC admin is toggling slot
-  if (command === "toggle") {
+  // 🔹 Handle /slot on/off toggle (GC admin only)
+  if (command === "on" || command === "off") {
     try {
       const threadInfo = await api.getThreadInfo(threadID);
       const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
       if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle slot.", threadID);
 
-      // Toggle slot status
-      let slotStatus = (await getData(`slot/${threadID}`)) || { enabled: true };
-      slotStatus.enabled = !slotStatus.enabled;
-      await setData(`slot/${threadID}`, slotStatus);
+      const enabled = command === "on";
+      await setData(`slot/status/${threadID}`, { enabled });
 
       return api.sendMessage(
-        `🎰 Slot is now ${slotStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+        `🎰 Slot system is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
         threadID
       );
     } catch (err) {
@@ -64,25 +62,21 @@ module.exports.run = async function ({ api, event, args, Users }) {
   }
 
   // 🔹 Check if slot is enabled
-  const slotStatus = (await getData(`slot/${threadID}`)) || { enabled: true };
+  const slotStatus = (await getData(`slot/status/${threadID}`)) || { enabled: true };
   if (!slotStatus.enabled) {
     return api.sendMessage("❌ Slot is currently disabled by GC admin.", threadID);
   }
 
-  // ✅ Load player balance per group
+  // ✅ Load player balance
   let userBank = (await getData(`bank/${threadID}/${senderID}`)) || {
     balance: 0,
     name: await getUserName(senderID, api, Users)
   };
 
   const bet = parseInt(args[0]);
-  if (isNaN(bet) || bet <= 0) {
-    return api.sendMessage("❌ Usage: /slot <bet>", threadID);
-  }
+  if (isNaN(bet) || bet <= 0) return api.sendMessage("❌ Usage: /slot <bet>", threadID);
 
-  if (userBank.balance < bet) {
-    return api.sendMessage("⚠️ You don't have enough coins!", threadID);
-  }
+  if (userBank.balance < bet) return api.sendMessage("⚠️ You don't have enough coins!", threadID);
 
   // Deduct bet
   userBank.balance -= bet;
@@ -109,7 +103,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
     resultMsg += `❌ You lost your bet of ${bet.toLocaleString()} coins.`;
   }
 
-  // ✅ Save updated balance per group
+  // ✅ Save updated balance
   userBank.name = await getUserName(senderID, api, Users);
   await setData(`bank/${threadID}/${senderID}`, userBank);
 
