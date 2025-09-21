@@ -1,7 +1,3 @@
-const axios = require("axios");
-const fs = require("fs-extra");
-const path = require("path");
-
 const mathSansBold = {
   A: "𝗔", B: "𝗕", C: "𝗖", D: "𝗗", E: "𝗘", F: "𝗙", G: "𝗚", H: "𝗛", I: "𝗜",
   J: "𝗝", K: "𝗞", L: "𝗟", M: "𝗠", N: "𝗡", O: "𝗢", P: "𝗣", Q: "𝗤", R: "𝗥",
@@ -16,10 +12,10 @@ let lastUsed = {};
 
 module.exports.config = {
   name: "help",
-  version: "1.0.3",
+  version: "1.0.4",
   hasPermission: 0,
   credits: "august + ChatGPT",
-  description: "Guide for new users with attachment",
+  description: "Guide for new users",
   commandCategory: "system",
   usages: "/help",
   cooldowns: 5
@@ -68,29 +64,6 @@ module.exports.run = async function ({ api, event }) {
   }
   msg += `├─────☾⋆\n│ » Total commands: [ ${commands.size} ]\n│「 ☾⋆ PREFIX: ${prefix} 」\n╰──────────⧕\n\n`;
 
-  // 🔹 download attachment (bot owner profile)
-  const attachmentUrl = "https://betadash-api-swordslush-production.up.railway.app/profile?uid=61559999326713";
-  const cacheDir = path.join(__dirname, "..", "cache");
-  const filePath = path.join(cacheDir, "bot_profile.png");
-
-  try {
-    await fs.ensureDir(cacheDir); // siguraduhin na meron cache folder
-    const response = await axios.get(attachmentUrl, { responseType: "stream" });
-
-    await new Promise((resolve, reject) => {
-      const writer = fs.createWriteStream(filePath);
-      response.data.pipe(writer);
-      writer.on("finish", resolve);
-      writer.on("error", reject);
-    });
-
-    await api.sendMessage(
-      { body: msg, attachment: fs.createReadStream(filePath) },
-      threadID,
-      () => fs.unlink(filePath).catch(() => {})
-    );
-  } catch (err) {
-    console.error("Error downloading or sending attachment:", err);
-    api.sendMessage(msg, threadID);
-  }
+  // 🔹 send message without attachment
+  api.sendMessage(msg, threadID, messageID);
 };
