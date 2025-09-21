@@ -43,12 +43,12 @@ const GLOBAL_COOLDOWN = 60 * 60 * 1000;
 
 module.exports.config = {
   name: "job",
-  version: "5.2.0",
+  version: "5.3.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Random job system with GC admin toggle, 1-hour cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
   commandCategory: "economy",
-  usages: "/job | /job on | /job off",
+  usages: "/job | /job on | /job off | /job status",
   cooldowns: 3
 };
 
@@ -71,9 +71,17 @@ module.exports.run = async function({ api, event }) {
   const now = Date.now();
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 🔹 Handle /job off and /job on (GC admin only)
-  if (command === "off" || command === "on") {
+  // 🔹 Handle /job on/off/status (GC admin only for on/off)
+  if (["on", "off", "status"].includes(command)) {
     try {
+      if (command === "status") {
+        const jobStatus = (await getData(`job/status/${threadID}`)) || { enabled: true };
+        return api.sendMessage(
+          `💼 Job system status: ${jobStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"}`,
+          threadID
+        );
+      }
+
       const threadInfo = await api.getThreadInfo(threadID);
       const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
       if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle the job system.", threadID);
