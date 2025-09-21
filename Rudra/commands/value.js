@@ -1,91 +1,75 @@
-const axios = require("axios");
-const cheerio = require("cheerio");
-const fs = require("fs");
-const path = require("path");
-
-const VALUE_LIST_URL = "https://growagarden.gg/value-list";
-const CACHE_FILE = path.join(__dirname, "growagarden_values.json");
-const CACHE_TTL = 1000 * 60 * 30; // 30 minutes
-
-async function fetchValues() {
-  try {
-    const { data } = await axios.get(VALUE_LIST_URL);
-    const $ = cheerio.load(data);
-
-    let items = [];
-
-    // parsing sa bawat card (katulad sa screenshot mo)
-    $(".card").each((i, el) => {
-      const name = $(el).find("div:contains('Value')").prev().text().trim() || 
-                   $(el).find(".card-title, h5").text().trim();
-
-      const value = $(el).find("div:contains('Value')").text()
-        .replace("Value:", "")
-        .trim();
-
-      if (name && value) {
-        items.push({ name, value });
-      }
-    });
-
-    fs.writeFileSync(
-      CACHE_FILE,
-      JSON.stringify({ timestamp: Date.now(), items }, null, 2)
-    );
-
-    return items;
-  } catch (err) {
-    console.error("❌ Error fetching value list:", err);
-    return [];
-  }
-}
-
-async function getValues() {
-  if (fs.existsSync(CACHE_FILE)) {
-    const raw = fs.readFileSync(CACHE_FILE);
-    const parsed = JSON.parse(raw);
-    if (Date.now() - parsed.timestamp < CACHE_TTL) {
-      return parsed.items;
-    }
-  }
-  return await fetchValues();
-}
+const https = require("https");
 
 module.exports.config = {
   name: "value",
   version: "1.0.0",
-  credits: "ChatGPT + Jaylord",
+  credits: "ChatGPT + NN",
   hasPermission: 0,
-  description: "Shows GrowAGarden item values",
+  description: "Fetch Grow a Garden Value List",
   usages: "/values [all | <item name>]",
-  commandCategory: "economy",
-  cooldowns: 5,
+  commandCategory: "games",
+  cooldowns: 5
 };
 
-module.exports.run = async function ({ api, event, args }) {
-  const items = await getValues();
-  if (!items || items.length === 0) {
-    return api.sendMessage("❌ Hindi ko nakuha yung value list ngayon.", event.threadID, event.messageID);
-  }
+function fetchValues() {
+  const options = {
+    method: "GET",
+    hostname: "growagarden.gg",
+    path: "/api/values", // <-- ito kailangan natin i-confirm exact path
+    headers: {
+      accept: "*/*",
+      "content-type": "application/json",
+      referer: "https://growagarden.gg/value-list"
+    }
+  };
 
-  if (args.length > 0 && args[0].toLowerCase() !== "all") {
-    const searchName = args.join(" ").toLowerCase();
-    const found = items.find(i => i.name.toLowerCase() === searchName);
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on("data", chunk => chunks.push(chunk));
+      res.on("end", () => {
+        try {
+          const body = Buffer.concat(chunks);
+          resolve(JSON.parse(body.toString()));
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    req.on("error", (err) => reject(err));
+    req.end();
+  });
+}
+
+function formatValuesMessage(values, search) {
+  if (!values) return "❌ Failed to fetch value list.";
+  let msg = "";
+
+  if (search) {
+    const found = values.find(v => v.name.toLowerCase() === search.toLowerCase());
     if (found) {
-      return api.sendMessage(`📦 ${found.name}\n💰 Value: ${found.value}`, event.threadID, event.messageID);
+      msg = `📦 ${found.name}\n💰 Value: ${found.value}\n📈 Demand: ${found.demand || "N/A"}\n📊 Trend: ${found.trend || "N/A"}`;
     } else {
-      return api.sendMessage("❌ Item not found sa value list.", event.threadID, event.messageID);
+      msg = "❌ Item not found.";
     }
   } else {
-    let msg = "📋 GrowAGarden Value List:\n\n";
-    items.forEach(i => {
-      msg += `- ${i.name}: ${i.value}\n`;
+    msg = "📋 **Grow a Garden Value List** 📋\n\n";
+    values.forEach(v => {
+      msg += `- ${v.name}: 💰 ${v.value}\n`;
     });
+  }
 
-    // Kung masyado mahaba, hatiin sa chunks
-    const chunkSize = 1900;
-    for (let i = 0; i < msg.length; i += chunkSize) {
-      api.sendMessage(msg.slice(i, i + chunkSize), event.threadID, event.messageID);
-    }
+  return msg;
+}
+
+module.exports.run = async function({ api, event, args }) {
+  try {
+    const values = await fetchValues();
+    const search = args.length > 0 && args[0].toLowerCase() !== "all" ? args.join(" ") : null;
+    const msg = formatValuesMessage(values, search);
+    api.sendMessage(msg, event.threadID, event.messageID);
+  } catch (err) {
+    console.error("[VALUES] Error:", err);
+    api.sendMessage("❌ Failed to fetch Grow a Garden values.", event.threadID, event.messageID);
   }
 };
