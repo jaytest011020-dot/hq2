@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "race",
-  version: "1.0.0",
+  version: "1.0.1",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
   description: "Horse race betting game with animation",
@@ -121,7 +121,7 @@ module.exports.run = async function({ api, event, args }) {
       }
 
       api.sendMessage(msg, threadID, () => {
-        setTimeout(updateRace, 2000); // update every 2s
+        setTimeout(updateRace, 5000); // update every 5s
       });
     }
 
