@@ -45,7 +45,7 @@ async function formatList(uids, api) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "5.1.0",
+  version: "5.2.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Automatically track active members by seen/chat & kick inactive users after deadline",
@@ -155,16 +155,21 @@ ${inactiveList}
   pollData.pollMsgID = sent.messageID;
   await setData(`/autoclean/${threadID}`, pollData);
 
-  // Schedule auto-kick
-  setTimeout(async () => {
-    const finalData = await getData(`/autoclean/${threadID}`);
-    if (!finalData) return;
+  // ✅ Interval-based auto-kick check
+  const CHECK_INTERVAL = 5000; // 5 seconds
+  const intervalID = setInterval(async () => {
+    const currentData = await getData(`/autoclean/${threadID}`);
+    if (!currentData) return clearInterval(intervalID);
 
+    const now = Date.now();
+    if (now < currentData.endTime) return; // Not yet expired
+
+    // Kick inactive members
     api.getThreadInfo(threadID, async (err, info) => {
       if (err) return;
 
       const toKick = info.participantIDs.filter(uid =>
-        !finalData.activeUsers.includes(uid) &&
+        !currentData.activeUsers.includes(uid) &&
         uid !== botID &&
         uid !== ownerID &&
         !info.adminIDs.some(a => a.id === uid)
@@ -177,23 +182,23 @@ ${inactiveList}
       }
 
       await setData(`/autoclean/${threadID}`, null);
+      clearInterval(intervalID);
 
       api.sendMessage(
         `╭[AUTO CLEAN FINISHED]╮
-┃ 👥 Active: ${finalData.activeUsers.length} / ${finalData.totalUsers.length}
+┃ 👥 Active: ${currentData.activeUsers.length} / ${currentData.totalUsers.length}
 ┃ 🚫 Kicked: ${toKick.length}
 ╰━━━━━━━━━━━━━━━╯`,
         threadID
       );
     });
-  }, duration);
+  }, CHECK_INTERVAL);
 };
 
 // Handle seen/chat events
 module.exports.handleEvent = async function({ api, event }) {
   const { threadID, senderID, type } = event;
 
-  // Only check message_seen or message (chat text)
   if (type !== "message_seen" && type !== "message") return;
 
   let pollData = await getData(`/autoclean/${threadID}`);
@@ -201,14 +206,12 @@ module.exports.handleEvent = async function({ api, event }) {
 
   if (!Array.isArray(pollData.activeUsers)) pollData.activeUsers = [];
 
-  // If not yet active, register now
   if (!pollData.activeUsers.includes(senderID)) {
     pollData.activeUsers.push(senderID);
     await setData(`/autoclean/${threadID}`, pollData);
 
     const name = await getUserName(senderID, api);
 
-    // Update ongoing message first
     if (pollData.pollMsgID) {
       try { await api.unsendMessage(pollData.pollMsgID); } catch {}
     }
@@ -229,7 +232,6 @@ module.exports.handleEvent = async function({ api, event }) {
     pollData.pollMsgID = sent.messageID;
     await setData(`/autoclean/${threadID}`, pollData);
 
-    // Then send confirmation below
     api.sendMessage(
       {
         body: `✅ Registered as active: ${name}`,
