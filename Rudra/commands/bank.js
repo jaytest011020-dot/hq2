@@ -3,11 +3,11 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "3.2.0",
+  version: "3.3.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Bank system per group chat with auto-updated usernames + send coins",
-  usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>",
+  description: "Bank system per group chat with toggle by GC admin or bot admin",
+  usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>, /bank on/off",
   commandCategory: "economy",
   cooldowns: 3,
 };
@@ -22,17 +22,13 @@ async function getUserName(uid, api, Users) {
     const name = Object.values(userInfo)[0]?.name || `FB-User(${uid})`;
     global.data.userName.set(uid, name);
     return name;
-  } catch (err) {
-    console.log(`[BANK] api.getUserInfo failed for UID ${uid}:`, err);
-  }
+  } catch (err) {}
 
   try {
     const name = await Users.getName(uid) || `FB-User(${uid})`;
     global.data.userName.set(uid, name);
     return name;
-  } catch (err) {
-    console.log(`[BANK] Users.getName failed for UID ${uid}:`, err);
-  }
+  } catch (err) {}
 
   const fallbackName = `FB-User(${uid})`;
   global.data.userName.set(uid, fallbackName);
@@ -49,6 +45,30 @@ function formatBalance(user, balance) {
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID, mentions } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
+
+  // 🔹 Toggle bank system (GC admin or bot admin only)
+  if (command === "on" || command === "off") {
+    let isAdmin = ADMINBOT.includes(senderID);
+
+    if (!isAdmin && event.isGroup) {
+      try {
+        const threadInfo = await api.getThreadInfo(threadID);
+        if (threadInfo.adminIDs.some(a => a.id == senderID)) isAdmin = true;
+      } catch {}
+    }
+
+    if (!isAdmin) return api.sendMessage("❌ Only bot admins or GC admins can toggle the bank.", threadID);
+
+    let bankStatus = (await getData(`bank/status/${threadID}`)) || { enabled: true };
+    bankStatus.enabled = command === "on";
+    await setData(`bank/status/${threadID}`, bankStatus);
+
+    return api.sendMessage(`🏦 Bank system is now ${bankStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`, threadID);
+  }
+
+  // 🔹 Check if bank system is enabled
+  const bankStatus = (await getData(`bank/status/${threadID}`)) || { enabled: true };
+  if (!bankStatus.enabled) return api.sendMessage("❌ Bank system is currently disabled by GC admin.", threadID);
 
   // 📋 Show all accounts in the current group
   if (command === "all") {
@@ -91,9 +111,7 @@ module.exports.run = async function({ api, event, args, Users }) {
       try {
         const threadInfo = await api.getThreadInfo(threadID);
         if (threadInfo.adminIDs.some(a => a.id == senderID)) isAdmin = true;
-      } catch (err) {
-        console.log("[BANK] Failed to check GC admin:", err);
-      }
+      } catch {}
     }
 
     if (!isAdmin)
@@ -121,7 +139,7 @@ module.exports.run = async function({ api, event, args, Users }) {
     );
   }
 
-  // 💸 Send coins (multi-word mention fix)
+  // 💸 Send coins
   if (command === "send") {
     if (!mentions || !Object.keys(mentions).length)
       return api.sendMessage("❌ Please mention a user to send coins.", threadID, messageID);
@@ -130,7 +148,6 @@ module.exports.run = async function({ api, event, args, Users }) {
     if (recipientID === senderID)
       return api.sendMessage("❌ You cannot send coins to yourself.", threadID, messageID);
 
-    // Kunin ang amount mula sa natitirang args pagkatapos ng mention
     let mentionName = Object.values(mentions)[0];
     const amountText = args.slice(1).join(" ").replace(mentionName, "").trim();
     const amount = parseInt(amountText);
