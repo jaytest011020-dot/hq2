@@ -1,75 +1,49 @@
-const https = require("https");
+const axios = require("axios");
+const cheerio = require("cheerio");
 
 module.exports.config = {
-  name: "value",
+  name: "values",
   version: "1.0.0",
-  credits: "ChatGPT + NN",
-  hasPermission: 0,
-  description: "Fetch Grow a Garden Value List",
-  usages: "/values [all | <item name>]",
+  hasPermssion: 0,
+  credits: "ChatGPT",
+  description: "Check Grow a Garden item value",
   commandCategory: "games",
-  cooldowns: 5
+  usages: "/values <itemName>",
+  cooldowns: 5,
 };
 
-function fetchValues() {
-  const options = {
-    method: "GET",
-    hostname: "growagarden.gg",
-    path: "/api/values", // <-- ito kailangan natin i-confirm exact path
-    headers: {
-      accept: "*/*",
-      "content-type": "application/json",
-      referer: "https://growagarden.gg/value-list"
-    }
-  };
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      const chunks = [];
-      res.on("data", chunk => chunks.push(chunk));
-      res.on("end", () => {
-        try {
-          const body = Buffer.concat(chunks);
-          resolve(JSON.parse(body.toString()));
-        } catch (err) {
-          reject(err);
-        }
-      });
-    });
-    req.on("error", (err) => reject(err));
-    req.end();
-  });
-}
-
-function formatValuesMessage(values, search) {
-  if (!values) return "❌ Failed to fetch value list.";
-  let msg = "";
-
-  if (search) {
-    const found = values.find(v => v.name.toLowerCase() === search.toLowerCase());
-    if (found) {
-      msg = `📦 ${found.name}\n💰 Value: ${found.value}\n📈 Demand: ${found.demand || "N/A"}\n📊 Trend: ${found.trend || "N/A"}`;
-    } else {
-      msg = "❌ Item not found.";
-    }
-  } else {
-    msg = "📋 **Grow a Garden Value List** 📋\n\n";
-    values.forEach(v => {
-      msg += `- ${v.name}: 💰 ${v.value}\n`;
-    });
+module.exports.run = async ({ api, event, args }) => {
+  const itemName = args.join(" ");
+  if (!itemName) {
+    return api.sendMessage("❌ Please provide an item name. Example: /values carrot", event.threadID, event.messageID);
   }
 
-  return msg;
-}
-
-module.exports.run = async function({ api, event, args }) {
   try {
-    const values = await fetchValues();
-    const search = args.length > 0 && args[0].toLowerCase() !== "all" ? args.join(" ") : null;
-    const msg = formatValuesMessage(values, search);
+    // Step 1: Fetch homepage
+    const homepage = await axios.get("https://growagarden.gg/value-list");
+    const $ = cheerio.load(homepage.data);
+    const scripts = $("script#__NEXT_DATA__").html();
+    const parsed = JSON.parse(scripts);
+    const buildId = parsed.buildId;
+
+    // Step 2: Fetch value-list.json
+    const jsonUrl = `https://growagarden.gg/_next/data/${buildId}/value-list.json`;
+    const valueData = await axios.get(jsonUrl);
+    const items = valueData.data.pageProps.items;
+
+    // Step 3: Search item
+    const item = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+
+    if (!item) {
+      return api.sendMessage(`❌ Item "${itemName}" not found.`, event.threadID, event.messageID);
+    }
+
+    // Step 4: Return result
+    const msg = `🌱 Item: ${item.name}\n💰 Value: ${item.value}`;
     api.sendMessage(msg, event.threadID, event.messageID);
+
   } catch (err) {
-    console.error("[VALUES] Error:", err);
-    api.sendMessage("❌ Failed to fetch Grow a Garden values.", event.threadID, event.messageID);
+    console.error(err);
+    api.sendMessage("❌ Error fetching values. Try again later.", event.threadID, event.messageID);
   }
 };
