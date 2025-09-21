@@ -1,9 +1,11 @@
+const fs = require("fs");
+const path = require("path");
 const { setData, getData } = require("../../database.js");
 const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "3.3.0",
+  version: "3.3.1",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
   description: "Bank system per group chat with toggle by GC admin or bot admin",
@@ -43,7 +45,26 @@ function formatBalance(user, balance) {
 }
 
 module.exports.run = async function({ api, event, args, Users }) {
-  const { threadID, senderID, messageID, mentions } = event;
+  const { threadID, senderID, messageID } = event;
+
+  // --- Maintenance check ---
+  try {
+    const maintenance = await getData("/maintenance");
+    if (maintenance?.enabled) {
+      const mp4Path = path.join(__dirname, "cache", "AI data.mp4"); // relative path
+      return api.sendMessage(
+        {
+          body: "🚧 Bot is currently under maintenance. Bank commands are temporarily disabled.",
+          attachment: fs.createReadStream(mp4Path),
+        },
+        threadID,
+        messageID
+      );
+    }
+  } catch (err) {
+    console.error("Maintenance check failed:", err);
+  }
+
   const command = args[0] ? args[0].toLowerCase() : "";
 
   // 🔹 Toggle bank system (GC admin or bot admin only)
@@ -77,12 +98,10 @@ module.exports.run = async function({ api, event, args, Users }) {
 
     for (const uid in allData) {
       const freshName = await getUserName(uid, api, Users);
-
       if (allData[uid].name !== freshName) {
         allData[uid].name = freshName;
         await setData(`bank/${threadID}/${uid}`, allData[uid]);
       }
-
       results.push({
         uid,
         name: freshName,
@@ -106,7 +125,6 @@ module.exports.run = async function({ api, event, args, Users }) {
   // ➕ Add coins (bot admin or GC admin)
   if (command === "add") {
     let isAdmin = ADMINBOT.includes(senderID);
-
     if (!isAdmin && event.isGroup) {
       try {
         const threadInfo = await api.getThreadInfo(threadID);
@@ -114,8 +132,7 @@ module.exports.run = async function({ api, event, args, Users }) {
       } catch {}
     }
 
-    if (!isAdmin)
-      return api.sendMessage("❌ Only bot admins or GC admins can add coins.", threadID, messageID);
+    if (!isAdmin) return api.sendMessage("❌ Only bot admins or GC admins can add coins.", threadID, messageID);
 
     const targetUID = args[1];
     const amount = parseInt(args[2]);
@@ -123,10 +140,7 @@ module.exports.run = async function({ api, event, args, Users }) {
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID, messageID);
 
     const freshName = await getUserName(targetUID, api, Users);
-    let userData = (await getData(`bank/${threadID}/${targetUID}`)) || {
-      name: freshName,
-      balance: 0
-    };
+    let userData = (await getData(`bank/${threadID}/${targetUID}`)) || { name: freshName, balance: 0 };
 
     userData.balance += amount;
     userData.name = freshName;
@@ -141,6 +155,7 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   // 💸 Send coins
   if (command === "send") {
+    const { mentions } = event;
     if (!mentions || !Object.keys(mentions).length)
       return api.sendMessage("❌ Please mention a user to send coins.", threadID, messageID);
 
@@ -184,11 +199,7 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   // 👤 Default: show own balance
   const freshName = await getUserName(senderID, api, Users);
-  let userData = (await getData(`bank/${threadID}/${senderID}`)) || {
-    name: freshName,
-    balance: 0
-  };
-
+  let userData = (await getData(`bank/${threadID}/${senderID}`)) || { name: freshName, balance: 0 };
   userData.name = freshName;
   await setData(`bank/${threadID}/${senderID}`, userData);
 
