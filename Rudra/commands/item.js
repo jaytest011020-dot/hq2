@@ -1,5 +1,16 @@
 const https = require("https");
 
+module.exports.config = {
+  name: "getitems",
+  version: "1.0.0",
+  hasPermssion: 0,
+  credits: "ChatGPT",
+  description: "Fetch items from Grow A Garden API",
+  commandCategory: "system",
+  usages: "/getitems",
+  cooldowns: 5,
+};
+
 function createOptions(path) {
   return {
     method: "GET",
@@ -9,7 +20,7 @@ function createOptions(path) {
       accept: "*/*",
       "accept-language": "en-US,en;q=0.9",
       priority: "u=1, i",
-      referer: "https://growagarden.gg/weather",
+      referer: "https://growagarden.gg/",
       "user-agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 OPR/119.0.0.0",
       "sec-fetch-dest": "empty",
@@ -19,7 +30,7 @@ function createOptions(path) {
   };
 }
 
-function fetchWeatherStats(path) {
+function fetchItems(path) {
   return new Promise((resolve, reject) => {
     const options = createOptions(path);
     const req = https.request(options, (res) => {
@@ -47,16 +58,21 @@ function fetchWeatherStats(path) {
   });
 }
 
-function register(app) {
-  app.get("/api/GetWeather", async (req, res) => {
-    const path = "/api/weather/stats";
-    try {
-      const stats = await fetchWeatherStats(path);
-      res.json(stats);
-    } catch (err) {
-      res.status(500).json({ error: err.message || "Failed to fetch weather stats" });
-    }
-  });
-}
+module.exports.run = async function ({ api, event }) {
+  const path = "/api/items"; // endpoint ng items
+  try {
+    const items = await fetchItems(path);
 
-module.exports = { register };
+    // Example output: item names only
+    const itemList = items
+      .map((item) => `🍎 ${item.name}`)
+      .join("\n");
+
+    api.sendMessage(`Here are the items:\n\n${itemList}`, event.threadID);
+  } catch (err) {
+    api.sendMessage(
+      "❌ Failed to fetch items: " + (err.message || "Unknown error"),
+      event.threadID
+    );
+  }
+};
