@@ -1,16 +1,5 @@
 const https = require("https");
 
-module.exports.config = {
-  name: "getitems",
-  version: "1.0.0",
-  hasPermssion: 0,
-  credits: "ChatGPT",
-  description: "Fetch items from Grow A Garden API",
-  commandCategory: "system",
-  usages: "/getitems",
-  cooldowns: 5,
-};
-
 function createOptions(path) {
   return {
     method: "GET",
@@ -20,12 +9,9 @@ function createOptions(path) {
       accept: "*/*",
       "accept-language": "en-US,en;q=0.9",
       priority: "u=1, i",
-      referer: "https://growagarden.gg/",
+      referer: "https://growagarden.gg/values",
       "user-agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 OPR/119.0.0.0",
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-origin",
     },
   };
 }
@@ -50,29 +36,52 @@ function fetchItems(path) {
       });
     });
 
-    req.on("error", (e) => {
-      reject(e);
-    });
-
+    req.on("error", (e) => reject(e));
     req.end();
   });
 }
 
-module.exports.run = async function ({ api, event }) {
-  const path = "/api/items"; // endpoint ng items
+module.exports.config = {
+  name: "value",
+  version: "1.0.0",
+  hasPermssion: 0,
+  credits: "ChatGPT",
+  description: "Get Grow A Garden item info",
+  commandCategory: "garden",
+  usages: "/getitems <name>",
+  cooldowns: 5,
+};
+
+module.exports.run = async function ({ api, event, args }) {
   try {
-    const items = await fetchItems(path);
+    const itemName = args.join(" ").toLowerCase();
+    if (!itemName) {
+      return api.sendMessage("❌ Please provide an item name.", event.threadID, event.messageID);
+    }
 
-    // Example output: item names only
-    const itemList = items
-      .map((item) => `🍎 ${item.name}`)
-      .join("\n");
+    // ✅ Correct endpoint (lahat ng items)
+    const stats = await fetchItems("/api/v1/items/Gag/all?page=1&limit=1000000&sortBy=position");
 
-    api.sendMessage(`Here are the items:\n\n${itemList}`, event.threadID);
-  } catch (err) {
-    api.sendMessage(
-      "❌ Failed to fetch items: " + (err.message || "Unknown error"),
-      event.threadID
+    if (!stats.items) {
+      return api.sendMessage("❌ No items data found.", event.threadID, event.messageID);
+    }
+
+    const found = stats.items.find(
+      (item) => item.name.toLowerCase().includes(itemName)
     );
+
+    if (!found) {
+      return api.sendMessage("❌ Item not found.", event.threadID, event.messageID);
+    }
+
+    let msg = `🍎 Item Info\n\n`;
+    msg += `• Name: ${found.name}\n`;
+    msg += `• Category: ${found.category}\n`;
+    msg += `• Rarity: ${found.rarity}\n`;
+    msg += `• Mutation: ${found.mutation || "None"}\n`;
+
+    api.sendMessage(msg, event.threadID, event.messageID);
+  } catch (err) {
+    api.sendMessage("❌ Failed to fetch items: " + err.message, event.threadID, event.messageID);
   }
 };
