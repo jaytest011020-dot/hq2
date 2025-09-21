@@ -7,10 +7,10 @@ const cooldowns = new Map();
 
 module.exports.config = {
   name: "music",
-  version: "1.1.1",
+  version: "2.0.0",
   hasPermssion: 0,
-  credits: "ChatGPT",
-  description: "Search Apple Music & auto-play first result",
+  credits: "Jaylord La Peña + ChatGPT",
+  description: "Search and play full music",
   commandCategory: "music",
   usages: "/music <song name>",
   cooldowns: 5,
@@ -41,27 +41,27 @@ module.exports.run = async ({ api, event, args }) => {
   try {
     api.sendMessage("⏳ Searching & loading your music...", threadID, async (err, info) => {
       try {
-        const apiURL = `https://kaiz-apis.gleeze.com/api/apple-music?search=${encodeURIComponent(query)}&apikey=71ee3719-dd7d-4a98-8484-eb0bb3081e0f`;
+        const apiURL = `https://betadash-api-swordslush-production.up.railway.app/sc?search=${encodeURIComponent(query)}`;
         const res = await axios.get(apiURL);
 
-        if (!res.data || !res.data.response || res.data.response.length === 0) {
+        if (!res.data || !res.data.title || !res.data.url) {
           return api.sendMessage("❌ No results found.", threadID, messageID);
         }
 
-        const song = res.data.response[0]; // First result
-        const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.m4a`);
+        const { title, url, duration, author } = res.data;
+        const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.mp3`);
 
-        // Download preview
-        const audioBuffer = (await axios.get(song.previewMp3, { responseType: "arraybuffer" })).data;
+        // Download full audio
+        const audioBuffer = (await axios.get(url, { responseType: "arraybuffer" })).data;
         fs.writeFileSync(tmpPath, Buffer.from(audioBuffer, "binary"));
 
         // Delete loading message
         api.unsendMessage(info.messageID);
 
-        // Send music info + preview
+        // Send music info + full audio
         api.sendMessage(
           {
-            body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${song.title}\n👤 Artist: ${song.artist}\n💿 Album: ${song.album}\n📅 Release: ${song.releaseDate}\n⏱ Duration: ${song.duration}\n🔗 [Apple Music Link](${song.url})`,
+            body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${title}\n👤 Artist: ${author || "Unknown"}\n⏱ Duration: ${duration || "N/A"}`,
             attachment: fs.createReadStream(tmpPath),
           },
           threadID,
