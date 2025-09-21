@@ -3,7 +3,7 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "redeem",
-  version: "1.1.0",
+  version: "1.2.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
   description: "Redeem code system with toggle per GC",
@@ -21,7 +21,7 @@ function parseExpiry(text) {
   return num * ms[unit];
 }
 
-module.exports.run = async function ({ api, event, args, Users }) {
+module.exports.run = async function ({ api, event, args }) {
   const { threadID, senderID, messageID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
@@ -36,7 +36,8 @@ module.exports.run = async function ({ api, event, args, Users }) {
       } catch {}
     }
 
-    if (!isAdmin) return api.sendMessage("❌ Only admins can toggle redeem system.", threadID, messageID);
+    if (!isAdmin)
+      return api.sendMessage("❌ Only admins can toggle redeem system.", threadID, messageID);
 
     let redeemStatus = (await getData(`redeem/status/${threadID}`)) || { enabled: true };
     redeemStatus.enabled = command === "on";
@@ -60,7 +61,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
     if (!ADMINBOT.includes(senderID))
       return api.sendMessage("❌ Only bot admins can create redeem codes.", threadID, messageID);
 
-    const code = args[1];
+    const code = args[1].toUpperCase(); // Always uppercase
     const coins = parseInt(args[2]);
     const expiryMs = parseExpiry(args[3]);
 
@@ -88,10 +89,14 @@ module.exports.run = async function ({ api, event, args, Users }) {
     return api.sendMessage("❌ Please provide a redeem code.", threadID, messageID);
   }
 
-  const code = args[0];
+  const code = args[0].toUpperCase(); // Always uppercase
   let redeemData = (await getData("redeem/codes")) || {};
-  const codeData = redeemData[code];
 
+  if (!redeemData || Object.keys(redeemData).length === 0) {
+    return api.sendMessage("❌ No redeem codes available.", threadID, messageID);
+  }
+
+  const codeData = redeemData[code];
   if (!codeData) {
     return api.sendMessage("❌ Invalid or expired code.", threadID, messageID);
   }
@@ -112,7 +117,14 @@ module.exports.run = async function ({ api, event, args, Users }) {
   await setData("redeem/codes", redeemData);
 
   // Add coins to bank
-  let userData = (await getData(`bank/global/${senderID}`)) || { balance: 0, name: await Users.getNameUser(senderID) };
+  let userData = await getData(`bank/global/${senderID}`);
+  if (!userData) {
+    const info = await api.getUserInfo(senderID);
+    userData = {
+      balance: 0,
+      name: info[senderID]?.name || "Unknown User",
+    };
+  }
   userData.balance += codeData.coins;
   await setData(`bank/global/${senderID}`, userData);
 
