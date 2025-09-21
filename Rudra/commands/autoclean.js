@@ -45,14 +45,48 @@ async function formatList(uids, api) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "5.3.0",
+  version: "5.5.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Automatically track active members & kick inactive users after deadline",
   commandCategory: "group",
-  usages: "/autoclean 1m|1h|1d | cancel | resend | list",
+  usages: "/autoclean 1m|1h|1d | cancel | resend | list | startkick",
   cooldowns: 5
 };
+
+// Kick function
+async function kickInactiveMembers(api, threadID) {
+  const currentData = await getData(`/autoclean/${threadID}`);
+  if (!currentData || !Array.isArray(currentData.totalUsers) || !Array.isArray(currentData.activeUsers)) return;
+
+  const botID = api.getCurrentUserID();
+  const ownerID = "61559999326713";
+
+  api.getThreadInfo(threadID, async (err, info) => {
+    if (err) return;
+
+    const toKick = currentData.totalUsers.filter(uid =>
+      !currentData.activeUsers.includes(uid) &&
+      uid !== botID &&
+      uid !== ownerID &&
+      !info.adminIDs.some(a => a.id === uid)
+    );
+
+    for (const uid of toKick) {
+      try { await api.removeUserFromGroup(uid, threadID); } catch {}
+    }
+
+    await setData(`/autoclean/${threadID}`, null);
+
+    api.sendMessage(
+      `╭[AUTO CLEAN FINISHED]╮
+┃ 👥 Active: ${currentData.activeUsers.length} / ${currentData.totalUsers.length}
+┃ 🚫 Kicked: ${toKick.length}
+╰━━━━━━━━━━━━━━━╯`,
+      threadID
+    );
+  });
+}
 
 // Run command
 module.exports.run = async function({ api, event, args }) {
@@ -67,7 +101,7 @@ module.exports.run = async function({ api, event, args }) {
   }
 
   if (!args[0]) {
-    return api.sendMessage("❌ Usage: /autoclean 1m|1h|1d | cancel | resend | list", threadID, messageID);
+    return api.sendMessage("❌ Usage: /autoclean 1m|1h|1d | cancel | resend | list | startkick", threadID, messageID);
   }
 
   const sub = args[0].toLowerCase();
@@ -80,6 +114,13 @@ module.exports.run = async function({ api, event, args }) {
     }
     await setData(`/autoclean/${threadID}`, null);
     return api.sendMessage("🛑 AutoClean canceled.", threadID, messageID);
+  }
+
+  // Manual kick trigger
+  if (sub === "startkick") {
+    if (!pollData) return api.sendMessage("⚠️ No active autoclean to kick.", threadID, messageID);
+    await kickInactiveMembers(api, threadID);
+    return;
   }
 
   // Resend ongoing status
@@ -139,7 +180,7 @@ ${inactiveList}
   pollData = {
     endTime,
     activeUsers: [],
-    totalUsers: members, // Only original members
+    totalUsers: members,
     pollMsgID: null
   };
 
@@ -155,46 +196,15 @@ ${inactiveList}
   pollData.pollMsgID = sent.messageID;
   await setData(`/autoclean/${threadID}`, pollData);
 
-  // ✅ Interval-based auto-kick check
-  const CHECK_INTERVAL = 5000; // 5 seconds
-  const intervalID = setInterval(async () => {
-    const currentData = await getData(`/autoclean/${threadID}`);
-    if (!currentData || !Array.isArray(currentData.totalUsers) || !Array.isArray(currentData.activeUsers)) {
-      return clearInterval(intervalID);
-    }
-
-    const now = Date.now();
-    if (now < currentData.endTime) return; // Not yet expired
-
-    // Kick only original participants
-    api.getThreadInfo(threadID, async (err, info) => {
-      if (err) return;
-
-      const toKick = currentData.totalUsers.filter(uid =>
-        !currentData.activeUsers.includes(uid) &&
-        uid !== botID &&
-        uid !== ownerID &&
-        !info.adminIDs.some(a => a.id === uid)
-      );
-
-      for (const uid of toKick) {
-        try { await api.removeUserFromGroup(uid, threadID); } catch (e) {
-          console.error("Kick error:", e.message);
-        }
-      }
-
-      await setData(`/autoclean/${threadID}`, null);
-      clearInterval(intervalID);
-
-      api.sendMessage(
-        `╭[AUTO CLEAN FINISHED]╮
-┃ 👥 Active: ${currentData.activeUsers.length} / ${currentData.totalUsers.length}
-┃ 🚫 Kicked: ${toKick.length}
-╰━━━━━━━━━━━━━━━╯`,
-        threadID
-      );
-    });
-  }, CHECK_INTERVAL);
+  // Schedule auto kick
+  const remaining = pollData.endTime - Date.now();
+  if (remaining <= 0) {
+    await kickInactiveMembers(api, threadID);
+  } else {
+    setTimeout(async () => {
+      await kickInactiveMembers(api, threadID);
+    }, remaining);
+  }
 };
 
 // Handle seen/chat events
