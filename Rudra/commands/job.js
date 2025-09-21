@@ -34,8 +34,11 @@ const JOB_EMOJIS = {
 
 // Fun phrases
 const FUN_PHRASES = [
-  "You worked hard today!", "Luck is on your side!", "Great job!",
-  "Keep it up!", "You're unstoppable!"
+  "You worked hard today!",
+  "Luck is on your side!",
+  "Great job!",
+  "Keep it up!",
+  "You're unstoppable!"
 ];
 
 // Global cooldown (1 hour)
@@ -66,50 +69,53 @@ async function getUserName(uid, api) {
   }
 }
 
-module.exports.run = async function({ api, event }) {
-  const { senderID, threadID, messageID, args } = event;
+module.exports.run = async function({ api, event, args }) {
+  const { senderID, threadID, messageID } = event;
   const now = Date.now();
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 🔹 Handle /job on/off/status (GC admin only for on/off)
+  // 🔹 Handle /job on/off/status
   if (["on", "off", "status"].includes(command)) {
     try {
       if (command === "status") {
         const jobStatus = (await getData(`job/status/${threadID}`)) || { enabled: true };
         return api.sendMessage(
           `💼 Job system status: ${jobStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"}`,
-          threadID
+          threadID,
+          messageID
         );
       }
 
       const threadInfo = await api.getThreadInfo(threadID);
       const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
-      if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle the job system.", threadID);
+      if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle the job system.", threadID, messageID);
 
       const enabled = command === "on";
       await setData(`job/status/${threadID}`, { enabled });
+
       return api.sendMessage(
         `💼 Job system is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
-        threadID
+        threadID,
+        messageID
       );
     } catch (err) {
       console.error("[JOB] Toggle error:", err);
-      return api.sendMessage("⚠️ Failed to toggle job system.", threadID);
+      return api.sendMessage("⚠️ Failed to toggle job system.", threadID, messageID);
     }
   }
 
   // 🔹 Check if job system is enabled
   const jobStatus = (await getData(`job/status/${threadID}`)) || { enabled: true };
   if (!jobStatus.enabled) {
-    return api.sendMessage("❌ Job system is currently disabled by GC admin.", threadID);
+    return api.sendMessage("❌ Job system is currently disabled by GC admin.", threadID, messageID);
   }
 
-  // Load user data
+  // 🔹 Load user data
   const userData = (await getData(`job/${threadID}/${senderID}`)) || {};
   const inventory = (await getData(`inventory/${threadID}/${senderID}`)) || { items: [] };
   const bankData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0 };
 
-  // Check global cooldown
+  // 🔹 Check cooldown
   const lastTime = userData.lastTime || 0;
   const elapsed = now - lastTime;
 
@@ -133,11 +139,11 @@ module.exports.run = async function({ api, event }) {
     return api.sendMessage(`⏳ You must wait ${mins}m ${secs}s before doing another job.`, threadID, messageID);
   }
 
-  // Random job selection
+  // 🔹 Random job selection
   let job = JOBS[Math.floor(Math.random() * JOBS.length)];
   let isRare = job.rare || false;
 
-  // 10% chance for rare job if not rare
+  // 10% chance for rare job
   if (!isRare && Math.random() <= 0.10) {
     const rareJobs = JOBS.filter(j => j.rare);
     job = rareJobs[Math.floor(Math.random() * rareJobs.length)];
@@ -178,18 +184,15 @@ module.exports.run = async function({ api, event }) {
   const emoji = JOB_EMOJIS[job.name] || "💼";
   const funText = FUN_PHRASES[Math.floor(Math.random() * FUN_PHRASES.length)];
 
-  // Construct message
-  const msg = `
-=========================
-${emoji} ${userName} did the ${job.name} job! ${isRare ? "✨" : ""}
+  // Final message
+  const msg =
+`${emoji} ${userName} did the ${job.name} job! ${isRare ? "✨" : ""}
 
 ${usedItemsText}💰 Earnings: ${earned} coins${critical ? " 💥 Critical!" : ""}
 🏦 Balance: ${bankData.balance.toLocaleString()} coins
-⏳ Next job available in: ${Math.floor(cooldown/60000)}m ${Math.floor((cooldown%60000)/1000)}s
+⏳ Next job available in: ${Math.floor(cooldown/60000)}m
 
-💬 ${funText}
-=========================
-`;
+💬 ${funText}`;
 
-  api.sendMessage(msg, threadID, messageID);
+  return api.sendMessage(msg, threadID, messageID);
 };
