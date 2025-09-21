@@ -1,8 +1,11 @@
+const fs = require("fs");
+const path = require("path");
 const axios = require("axios");
+const { getData } = require("../../database.js"); // adjust path if needed
 
 module.exports.config = {
   name: "activist",
-  version: "1.0.1",
+  version: "1.0.3",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Generate activist image for mentioned user",
@@ -13,13 +16,33 @@ module.exports.config = {
 };
 
 module.exports.run = async function ({ api, event, args }) {
+  const { threadID, messageID } = event;
+
+  // --- Maintenance check ---
   try {
-    // Check for mentions
+    const maintenance = await getData("/maintenance");
+    if (maintenance?.enabled) {
+      const mp4Path = path.join(__dirname, "cache", "AI data.mp4"); // relative to this module
+      return api.sendMessage(
+        {
+          body: "🚧 Bot is currently under maintenance. This command is temporarily disabled.",
+          attachment: fs.createReadStream(mp4Path),
+        },
+        threadID,
+        messageID
+      );
+    }
+  } catch (err) {
+    console.error("Maintenance check failed:", err);
+  }
+
+  // --- Command logic ---
+  try {
     if (!event.mentions || Object.keys(event.mentions).length === 0) {
       return api.sendMessage(
         "❌ Please mention someone.\nUsage: /activist @mention <text>",
-        event.threadID,
-        event.messageID
+        threadID,
+        messageID
       );
     }
 
@@ -29,7 +52,6 @@ module.exports.run = async function ({ api, event, args }) {
 
     const url = `https://betadash-api-swordslush-production.up.railway.app/activists?userid=${mentionId}&text=${encodeURIComponent(text)}`;
 
-    // Fetch image as stream (no need to save file)
     const response = await axios.get(url, { responseType: "stream" });
 
     await api.sendMessage(
@@ -37,10 +59,10 @@ module.exports.run = async function ({ api, event, args }) {
         body: `🖼 Activist card for ${mentionName}\nText: ${text}`,
         attachment: response.data
       },
-      event.threadID,
-      event.messageID
+      threadID,
+      messageID
     );
   } catch (e) {
-    api.sendMessage("❌ Error: " + e.message, event.threadID, event.messageID);
+    api.sendMessage("❌ Error: " + e.message, threadID, messageID);
   }
 };
