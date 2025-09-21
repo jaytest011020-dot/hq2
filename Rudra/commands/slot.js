@@ -4,12 +4,35 @@ const { getData, setData } = require("../../database.js");
 // Slot symbols
 const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎"];
 
+// 🔑 Fetch username (same logic as bank.js)
+async function getUserName(uid, api, Users) {
+  let cachedName = global.data.userName.get(uid);
+  if (cachedName) return cachedName;
+
+  try {
+    const userInfo = await api.getUserInfo(uid);
+    const name = Object.values(userInfo)[0]?.name || `FB-User(${uid})`;
+    global.data.userName.set(uid, name);
+    return name;
+  } catch (err) {}
+
+  try {
+    const name = await Users.getName(uid) || `FB-User(${uid})`;
+    global.data.userName.set(uid, name);
+    return name;
+  } catch (err) {}
+
+  const fallbackName = `FB-User(${uid})`;
+  global.data.userName.set(uid, fallbackName);
+  return fallbackName;
+}
+
 module.exports.config = {
   name: "slot",
-  version: "1.0.2",
+  version: "2.0.0",
   hasPermssion: 0,
-  credits: "ChatGPT + Firebase refactor",
-  description: "Play slot machine with coins",
+  credits: "Jaylord La Peña + ChatGPT",
+  description: "Play slot machine with coins (per GC bank system)",
   commandCategory: "Games",
   usages: "/slot <amount>",
   cooldowns: 5,
@@ -18,8 +41,11 @@ module.exports.config = {
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
 
-  // ✅ Load player balance from DB
-  let userBank = (await getData(`/bank/${senderID}`)) || { balance: 0 };
+  // ✅ Load player balance per group
+  let userBank = (await getData(`bank/${threadID}/${senderID}`)) || {
+    balance: 0,
+    name: await getUserName(senderID, api, Users)
+  };
 
   const bet = parseInt(args[0]);
   if (isNaN(bet) || bet <= 0) {
@@ -55,14 +81,11 @@ module.exports.run = async function ({ api, event, args, Users }) {
     resultMsg += `❌ You lost your bet of ${bet.toLocaleString()} coins.`;
   }
 
-  // ✅ Save updated balance + name to DB
-  const name = await Users.getNameUser(senderID);
-  await setData(`/bank/${senderID}`, {
-    balance: userBank.balance,
-    name
-  });
+  // ✅ Save updated balance per group
+  userBank.name = await getUserName(senderID, api, Users);
+  await setData(`bank/${threadID}/${senderID}`, userBank);
 
-  resultMsg += `\n\n👤 ${name}\n💳 Balance: ${userBank.balance.toLocaleString()} coins`;
+  resultMsg += `\n\n👤 ${userBank.name}\n💳 Balance: ${userBank.balance.toLocaleString()} coins`;
 
   return api.sendMessage(resultMsg, threadID);
 };
