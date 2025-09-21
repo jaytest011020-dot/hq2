@@ -42,13 +42,14 @@ function formatSection(title, items) {
   return items.map(i => `• ${i.emoji || ""} ${i.name} (${i.quantity})`).join("\n");
 }
 
-// Get next 5-minute mark +1 (6, 11, 16, 21…)
+// Get next 5-minute mark aligned to 1, 6, 11, 16, 21…
 function getNext5Min(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
 
-  // Next multiple of 5 plus 1
-  let nextMinutes = minutes - (minutes % 5) + 6;
+  // Calculate next multiple of 5 + 1
+  let nextMinutes = Math.floor(minutes / 5) * 5 + 1;
+  if (nextMinutes <= minutes) nextMinutes += 5;
 
   const next = new Date(now);
   next.setMinutes(nextMinutes);
