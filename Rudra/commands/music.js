@@ -7,7 +7,7 @@ const cooldowns = new Map();
 
 module.exports.config = {
   name: "music",
-  version: "2.0.0",
+  version: "2.1.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Search and play full music",
@@ -44,11 +44,26 @@ module.exports.run = async ({ api, event, args }) => {
         const apiURL = `https://betadash-api-swordslush-production.up.railway.app/sc?search=${encodeURIComponent(query)}`;
         const res = await axios.get(apiURL);
 
-        if (!res.data || !res.data.title || !res.data.url) {
-          return api.sendMessage("❌ No results found.", threadID, messageID);
+        console.log("📩 Raw API Response:", res.data); // 🔹 Debug log
+
+        let song;
+
+        // 🔹 Handle kung array o object ang response
+        if (Array.isArray(res.data)) {
+          song = res.data[0]; // kunin yung first result
+        } else {
+          song = res.data; // assume na object na sya
         }
 
-        const { title, url, duration, author } = res.data;
+        if (!song || !song.title || !(song.url || song.link)) {
+          return api.sendMessage("❌ No results found or missing fields.", threadID, messageID);
+        }
+
+        const title = song.title || "Unknown Title";
+        const url = song.url || song.link; // support both url/link
+        const duration = song.duration || "N/A";
+        const author = song.author || song.artist || "Unknown";
+
         const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.mp3`);
 
         // Download full audio
@@ -61,7 +76,7 @@ module.exports.run = async ({ api, event, args }) => {
         // Send music info + full audio
         api.sendMessage(
           {
-            body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${title}\n👤 Artist: ${author || "Unknown"}\n⏱ Duration: ${duration || "N/A"}`,
+            body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${title}\n👤 Artist: ${author}\n⏱ Duration: ${duration}`,
             attachment: fs.createReadStream(tmpPath),
           },
           threadID,
