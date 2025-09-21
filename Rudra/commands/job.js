@@ -1,6 +1,6 @@
 const { setData, getData } = require("../../database.js");
 
-// ✅ Job definitions
+// ✅ Job definitions (dinagdagan pa)
 const JOBS = [
   { name: "Farmer", min: 50, max: 100 },
   { name: "Miner", min: 80, max: 150 },
@@ -22,6 +22,20 @@ const JOBS = [
   { name: "Soldier", min: 70, max: 140 },
   { name: "Hacker", min: 300, max: 500, rare: true },
   { name: "CEO", min: 500, max: 1000, rare: true },
+
+  // 🔹 New jobs added
+  { name: "Fisherman", min: 40, max: 100 },
+  { name: "Barber", min: 60, max: 120 },
+  { name: "Mechanic", min: 80, max: 160 },
+  { name: "Janitor", min: 30, max: 70 },
+  { name: "Delivery Rider", min: 50, max: 120 },
+  { name: "Waiter", min: 40, max: 90 },
+  { name: "Dancer", min: 60, max: 110 },
+  { name: "Actor", min: 100, max: 200 },
+  { name: "Streamer", min: 80, max: 180 },
+  { name: "Athlete", min: 90, max: 200 },
+  { name: "Astronaut", min: 300, max: 600, rare: true },
+  { name: "President", min: 700, max: 1200, rare: true }
 ];
 
 // Job emojis
@@ -30,6 +44,9 @@ const JOB_EMOJIS = {
   Artist: "🎨", Musician: "🎵", Builder: "🏗️", Programmer: "💻", Doctor: "🩺",
   Nurse: "🩹", Engineer: "⚙️", Scientist: "🔬", Lawyer: "⚖️", Police: "👮",
   Firefighter: "🔥", Pilot: "✈️", Soldier: "🪖", Hacker: "💻", CEO: "💼",
+  Fisherman: "🎣", Barber: "💈", Mechanic: "🔧", Janitor: "🧹",
+  "Delivery Rider": "📦", Waiter: "🍽️", Dancer: "💃", Actor: "🎭",
+  Streamer: "🎥", Athlete: "🏅", Astronaut: "🚀", President: "🏛️"
 };
 
 // Fun phrases
@@ -38,18 +55,21 @@ const FUN_PHRASES = [
   "Luck is on your side!",
   "Great job!",
   "Keep it up!",
-  "You're unstoppable!"
+  "You're unstoppable!",
+  "That was amazing!",
+  "You crushed it!",
+  "The grind is paying off!"
 ];
 
-// Global cooldown (1 hour)
-const GLOBAL_COOLDOWN = 60 * 60 * 1000;
+// ⏳ Global cooldown (30 minutes)
+const GLOBAL_COOLDOWN = 30 * 60 * 1000;
 
 module.exports.config = {
   name: "job",
-  version: "5.3.0",
+  version: "5.4.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Random job system with GC admin toggle, 1-hour cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
+  description: "Random job system with GC admin toggle, 30m cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
   commandCategory: "economy",
   usages: "/job | /job on | /job off | /job status",
   cooldowns: 3
@@ -59,7 +79,6 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// 🔑 Get username via api.getUserInfo
 async function getUserName(uid, api) {
   try {
     const info = await api.getUserInfo(uid);
