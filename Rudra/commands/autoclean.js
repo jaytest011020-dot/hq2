@@ -45,10 +45,10 @@ async function formatList(uids, api) {
 
 module.exports.config = {
   name: "autoclean",
-  version: "5.2.0",
+  version: "5.3.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Automatically track active members by seen/chat & kick inactive users after deadline",
+  description: "Automatically track active members & kick inactive users after deadline",
   commandCategory: "group",
   usages: "/autoclean 1m|1h|1d | cancel | resend | list",
   cooldowns: 5
@@ -133,13 +133,13 @@ ${inactiveList}
   const duration = parseDuration(sub);
   if (!duration) return api.sendMessage("❌ Invalid duration. Use 1m, 1h, or 1d.", threadID, messageID);
 
-  const members = info.participantIDs;
+  const members = info.participantIDs; // Frozen list
   const endTime = Date.now() + duration;
 
   pollData = {
     endTime,
     activeUsers: [],
-    totalUsers: members,
+    totalUsers: members, // Only original members
     pollMsgID: null
   };
 
@@ -159,16 +159,18 @@ ${inactiveList}
   const CHECK_INTERVAL = 5000; // 5 seconds
   const intervalID = setInterval(async () => {
     const currentData = await getData(`/autoclean/${threadID}`);
-    if (!currentData) return clearInterval(intervalID);
+    if (!currentData || !Array.isArray(currentData.totalUsers) || !Array.isArray(currentData.activeUsers)) {
+      return clearInterval(intervalID);
+    }
 
     const now = Date.now();
     if (now < currentData.endTime) return; // Not yet expired
 
-    // Kick inactive members
+    // Kick only original participants
     api.getThreadInfo(threadID, async (err, info) => {
       if (err) return;
 
-      const toKick = info.participantIDs.filter(uid =>
+      const toKick = currentData.totalUsers.filter(uid =>
         !currentData.activeUsers.includes(uid) &&
         uid !== botID &&
         uid !== ownerID &&
