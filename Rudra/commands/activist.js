@@ -2,8 +2,21 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 
+module.exports.config = {
+  name: "activist",
+  version: "1.0.0",
+  hasPermssion: 0,
+  credits: "Jaylord La Peña + ChatGPT",
+  description: "Generate activist image for mentioned user",
+  usePrefix: true,
+  commandCategory: "fun",
+  usages: "/activist @mention <text>",
+  cooldowns: 5,
+};
+
 module.exports.run = async function ({ api, event, args }) {
   try {
+    // Check for mentions
     if (!event.mentions || Object.keys(event.mentions).length === 0) {
       return api.sendMessage(
         "❌ Please mention someone.\nUsage: /activist @mention <text>",
