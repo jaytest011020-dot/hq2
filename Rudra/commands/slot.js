@@ -28,12 +28,12 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "slot",
-  version: "2.2.0",
+  version: "2.3.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Play slot machine with coins (per GC bank system) with admin toggle",
   commandCategory: "Games",
-  usages: "/slot <amount> | /slot on | /slot off",
+  usages: "/slot <bet> | /slot on | /slot off | /slot status",
   cooldowns: 5,
 };
 
@@ -41,9 +41,17 @@ module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 🔹 Handle /slot on/off toggle (GC admin only)
-  if (command === "on" || command === "off") {
+  // 🔹 Handle /slot on/off/status toggle (GC admin only)
+  if (["on", "off", "status"].includes(command)) {
     try {
+      if (command === "status") {
+        const slotStatus = (await getData(`slot/status/${threadID}`)) || { enabled: true };
+        return api.sendMessage(
+          `🎰 Slot system status: ${slotStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"}`,
+          threadID
+        );
+      }
+
       const threadInfo = await api.getThreadInfo(threadID);
       const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
       if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle slot.", threadID);
