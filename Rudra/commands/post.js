@@ -1,10 +1,9 @@
 module.exports.config = {
 	name: "post",
 	version: "1.0.0",
-	permission: 3,
+	hasPermssion: 3,
 	credits: "ryuko",
-	prefix: true,
-  premium: false,
+	usePrefix: true,
 	description: "create a new post in acc bot",
 	category: "operator",
 	cooldowns: 5
