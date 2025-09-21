@@ -42,32 +42,10 @@ module.exports.run = async ({ api, event, args }) => {
     api.sendMessage("⏳ Searching & loading your music...", threadID, async (err, info) => {
       try {
         const apiURL = `https://betadash-api-swordslush-production.up.railway.app/sc?search=${encodeURIComponent(query)}`;
-        const res = await axios.get(apiURL);
-
-        console.log("📩 Raw API Response:", res.data); // 🔹 Debug log
-
-        let song;
-
-        // 🔹 Handle kung array o object ang response
-        if (Array.isArray(res.data)) {
-          song = res.data[0]; // kunin yung first result
-        } else {
-          song = res.data; // assume na object na sya
-        }
-
-        if (!song || !song.title || !(song.url || song.link)) {
-          return api.sendMessage("❌ No results found or missing fields.", threadID, messageID);
-        }
-
-        const title = song.title || "Unknown Title";
-        const url = song.url || song.link; // support both url/link
-        const duration = song.duration || "N/A";
-        const author = song.author || song.artist || "Unknown";
-
         const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.mp3`);
 
-        // Download full audio
-        const audioBuffer = (await axios.get(url, { responseType: "arraybuffer" })).data;
+        // Download full audio directly
+        const audioBuffer = (await axios.get(apiURL, { responseType: "arraybuffer" })).data;
         fs.writeFileSync(tmpPath, Buffer.from(audioBuffer, "binary"));
 
         // Delete loading message
@@ -76,7 +54,7 @@ module.exports.run = async ({ api, event, args }) => {
         // Send music info + full audio
         api.sendMessage(
           {
-            body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${title}\n👤 Artist: ${author}\n⏱ Duration: ${duration}`,
+            body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${query}\n👤 Artist: Unknown\n⏱ Duration: Unknown`,
             attachment: fs.createReadStream(tmpPath),
           },
           threadID,
