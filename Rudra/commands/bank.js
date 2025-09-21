@@ -3,8 +3,8 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "3.1.0",
-  credits: "ChatGPT + NN",
+  version: "3.2.0",
+  credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
   description: "Bank system per group chat with auto-updated usernames + send coins",
   usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>",
@@ -14,11 +14,9 @@ module.exports.config = {
 
 // 🔑 Fetch username with global cache
 async function getUserName(uid, api, Users) {
-  // Check cache
   let cachedName = global.data.userName.get(uid);
   if (cachedName) return cachedName;
 
-  // Try api.getUserInfo
   try {
     const userInfo = await api.getUserInfo(uid);
     const name = Object.values(userInfo)[0]?.name || `FB-User(${uid})`;
@@ -28,7 +26,6 @@ async function getUserName(uid, api, Users) {
     console.log(`[BANK] api.getUserInfo failed for UID ${uid}:`, err);
   }
 
-  // Fallback to Users.getName
   try {
     const name = await Users.getName(uid) || `FB-User(${uid})`;
     global.data.userName.set(uid, name);
@@ -61,7 +58,6 @@ module.exports.run = async function({ api, event, args, Users }) {
     for (const uid in allData) {
       const freshName = await getUserName(uid, api, Users);
 
-      // Auto-update name in database
       if (allData[uid].name !== freshName) {
         allData[uid].name = freshName;
         await setData(`bank/${threadID}/${uid}`, allData[uid]);
@@ -76,7 +72,6 @@ module.exports.run = async function({ api, event, args, Users }) {
 
     if (!results.length) return api.sendMessage("🏦 No accounts found in this group.", threadID, messageID);
 
-    // Sort by balance descending
     results.sort((a, b) => b.balance - a.balance);
 
     let msg = `📋 𝗕𝗮𝗻𝗸 𝗔𝗰𝗰𝗼𝘂𝗻𝘁𝘀 (Total: ${results.length}) 📋\n\n`;
@@ -88,10 +83,21 @@ module.exports.run = async function({ api, event, args, Users }) {
     return api.sendMessage(msg, threadID, messageID);
   }
 
-  // ➕ Add coins (admin only)
+  // ➕ Add coins (bot admin or GC admin)
   if (command === "add") {
-    if (!ADMINBOT.includes(senderID))
-      return api.sendMessage("❌ Only bot admins can add coins.", threadID, messageID);
+    let isAdmin = ADMINBOT.includes(senderID);
+
+    if (!isAdmin && event.isGroup) {
+      try {
+        const threadInfo = await api.getThreadInfo(threadID);
+        if (threadInfo.adminIDs.some(a => a.id == senderID)) isAdmin = true;
+      } catch (err) {
+        console.log("[BANK] Failed to check GC admin:", err);
+      }
+    }
+
+    if (!isAdmin)
+      return api.sendMessage("❌ Only bot admins or GC admins can add coins.", threadID, messageID);
 
     const targetUID = args[1];
     const amount = parseInt(args[2]);
