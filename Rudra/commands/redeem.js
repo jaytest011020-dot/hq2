@@ -3,162 +3,122 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "redeem",
-  version: "1.0.0",
+  version: "1.1.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Redeem code system with toggle and expiration",
-  usages: "/redeem <code> | /redeem make <code> <coins> <expire> | /redeem on/off",
+  description: "Redeem code system with toggle per GC",
+  usages: "/redeem <code> | /redeem make <code> <coins> <expiry> | /redeem on/off",
   commandCategory: "economy",
   cooldowns: 3,
 };
 
-// 🔑 Parse expiration string (1s, 1m, 1h, 1d)
-function parseExpire(str) {
-  if (!str) return null;
-  const match = str.match(/^(\d+)([smhd])$/);
+function parseExpiry(text) {
+  const match = text.match(/^(\d+)(s|m|h|d)$/);
   if (!match) return null;
-
-  const val = parseInt(match[1]);
+  const num = parseInt(match[1]);
   const unit = match[2];
-  const now = Date.now();
-
-  switch (unit) {
-    case "s": return now + val * 1000;
-    case "m": return now + val * 60 * 1000;
-    case "h": return now + val * 60 * 60 * 1000;
-    case "d": return now + val * 24 * 60 * 60 * 1000;
-    default: return null;
-  }
-}
-
-// 🏦 Add coins to user balance
-async function addCoins(uid, threadID, amount, api, Users) {
-  const freshName = (await Users.getName(uid)) || `FB-User(${uid})`;
-  let userData = (await getData(`bank/${threadID}/${uid}`)) || {
-    name: freshName,
-    balance: 0,
-  };
-
-  userData.balance += amount;
-  userData.name = freshName;
-  await setData(`bank/${threadID}/${uid}`, userData);
-
-  return userData;
+  const ms = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+  return num * ms[unit];
 }
 
 module.exports.run = async function ({ api, event, args, Users }) {
-  const { threadID, senderID } = event;
+  const { threadID, senderID, messageID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 🔹 Toggle system (must be EXACT: /redeem on or /redeem off)
+  // 🔹 Toggle system
   if ((command === "on" || command === "off") && args.length === 1) {
     let isAdmin = ADMINBOT.includes(senderID);
 
     if (!isAdmin && event.isGroup) {
       try {
         const threadInfo = await api.getThreadInfo(threadID);
-        if (threadInfo.adminIDs.some((a) => a.id == senderID)) isAdmin = true;
+        if (threadInfo.adminIDs.some(a => a.id == senderID)) isAdmin = true;
       } catch {}
     }
 
-    if (!isAdmin)
-      return api.sendMessage(
-        "❌ Only bot admins or GC admins can toggle the redeem system.",
-        threadID
-      );
+    if (!isAdmin) return api.sendMessage("❌ Only admins can toggle redeem system.", threadID, messageID);
 
-    let redeemStatus =
-      (await getData(`redeem/status/${threadID}`)) || { enabled: true };
+    let redeemStatus = (await getData(`redeem/status/${threadID}`)) || { enabled: true };
     redeemStatus.enabled = command === "on";
     await setData(`redeem/status/${threadID}`, redeemStatus);
 
     return api.sendMessage(
-      `🎟 Redeem system is now ${
-        redeemStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"
-      } in this group.`,
-      threadID
+      `🎟 Redeem system is now ${redeemStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+      threadID,
+      messageID
     );
   }
 
-  // 🔹 Check if redeem system is enabled in this GC
-  const redeemStatus =
-    (await getData(`redeem/status/${threadID}`)) || { enabled: true };
-  if (!redeemStatus.enabled)
-    return api.sendMessage(
-      "❌ Redeem system is currently disabled by GC admin.",
-      threadID
-    );
+  // 🔹 Check if redeem system is enabled
+  const redeemStatus = (await getData(`redeem/status/${threadID}`)) || { enabled: true };
+  if (!redeemStatus.enabled) {
+    return api.sendMessage("❌ Redeem system is currently disabled in this group.", threadID, messageID);
+  }
 
-  // 🔹 Create a code (bot admin only)
-  if (command === "make") {
+  // 🔹 Create code (bot admin only)
+  if (command === "make" && args.length === 4) {
     if (!ADMINBOT.includes(senderID))
-      return api.sendMessage("❌ Only bot admins can create redeem codes.", threadID);
+      return api.sendMessage("❌ Only bot admins can create redeem codes.", threadID, messageID);
 
     const code = args[1];
     const coins = parseInt(args[2]);
-    const expire = parseExpire(args[3]);
+    const expiryMs = parseExpiry(args[3]);
 
-    if (!code || isNaN(coins) || coins <= 0)
-      return api.sendMessage(
-        "❌ Usage: /redeem make <code> <coins> <expire>\nExample: /redeem make BONUS100 1000 1d",
-        threadID
-      );
+    if (!coins || coins <= 0 || !expiryMs)
+      return api.sendMessage("❌ Usage: /redeem make <code> <coins> <expiry(1s/1m/1h/1d)>", threadID, messageID);
 
-    const redeemData = (await getData("redeem/codes")) || {};
-
+    let redeemData = (await getData("redeem/codes")) || {};
     redeemData[code] = {
       coins,
-      expire,
-      usedBy: [],
+      created: Date.now(),
+      expires: Date.now() + expiryMs,
+      redeemed: [],
     };
-
     await setData("redeem/codes", redeemData);
 
     return api.sendMessage(
-      `✅ Created redeem code:\n🎟 Code: ${code}\n💰 Coins: ${coins.toLocaleString()}\n⏳ Expire: ${
-        args[3] || "none"
-      }`,
-      threadID
+      `✅ Created redeem code: ${code}\n💰 Coins: ${coins}\n⏳ Expires in ${args[3]}`,
+      threadID,
+      messageID
     );
   }
 
-  // 🔹 Redeem a code
-  if (!args[0])
-    return api.sendMessage(
-      "❌ Please provide a redeem code.",
-      threadID
-    );
+  // 🔹 Redeem code
+  if (!args[0]) {
+    return api.sendMessage("❌ Please provide a redeem code.", threadID, messageID);
+  }
 
   const code = args[0];
-  const redeemData = (await getData("redeem/codes")) || {};
+  let redeemData = (await getData("redeem/codes")) || {};
   const codeData = redeemData[code];
 
-  if (!codeData)
-    return api.sendMessage("❌ Invalid or expired code.", threadID);
-
-  if (codeData.expire && Date.now() > codeData.expire) {
-    delete redeemData[code];
-    await setData("redeem/codes", redeemData);
-    return api.sendMessage("❌ This code has expired.", threadID);
+  if (!codeData) {
+    return api.sendMessage("❌ Invalid or expired code.", threadID, messageID);
   }
 
-  if (codeData.usedBy.includes(senderID))
-    return api.sendMessage("❌ You have already redeemed this code.", threadID);
+  if (Date.now() > codeData.expires) {
+    delete redeemData[code];
+    await setData("redeem/codes", redeemData);
+    return api.sendMessage("❌ This code has already expired.", threadID, messageID);
+  }
 
-  // ✅ Redeem success
-  codeData.usedBy.push(senderID);
+  if (codeData.redeemed.includes(senderID)) {
+    return api.sendMessage("❌ You already redeemed this code.", threadID, messageID);
+  }
+
+  // Add to redeemed list
+  codeData.redeemed.push(senderID);
+  redeemData[code] = codeData;
   await setData("redeem/codes", redeemData);
 
-  const userData = await addCoins(
-    senderID,
-    threadID,
-    codeData.coins,
-    api,
-    Users
-  );
+  // Add coins to bank
+  let userData = (await getData(`bank/global/${senderID}`)) || { balance: 0, name: await Users.getNameUser(senderID) };
+  userData.balance += codeData.coins;
+  await setData(`bank/global/${senderID}`, userData);
 
   return api.sendMessage(
-    `🎉 Successfully redeemed code!\n\n👤 User: ${userData.name}\n💰 +${codeData.coins.toLocaleString()} coins\n🏦 New Balance: ${userData.balance.toLocaleString()} coins`,
-    threadID
+    `🎉 Successfully redeemed code!\n💰 You received ${codeData.coins} coins.\n🏦 New Balance: ${userData.balance}`,
+    threadID,
+    messageID
   );
 };
