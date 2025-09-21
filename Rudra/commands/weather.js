@@ -49,10 +49,10 @@ function fetchWeatherStats(path) {
 
 module.exports.config = {
   name: "weather",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermssion: 0,
   credits: "ChatGPT",
-  description: "Get weather stats from Grow A Garden",
+  description: "Get only active weather events from Grow A Garden",
   commandCategory: "garden",
   usages: "/weather",
   cooldowns: 5,
@@ -62,9 +62,18 @@ module.exports.run = async function ({ api, event }) {
   try {
     const stats = await fetchWeatherStats("/api/weather/stats");
     
-    let msg = "🌦 Grow A Garden Weather Stats 🌱\n\n";
-    for (const key in stats) {
-      msg += `• ${key}: ${stats[key]}\n`;
+    let activeEvents = [];
+    if (Array.isArray(stats.events)) {
+      activeEvents = stats.events.filter(ev => ev.active === true);
+    }
+
+    let msg = "🌦 Grow A Garden Active Weather Events 🌱\n\n";
+    if (activeEvents.length > 0) {
+      activeEvents.forEach((ev, idx) => {
+        msg += `• ${ev.name || "Unknown"}\n`;
+      });
+    } else {
+      msg += "❌ No active events right now.";
     }
 
     api.sendMessage(msg, event.threadID, event.messageID);
