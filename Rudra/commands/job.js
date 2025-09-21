@@ -43,12 +43,12 @@ const GLOBAL_COOLDOWN = 60 * 60 * 1000;
 
 module.exports.config = {
   name: "job",
-  version: "5.1.0",
+  version: "5.2.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Random job system with GC admin toggle, 1-hour cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
   commandCategory: "economy",
-  usages: "/job | /job toggle",
+  usages: "/job | /job on | /job off",
   cooldowns: 3
 };
 
@@ -71,20 +71,17 @@ module.exports.run = async function({ api, event }) {
   const now = Date.now();
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 🔹 Toggle job system (GC admin only)
-  if (command === "toggle") {
+  // 🔹 Handle /job off and /job on (GC admin only)
+  if (command === "off" || command === "on") {
     try {
       const threadInfo = await api.getThreadInfo(threadID);
       const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
       if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle the job system.", threadID);
 
-      // Toggle job status
-      let jobStatus = (await getData(`job/status/${threadID}`)) || { enabled: true };
-      jobStatus.enabled = !jobStatus.enabled;
-      await setData(`job/status/${threadID}`, jobStatus);
-
+      const enabled = command === "on";
+      await setData(`job/status/${threadID}`, { enabled });
       return api.sendMessage(
-        `💼 Job system is now ${jobStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+        `💼 Job system is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
         threadID
       );
     } catch (err) {
@@ -108,9 +105,10 @@ module.exports.run = async function({ api, event }) {
   const lastTime = userData.lastTime || 0;
   const elapsed = now - lastTime;
 
-  // Buff: Energy Drink halves cooldown
   let cooldown = GLOBAL_COOLDOWN;
   let usedItems = [];
+
+  // Buff: Energy Drink halves cooldown
   const energyDrink = inventory.items.find(i => i.name === "Energy Drink" && i.quantity > 0);
   if (energyDrink) {
     cooldown = Math.floor(cooldown / 2);
