@@ -1,10 +1,8 @@
 const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
 
 module.exports.config = {
   name: "activist",
-  version: "1.0.0",
+  version: "1.0.1",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Generate activist image for mentioned user",
@@ -31,20 +29,16 @@ module.exports.run = async function ({ api, event, args }) {
 
     const url = `https://betadash-api-swordslush-production.up.railway.app/activists?userid=${mentionId}&text=${encodeURIComponent(text)}`;
 
-    // Fetch image as arraybuffer
-    const response = await axios.get(url, { responseType: "arraybuffer" });
-    const buffer = Buffer.from(response.data, "binary");
+    // Fetch image as stream (no need to save file)
+    const response = await axios.get(url, { responseType: "stream" });
 
-    // Temporary file
-    const tempPath = path.join(__dirname, `activist_${mentionId}.png`);
-    fs.writeFileSync(tempPath, buffer);
-
-    // Send image
-    api.sendMessage(
-      { attachment: fs.createReadStream(tempPath) },
+    await api.sendMessage(
+      {
+        body: `🖼 Activist card for ${mentionName}\nText: ${text}`,
+        attachment: response.data
+      },
       event.threadID,
-      event.messageID,
-      () => fs.unlinkSync(tempPath) // delete temp file after sending
+      event.messageID
     );
   } catch (e) {
     api.sendMessage("❌ Error: " + e.message, event.threadID, event.messageID);
