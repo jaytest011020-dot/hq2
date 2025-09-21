@@ -1,12 +1,14 @@
+const { setData, getData } = require("../../database.js");
+
 module.exports.config = {
   name: "petcal",
-  version: "2.3.3",
+  version: "2.4.0",
   hasPermission: 0,
-  credits: "ChatGPT",
-  description: "Calculate pet weights (Age 1 → Age 100, linear growth up to 10× Age 1)",
+  credits: "ChatGPT + Jaylord La Peña",
+  description: "Calculate pet weights (with GC admin toggle on/off, Firebase support)",
   usePrefix: true,
   commandCategory: "gag tools",
-  usages: "/petcal <ageLevel> <weightKgAtThatAge>",
+  usages: "/petcal <ageLevel> <weightKgAtThatAge> | /petcal on | /petcal off",
   cooldowns: 5
 };
 
@@ -20,27 +22,50 @@ function usageExample(api, threadID, messageID) {
 }
 
 module.exports.run = async function ({ api, event, args }) {
-  const { threadID, messageID } = event;
+  const { senderID, threadID, messageID } = event;
+  const command = args[0] ? args[0].toLowerCase() : "";
 
+  // 🔹 Handle /petcal on/off toggle (GC admin only)
+  if (command === "on" || command === "off") {
+    try {
+      const threadInfo = await api.getThreadInfo(threadID);
+      const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+      if (!isAdmin) {
+        return api.sendMessage("❌ Only GC admins can toggle the pet calculator.", threadID, messageID);
+      }
+
+      const enabled = command === "on";
+      await setData(`petcal/status/${threadID}`, { enabled });
+
+      return api.sendMessage(
+        `🐾 Pet Calculator is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+        threadID,
+        messageID
+      );
+    } catch (err) {
+      console.error("[PETCAL] Toggle error:", err);
+      return api.sendMessage("⚠️ Failed to toggle pet calculator.", threadID, messageID);
+    }
+  }
+
+  // 🔹 Check if petcal system is enabled
+  const petcalStatus = (await getData(`petcal/status/${threadID}`)) || { enabled: true };
+  if (!petcalStatus.enabled) {
+    return api.sendMessage("❌ Pet Calculator is currently disabled by GC admin.", threadID, messageID);
+  }
+
+  // Normal function (calculator) starts here
   if (args.length < 2) return usageExample(api, threadID, messageID);
 
   let givenAge = parseInt(args[0]);
   let givenWeight = parseFloat(args[1]);
 
   if (isNaN(givenAge) || givenAge < 1 || givenAge > 100) {
-    return api.sendMessage(
-      "⚠️ Age level must be between 1 and 100.",
-      threadID,
-      { messageID }
-    );
+    return api.sendMessage("⚠️ Age level must be between 1 and 100.", threadID, { messageID });
   }
 
   if (isNaN(givenWeight) || givenWeight <= 0) {
-    return api.sendMessage(
-      "⚠️ Please provide a valid weight (kg).",
-      threadID,
-      { messageID }
-    );
+    return api.sendMessage("⚠️ Please provide a valid weight (kg).", threadID, { messageID });
   }
 
   // Scale factor at the given age (1.0 at Age 1 → 10.0 at Age 100)
