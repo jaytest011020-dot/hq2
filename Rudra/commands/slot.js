@@ -1,4 +1,3 @@
-// === modules/commands/slot.js ===
 const { getData, setData } = require("../../database.js");
 
 // Slot symbols
@@ -29,17 +28,46 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "slot",
-  version: "2.0.0",
+  version: "2.1.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Play slot machine with coins (per GC bank system)",
+  description: "Play slot machine with coins (per GC bank system) with admin toggle",
   commandCategory: "Games",
-  usages: "/slot <amount>",
+  usages: "/slot <amount> | /slot toggle",
   cooldowns: 5,
 };
 
 module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID } = event;
+  const command = args[0] ? args[0].toLowerCase() : "";
+
+  // 🔹 Check if GC admin is toggling slot
+  if (command === "toggle") {
+    try {
+      const threadInfo = await api.getThreadInfo(threadID);
+      const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+      if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle slot.", threadID);
+
+      // Toggle slot status
+      let slotStatus = (await getData(`slot/${threadID}`)) || { enabled: true };
+      slotStatus.enabled = !slotStatus.enabled;
+      await setData(`slot/${threadID}`, slotStatus);
+
+      return api.sendMessage(
+        `🎰 Slot is now ${slotStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+        threadID
+      );
+    } catch (err) {
+      console.error("[SLOT] Toggle error:", err);
+      return api.sendMessage("⚠️ Failed to toggle slot.", threadID);
+    }
+  }
+
+  // 🔹 Check if slot is enabled
+  const slotStatus = (await getData(`slot/${threadID}`)) || { enabled: true };
+  if (!slotStatus.enabled) {
+    return api.sendMessage("❌ Slot is currently disabled by GC admin.", threadID);
+  }
 
   // ✅ Load player balance per group
   let userBank = (await getData(`bank/${threadID}/${senderID}`)) || {
