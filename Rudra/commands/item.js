@@ -12,6 +12,7 @@ function createOptions(path) {
       referer: "https://growagarden.gg/values",
       "user-agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 OPR/119.0.0.0",
+      "Content-Length": "0", // ✅ importante
     },
   };
 }
@@ -31,7 +32,7 @@ function fetchItems(path) {
           const parsed = JSON.parse(data);
           resolve(parsed);
         } catch (err) {
-          reject(new Error("Failed to parse JSON: " + err.message));
+          reject(new Error("Failed to parse JSON: " + err.message + "\n" + data.slice(0,200)));
         }
       });
     });
@@ -42,7 +43,7 @@ function fetchItems(path) {
 }
 
 module.exports.config = {
-  name: "value",
+  name: "getitems",
   version: "1.0.0",
   hasPermssion: 0,
   credits: "ChatGPT",
@@ -59,28 +60,29 @@ module.exports.run = async function ({ api, event, args }) {
       return api.sendMessage("❌ Please provide an item name.", event.threadID, event.messageID);
     }
 
-    // ✅ Correct endpoint (lahat ng items)
     const stats = await fetchItems("/api/v1/items/Gag/all?page=1&limit=1000000&sortBy=position");
 
     if (!stats.items) {
       return api.sendMessage("❌ No items data found.", event.threadID, event.messageID);
     }
 
-    const found = stats.items.find(
+    const found = stats.items.filter(
       (item) => item.name.toLowerCase().includes(itemName)
     );
 
-    if (!found) {
+    if (!found.length) {
       return api.sendMessage("❌ Item not found.", event.threadID, event.messageID);
     }
 
-    let msg = `🍎 Item Info\n\n`;
-    msg += `• Name: ${found.name}\n`;
-    msg += `• Category: ${found.category}\n`;
-    msg += `• Rarity: ${found.rarity}\n`;
-    msg += `• Mutation: ${found.mutation || "None"}\n`;
+    let msg = `🍎 Item Info (${found.length} result${found.length>1?"s":""})\n\n`;
+    found.forEach((f) => {
+      msg += `• Name: ${f.name}\n`;
+      msg += `  Category: ${f.category}\n`;
+      msg += `  Rarity: ${f.rarity}\n`;
+      msg += `  Mutation: ${f.mutation || "None"}\n\n`;
+    });
 
-    api.sendMessage(msg, event.threadID, event.messageID);
+    api.sendMessage(msg.trim(), event.threadID, event.messageID);
   } catch (err) {
     api.sendMessage("❌ Failed to fetch items: " + err.message, event.threadID, event.messageID);
   }
