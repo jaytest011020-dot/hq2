@@ -121,18 +121,22 @@ module.exports.run = async function({ api, event, args, Users }) {
     );
   }
 
-  // 💸 Send coins
+  // 💸 Send coins (multi-word mention fix)
   if (command === "send") {
     if (!mentions || !Object.keys(mentions).length)
       return api.sendMessage("❌ Please mention a user to send coins.", threadID, messageID);
 
-    const amount = parseInt(args[2]);
-    if (isNaN(amount) || amount <= 0)
-      return api.sendMessage("❌ Please specify a valid number of coins.", threadID, messageID);
-
     const recipientID = Object.keys(mentions)[0];
     if (recipientID === senderID)
       return api.sendMessage("❌ You cannot send coins to yourself.", threadID, messageID);
+
+    // Kunin ang amount mula sa natitirang args pagkatapos ng mention
+    let mentionName = Object.values(mentions)[0];
+    const amountText = args.slice(1).join(" ").replace(mentionName, "").trim();
+    const amount = parseInt(amountText);
+
+    if (isNaN(amount) || amount <= 0)
+      return api.sendMessage("❌ Please specify a valid number of coins.", threadID, messageID);
 
     let senderData = (await getData(`bank/${threadID}/${senderID}`)) || {
       name: await getUserName(senderID, api, Users),
