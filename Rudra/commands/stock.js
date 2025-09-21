@@ -25,10 +25,12 @@ const SPECIAL_ITEMS = [
 
 // Auto-stock timers per GC
 const autoStockTimers = {};
+let autoStockQueue = []; // Queue to stagger multiple GCs
 
-// Fetch stock data
+// Always 10-second delay before every API request
 async function fetchGardenData() {
   try {
+    await new Promise(resolve => setTimeout(resolve, 10000)); // 10s delay
     const res = await axios.get("https://gagstock.gleeze.com/grow-a-garden");
     return res.data?.data || {};
   } catch {
@@ -88,16 +90,18 @@ ${gear}
 ──────────────────────
   `.trim();
 
+  // Send main stock message immediately
   api.sendMessage(stockMsg, threadID);
 
-  // Special items alert
+  // Special items alert (with 10-second delay)
   const allItems = [...(data.egg?.items || []), ...(data.seed?.items || []), ...(data.gear?.items || [])];
   const foundSpecial = allItems.filter(i =>
     SPECIAL_ITEMS.some(si => i.name.toLowerCase().includes(si.toLowerCase()))
   );
 
   if (foundSpecial.length > 0) {
-    const specialMsg = `
+    setTimeout(() => {
+      const specialMsg = `
 🚨 𝗡𝗲𝘄 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 🚨
 ──────────────────────
 🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
@@ -105,23 +109,32 @@ ${gear}
 ──────────────────────
 ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity})`).join("\n")}
 ──────────────────────
-    `.trim();
-    api.sendMessage(specialMsg, threadID);
+      `.trim();
+      api.sendMessage(specialMsg, threadID);
+    }, 10000); // 10s delay
   }
 }
 
 // Start auto-stock for a GC
 async function startAutoStock(threadID, api) {
-  if (autoStockTimers[threadID]) return; // prevent duplicate timers
+  if (autoStockTimers[threadID]) return;
+
+  // Add GC to queue if not already
+  if (!autoStockQueue.includes(threadID)) autoStockQueue.push(threadID);
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min(now);
-  const delay = next.getTime() - now.getTime();
+  const baseDelay = next.getTime() - now.getTime();
+
+  // Stagger delay: 10s × queue position
+  const position = autoStockQueue.indexOf(threadID);
+  const totalDelay = baseDelay + position * 10000;
 
   setTimeout(() => {
     sendStock(threadID, api); // first send
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
-  }, delay);
+    autoStockQueue = autoStockQueue.filter(tid => tid !== threadID); // remove from queue
+  }, totalDelay);
 }
 
 // Command: /stock
@@ -130,7 +143,6 @@ module.exports.run = async function({ api, event, args }) {
   const option = args[0]?.toLowerCase();
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
-  // Prevent duplicate manual usage
   if (gcData.enabled && option && option !== "off" && option !== "check") {
     return api.sendMessage("⚠️ Auto-stock is already active. No need to use /stock manually.", threadID, messageID);
   }
