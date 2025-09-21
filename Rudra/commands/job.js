@@ -43,12 +43,12 @@ const GLOBAL_COOLDOWN = 60 * 60 * 1000;
 
 module.exports.config = {
   name: "job",
-  version: "5.0.0",
+  version: "5.1.0",
   hasPermission: 0,
-  credits: "ChatGPT + NN",
-  description: "Random job system with 1-hour global cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
+  credits: "Jaylord La Peña + ChatGPT",
+  description: "Random job system with GC admin toggle, 1-hour cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
   commandCategory: "economy",
-  usages: "/job",
+  usages: "/job | /job toggle",
   cooldowns: 3
 };
 
@@ -67,8 +67,37 @@ async function getUserName(uid, api) {
 }
 
 module.exports.run = async function({ api, event }) {
-  const { senderID, threadID, messageID } = event;
+  const { senderID, threadID, messageID, args } = event;
   const now = Date.now();
+  const command = args[0] ? args[0].toLowerCase() : "";
+
+  // 🔹 Toggle job system (GC admin only)
+  if (command === "toggle") {
+    try {
+      const threadInfo = await api.getThreadInfo(threadID);
+      const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+      if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle the job system.", threadID);
+
+      // Toggle job status
+      let jobStatus = (await getData(`job/status/${threadID}`)) || { enabled: true };
+      jobStatus.enabled = !jobStatus.enabled;
+      await setData(`job/status/${threadID}`, jobStatus);
+
+      return api.sendMessage(
+        `💼 Job system is now ${jobStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+        threadID
+      );
+    } catch (err) {
+      console.error("[JOB] Toggle error:", err);
+      return api.sendMessage("⚠️ Failed to toggle job system.", threadID);
+    }
+  }
+
+  // 🔹 Check if job system is enabled
+  const jobStatus = (await getData(`job/status/${threadID}`)) || { enabled: true };
+  if (!jobStatus.enabled) {
+    return api.sendMessage("❌ Job system is currently disabled by GC admin.", threadID);
+  }
 
   // Load user data
   const userData = (await getData(`job/${threadID}/${senderID}`)) || {};
@@ -143,7 +172,7 @@ module.exports.run = async function({ api, event }) {
   const emoji = JOB_EMOJIS[job.name] || "💼";
   const funText = FUN_PHRASES[Math.floor(Math.random() * FUN_PHRASES.length)];
 
-  // Construct message (UI-friendly)
+  // Construct message
   const msg = `
 =========================
 ${emoji} ${userName} did the ${job.name} job! ${isRare ? "✨" : ""}
