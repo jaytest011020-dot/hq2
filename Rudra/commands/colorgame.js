@@ -4,7 +4,7 @@ const path = require("path");
 
 module.exports.config = {
   name: "cg",
-  version: "1.0.0",
+  version: "1.1.0",
   credits: "ChatGPT + Jaylord",
   hasPermission: 0,
   description: "Color game with betting system (uses bank balance)",
@@ -127,8 +127,9 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   // 📝 Format result
   let msg = `🎨✨ COLOR GAME ✨🎨\n\n`;
-  msg += `🎲 Drawn colors: ${drawnColors.map(c => `${colorEmojis[c]} ${c}`).join(" | ")}\n\n`;
-  msg += `👤 Player: ${userName}\n💰 Bet: ${bet.toLocaleString()} coins\n🎯 Your color: ${colorEmojis[chosenColor]} ${chosenColor}\n\n`;
+  // Drawn colors: emoji only
+  msg += `🎲 Drawn colors: ${drawnColors.map(c => colorEmojis[c]).join(" | ")}\n\n`;
+  msg += `👤 Player: ${userName}\n💰 Bet: ${bet.toLocaleString()} coins\n🎯 Your color: ${colorEmojis[chosenColor]}\n\n`;
 
   if (count > 0) {
     msg += `🌟 Hits: ${count} time(s)\n💰 Multiplier: ×${multiplier}\n🏆 Winnings: ${winnings.toLocaleString()} coins\n\n`;
