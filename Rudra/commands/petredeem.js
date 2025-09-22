@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "petredeem",
-  version: "1.5.0",
+  version: "1.6.0",
   hasPermsion: 0,
   description: "Add/remove pets (admin only) and redeem using coins",
   usages: "/petredeem add <name> <age> <weight> <price>\n/petredeem\n/petredeem <number>\n/petredeem remove <number>",
@@ -117,6 +117,10 @@ module.exports.run = async function({ api, event, args }) {
 
   bankData.balance -= pet.price;
   await setData(`bank/${threadID}/${senderID}`, bankData);
+
+  // Remove pet from list immediately after redeem
+  petsData.splice(index - 1, 1);
+  await setData(`petredeem/${threadID}/pets`, petsData);
 
   // Generate unique code
   const code = generateCode();
