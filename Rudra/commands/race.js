@@ -4,10 +4,10 @@ const path = require("path");
 
 module.exports.config = {
   name: "race",
-  version: "1.1.0",
+  version: "1.2.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Horse race betting game with animation (respects maintenance system)",
+  description: "Horse race betting game with countdown & prize pool",
   usages: "/race <amount>",
   commandCategory: "games",
   cooldowns: 3,
@@ -61,7 +61,11 @@ module.exports.run = async function ({ api, event, args }) {
     raceData.players.push({ id: senderID, name: playerData.name, bet });
     await setData(`race/${threadID}`, raceData);
 
-    return api.sendMessage(`✅ ${playerData.name} joined the race! 🐎`, threadID, messageID);
+    return api.sendMessage(
+      `✅ ${playerData.name} joined the race!\n💸 -${bet} coins\n💰 Remaining balance: ${playerData.balance}`,
+      threadID,
+      messageID
+    );
   }
 
   // New race
@@ -81,12 +85,12 @@ module.exports.run = async function ({ api, event, args }) {
   await setData(`race/${threadID}`, raceData);
 
   api.sendMessage(
-    `🏇 A new horse race has started!\n💰 Entry fee: ${bet} coins\n\nType /race ${bet} to join!\nRace will start in 30 seconds...`,
+    `🏇 A new horse race has started!\n💰 Entry fee: ${bet} coins\n\nType /race ${bet} to join!\n\n⏳ Race will start in 1 minute...`,
     threadID,
     messageID
   );
 
-  // Start countdown
+  // Start countdown after 1 min
   setTimeout(async () => {
     let raceData = (await getData(`race/${threadID}`));
     if (!raceData || !raceData.ongoing || raceData.players.length < 2) {
@@ -94,6 +98,12 @@ module.exports.run = async function ({ api, event, args }) {
       await setData(`race/${threadID}`, raceData);
       return api.sendMessage("❌ Race cancelled. Not enough players (need at least 2).", threadID);
     }
+
+    // 3-second countdown
+    api.sendMessage("⏳ The race is about to begin!\n3...", threadID);
+    setTimeout(() => api.sendMessage("2...", threadID), 1000);
+    setTimeout(() => api.sendMessage("1...", threadID), 2000);
+    setTimeout(() => api.sendMessage("🏁 GO!", threadID), 3000);
 
     let trackLength = 10;
     let progress = raceData.players.map(() => 0);
@@ -110,16 +120,19 @@ module.exports.run = async function ({ api, event, args }) {
       }
 
       // Build race board
+      let prizePool = raceData.bet * raceData.players.length;
       let msg = "🏁 Horse Race Progress 🏁\n\n";
       raceData.players.forEach((p, i) => {
         msg += `${i + 1}. ${p.name}: ${renderRace(progress[i], trackLength)}\n`;
       });
 
+      msg += `\n💰 Bet: ${raceData.bet} coins\n👥 Players: ${raceData.players.length}\n💵 Total Prize Pool: ${prizePool} coins`;
+
       // Check winner
       let winnerIndex = progress.findIndex(p => p >= trackLength);
       if (winnerIndex !== -1) {
         finished = true;
-        const prize = raceData.bet * raceData.players.length;
+        const prize = prizePool;
         const winner = raceData.players[winnerIndex];
 
         // Add prize to winner
@@ -127,7 +140,7 @@ module.exports.run = async function ({ api, event, args }) {
         winnerData.balance += prize;
         await setData(`bank/${threadID}/${winner.id}`, winnerData);
 
-        msg += `\n🎉 Winner: ${winner.name} 🏆\n💰 Prize: ${prize} coins`;
+        msg += `\n\n🎉 Winner: ${winner.name} 🏆\n💰 Prize: ${prize} coins`;
 
         // Reset race
         raceData.ongoing = false;
@@ -141,6 +154,6 @@ module.exports.run = async function ({ api, event, args }) {
       });
     }
 
-    updateRace();
-  }, 60000); // 30s join time
+    setTimeout(updateRace, 3500); // start after countdown
+  }, 60000); // 1 min join time
 };
