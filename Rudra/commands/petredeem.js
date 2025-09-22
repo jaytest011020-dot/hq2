@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "petredeem",
-  version: "1.2.0",
+  version: "1.4.0",
   hasPermsion: 0,
   description: "Add pets (admin only) and redeem using coins",
   usages: "/petredeem add <name> <age> <weight> <price>\n/petredeem\n/petredeem <number>",
@@ -22,9 +22,9 @@ function generateCode(length = 8) {
 module.exports.run = async function({ api, event, args }) {
   const { threadID, senderID, messageID } = event;
 
-  // Load pets and codes
+  // Load pets (per-thread) and codes (GLOBAL)
   const petsData = (await getData(`petredeem/${threadID}/pets`)) || [];
-  const codes = (await getData(`petredeem/${threadID}/codes`)) || {};
+  const codes = (await getData(`petredeem/codes`)) || {};
 
   // ---------------- ADD PET (Admin Only) ----------------
   if (args[0]?.toLowerCase() === "add") {
@@ -92,12 +92,21 @@ module.exports.run = async function({ api, event, args }) {
 
   // Generate unique code
   const code = generateCode();
-  codes[code] = { petName: pet.name, userID: senderID, used: false };
-  await setData(`petredeem/${threadID}/codes`, codes);
+  const userInfo = await api.getUserInfo(senderID);
+  const username = userInfo[senderID]?.name || "Unknown User";
+
+  codes[code] = { 
+    petName: pet.name, 
+    userID: senderID, 
+    username, 
+    used: false 
+  };
+
+  await setData(`petredeem/codes`, codes);
 
   return api.sendMessage(
     `🎉 Successfully redeemed your pet!\n\n🐾 Name: ${pet.name}\n🎂 Age: ${pet.age} years\n⚖️ Weight: ${pet.weight} kg\n` +
-    `🔑 Your redemption code: ${code}\n💰 Remaining balance: ${bankData.balance} coins`,
+    `🔑 Your redemption code: ${code}\n💰 Remaining balance: ${bankData.balance} coins\n\n📌 Please send this code to the GC Owner or an Admin to claim your pet.`,
     threadID,
     messageID
   );
