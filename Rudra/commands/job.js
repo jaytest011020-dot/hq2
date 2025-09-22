@@ -19,7 +19,14 @@ const JOBS = [
   { name: "Delivery Rider", min: 50, max: 120 }, { name: "Waiter", min: 40, max: 90 },
   { name: "Dancer", min: 60, max: 110 }, { name: "Actor", min: 100, max: 200 },
   { name: "Streamer", min: 80, max: 180 }, { name: "Athlete", min: 90, max: 200 },
-  { name: "Astronaut", min: 300, max: 600, rare: true }, { name: "President", min: 700, max: 1200, rare: true }
+  { name: "Astronaut", min: 300, max: 600, rare: true }, { name: "President", min: 700, max: 1200, rare: true },
+
+  // New high-paying jobs
+  { name: "Entrepreneur", min: 500, max: 1000, rare: true },
+  { name: "Investor", min: 500, max: 1000, rare: true },
+  { name: "Software Architect", min: 500, max: 1000, rare: true },
+  { name: "Celebrity", min: 500, max: 1000, rare: true },
+  { name: "Tech Founder", min: 500, max: 1000, rare: true }
 ];
 
 // Job emojis
@@ -30,7 +37,8 @@ const JOB_EMOJIS = {
   Firefighter: "🔥", Pilot: "✈️", Soldier: "🪖", Hacker: "💻", CEO: "💼",
   Fisherman: "🎣", Barber: "💈", Mechanic: "🔧", Janitor: "🧹",
   "Delivery Rider": "📦", Waiter: "🍽️", Dancer: "💃", Actor: "🎭",
-  Streamer: "🎥", Athlete: "🏅", Astronaut: "🚀", President: "🏛️"
+  Streamer: "🎥", Athlete: "🏅", Astronaut: "🚀", President: "🏛️",
+  Entrepreneur: "💡", Investor: "📈", "Software Architect": "🖥️", Celebrity: "🎬", "Tech Founder": "🚀"
 };
 
 // Fun phrases
@@ -39,14 +47,15 @@ const FUN_PHRASES = [
   "You're unstoppable!", "That was amazing!", "You crushed it!", "The grind is paying off!"
 ];
 
-const GLOBAL_COOLDOWN = 30 * 60 * 1000; // 30m
+// ✅ Set cooldown to 10 minutes
+const GLOBAL_COOLDOWN = 10 * 60 * 1000; // 10 minutes
 
 module.exports.config = {
   name: "job",
-  version: "5.4.1",
+  version: "5.5.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Random job system with GC admin toggle, 30m cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
+  description: "Random job system with high-paying jobs, 10m cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
   commandCategory: "economy",
   usages: "/job | /job on | /job off | /job status",
   cooldowns: 3
@@ -72,7 +81,7 @@ module.exports.run = async function({ api, event, args }) {
   try {
     const maintenance = await getData("/maintenance");
     if (maintenance?.enabled) {
-      const mp4Path = path.join(__dirname, "cache", "AI data.mp4"); // relative path
+      const mp4Path = path.join(__dirname, "cache", "AI data.mp4");
       return api.sendMessage(
         {
           body: "🚧 Bot is currently under maintenance. /job command is temporarily disabled.",
