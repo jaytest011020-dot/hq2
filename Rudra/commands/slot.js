@@ -1,4 +1,5 @@
 const { getData, setData } = require("../../database.js");
+const fs = require("fs");
 
 // Slot symbols
 const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎"];
@@ -28,10 +29,10 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "slot",
-  version: "2.3.0",
+  version: "2.4.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Play slot machine with coins (per GC bank system) with admin toggle",
+  description: "Play slot machine with coins (per GC bank system) with admin toggle + global maintenance respect",
   commandCategory: "Games",
   usages: "/slot <bet> | /slot on | /slot off | /slot status",
   cooldowns: 5,
@@ -69,7 +70,20 @@ module.exports.run = async function ({ api, event, args, Users }) {
     }
   }
 
-  // 🔹 Check if slot is enabled
+  // 🔒 Check global maintenance
+  const maintenance = (await getData("system/maintenance")) || { enabled: false };
+  if (maintenance.enabled) {
+    const videoPath = __dirname + "/../../cache/AI data.mp4";
+    return api.sendMessage(
+      {
+        body: "⚠️ Bot is under maintenance. Please try again later.",
+        attachment: fs.createReadStream(videoPath)
+      },
+      threadID
+    );
+  }
+
+  // 🔹 Check if slot is enabled for this GC
   const slotStatus = (await getData(`slot/status/${threadID}`)) || { enabled: true };
   if (!slotStatus.enabled) {
     return api.sendMessage("❌ Slot is currently disabled by GC admin.", threadID);
