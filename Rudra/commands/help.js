@@ -10,9 +10,13 @@ const mathSansBold = {
 const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 let lastUsed = {};
 
+const fs = require("fs");
+const path = require("path");
+const { getData } = require("../../database.js"); // adjust path if needed
+
 module.exports.config = {
   name: "help",
-  version: "1.0.4",
+  version: "1.0.5",
   hasPermission: 0,
   credits: "august + ChatGPT",
   description: "Guide for new users",
@@ -23,6 +27,24 @@ module.exports.config = {
 
 module.exports.run = async function ({ api, event }) {
   const { threadID, messageID } = event;
+
+  // --- Maintenance check ---
+  try {
+    const maintenance = await getData("/maintenance");
+    if (maintenance?.enabled) {
+      const mp4Path = path.join(__dirname, "cache", "AI data.mp4"); // relative path
+      return api.sendMessage(
+        {
+          body: "🚧 Bot is currently under maintenance. /help command is temporarily disabled.",
+          attachment: fs.createReadStream(mp4Path),
+        },
+        threadID,
+        messageID
+      );
+    }
+  } catch (err) {
+    console.error("Maintenance check failed:", err);
+  }
 
   // 🔹 check cooldown per thread
   const now = Date.now();
