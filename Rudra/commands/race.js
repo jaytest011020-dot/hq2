@@ -1,11 +1,13 @@
 const { setData, getData } = require("../../database.js");
+const fs = require("fs-extra");
+const path = require("path");
 
 module.exports.config = {
   name: "race",
-  version: "1.0.1",
+  version: "1.1.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Horse race betting game with animation",
+  description: "Horse race betting game with animation (respects maintenance system)",
   usages: "/race <amount>",
   commandCategory: "games",
   cooldowns: 3,
@@ -16,9 +18,23 @@ function renderRace(progress, trackLength = 10) {
   return "▓".repeat(progress) + "░".repeat(trackLength - progress);
 }
 
-module.exports.run = async function({ api, event, args }) {
+module.exports.run = async function ({ api, event, args }) {
   const { threadID, senderID, messageID } = event;
   const bet = parseInt(args[0]);
+
+  // 🔹 Check maintenance system
+  const maintenance = (await getData(`system/maintenance`)) || { enabled: false };
+  if (maintenance.enabled) {
+    const videoPath = path.join(__dirname, "cache", "AI data.mp4");
+    return api.sendMessage(
+      {
+        body: "⚠️ Bot is under maintenance.\n\nPlease try again later.",
+        attachment: fs.existsSync(videoPath) ? fs.createReadStream(videoPath) : null
+      },
+      threadID,
+      messageID
+    );
+  }
 
   if (!bet || bet <= 0) {
     return api.sendMessage("❌ Usage: /race <bet amount>", threadID, messageID);
@@ -126,5 +142,5 @@ module.exports.run = async function({ api, event, args }) {
     }
 
     updateRace();
-  }, 30000); // 30s join time
+  }, 60000); // 30s join time
 };
