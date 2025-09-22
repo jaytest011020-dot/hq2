@@ -5,7 +5,7 @@ const { getData } = require("../../database.js"); // adjust path if needed
 
 module.exports.config = {
   name: "activist",
-  version: "1.0.3",
+  version: "1.0.4",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Generate activist image for mentioned user",
@@ -22,11 +22,11 @@ module.exports.run = async function ({ api, event, args }) {
   try {
     const maintenance = await getData("/maintenance");
     if (maintenance?.enabled) {
-      const mp4Path = path.join(__dirname, "cache", "AI data.mp4"); // relative to this module
+      const imgPath = path.join(__dirname, "cache", "maintenance.jpeg"); // bagong attachment
       return api.sendMessage(
         {
           body: "🚧 Bot is currently under maintenance. This command is temporarily disabled.",
-          attachment: fs.createReadStream(mp4Path),
+          attachment: fs.existsSync(imgPath) ? fs.createReadStream(imgPath) : null,
         },
         threadID,
         messageID
