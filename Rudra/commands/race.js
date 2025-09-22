@@ -4,7 +4,7 @@ const path = require("path");
 
 module.exports.config = {
   name: "race",
-  version: "1.3.0",
+  version: "1.4.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
   description: "Horse race betting game with countdown & prize pool, GC toggle & maintenance",
@@ -118,10 +118,19 @@ module.exports.run = async function ({ api, event, args }) {
   // Start countdown after 1 min
   setTimeout(async () => {
     let raceData = (await getData(`race/${threadID}`));
-    if (!raceData || !raceData.ongoing || raceData.players.length < 2) {
+    if (!raceData || !raceData.ongoing) return;
+
+    // Refund bet if no one joined besides starter
+    if (raceData.players.length < 2) {
+      const starter = raceData.players[0];
+      let starterData = (await getData(`bank/${threadID}/${starter.id}`)) || { balance: 0, name: starter.name };
+      starterData.balance += raceData.bet; // refund
+      await setData(`bank/${threadID}/${starter.id}`, starterData);
+
       raceData.ongoing = false;
       await setData(`race/${threadID}`, raceData);
-      return api.sendMessage("❌ Race cancelled. Not enough players (need at least 2).", threadID);
+
+      return api.sendMessage(`❌ Race cancelled. Not enough players joined. 💸 ${starter.name}'s bet of ${raceData.bet} coins has been refunded.`, threadID);
     }
 
     api.sendMessage("⏳ The race is about to begin!\n3...", threadID);
