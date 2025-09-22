@@ -4,7 +4,7 @@ const path = require("path");
 
 module.exports.config = {
   name: "race",
-  version: "1.2.0",
+  version: "1.2.1",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
   description: "Horse race betting game with countdown & prize pool",
@@ -25,11 +25,11 @@ module.exports.run = async function ({ api, event, args }) {
   // 🔹 Check maintenance system
   const maintenance = (await getData(`system/maintenance`)) || { enabled: false };
   if (maintenance.enabled) {
-    const videoPath = path.join(__dirname, "cache", "AI data.mp4");
+    const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg"); // new attachment
     return api.sendMessage(
       {
         body: "⚠️ Bot is under maintenance.\n\nPlease try again later.",
-        attachment: fs.existsSync(videoPath) ? fs.createReadStream(videoPath) : null
+        attachment: fs.existsSync(attachmentPath) ? fs.createReadStream(attachmentPath) : null
       },
       threadID,
       messageID
