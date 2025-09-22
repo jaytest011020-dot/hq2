@@ -4,7 +4,7 @@ const path = require("path");
 
 module.exports.config = {
   name: "cg",
-  version: "1.3.0",
+  version: "1.2.0",
   credits: "ChatGPT + Jaylord",
   hasPermission: 0,
   description: "Color game with betting system (uses bank balance)",
@@ -13,8 +13,8 @@ module.exports.config = {
   cooldowns: 5
 };
 
-// 🎨 Available colors (8 total)
-const colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "black"];
+// 🎨 Available colors (8)
+const colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "brown"];
 const colorEmojis = {
   red: "🔴",
   blue: "🔵",
@@ -23,7 +23,7 @@ const colorEmojis = {
   purple: "🟣",
   orange: "🟠",
   pink: "🌸",
-  black: "⚫"
+  brown: "🟤"
 };
 
 // 🎲 Draw 3 random colors
@@ -56,7 +56,7 @@ async function getUserName(uid, api, Users) {
   return `FB-User(${uid})`;
 }
 
-module.exports.run = async function({ api, event, args, Users }) {
+module.exports.run = async function ({ api, event, args, Users }) {
   const { threadID, senderID, messageID } = event;
 
   // 🛠 Maintenance check
@@ -112,10 +112,11 @@ module.exports.run = async function({ api, event, args, Users }) {
   const drawnColors = drawColors();
   const count = drawnColors.filter(c => c === chosenColor).length;
 
+  // 🏆 Multiplier rules
   let multiplier = 0;
-  if (count === 1) multiplier = 2;
-  else if (count === 2) multiplier = 3;
-  else if (count === 3) multiplier = 5;
+  if (count === 1) multiplier = 1;
+  else if (count === 2) multiplier = 2;
+  else if (count === 3) multiplier = 5; // Jackpot 🎉
 
   let winnings = 0;
   if (multiplier > 0) {
@@ -139,7 +140,7 @@ module.exports.run = async function({ api, event, args, Users }) {
   }
 
   msg += `🏦 New Balance: ${userData.balance.toLocaleString()} coins\n\n`;
-  msg += `💡 Tip: 1 match ×2 | 2 matches ×3 | 3 matches ×5 (jackpot)`;
+  msg += `💡 Tip: 1 match ×1 | 2 matches ×2 | 3 matches ×5 (Jackpot 🎉)`;
 
   return api.sendMessage(msg, threadID, messageID);
 };
