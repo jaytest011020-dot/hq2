@@ -1,147 +1,42 @@
-const { setData, getData } = require("../../database.js");
-
-// 📌 Configurable number of admins to display in text
-const MAX_DISPLAY_ADMINS = 5;
-
-// List of violations
-const badwords = [
-  "tanga", "bobo", "gago", "puta", "pakyu", "inutil", "ulol",
-  "fuck", "shit", "asshole", "bitch", "dumb", "stupid", "motherfucker", "laplap", "pota", "inamo", "tangina", "tang ina", "kantut", "kantot", "jakol", "jakul", "jabol", "supot", "supot", "blow job", "blowjob", "puke", "puki", "baliw"
-];
-const racistWords = [
-  "negro", "nigger", "chimp", "nigga", "baluga",
-  "chink", "indio", "bakla", "niga", "bungal", "beki", "negra"
-];
-const allowedLinks = ["facebook.com", "fb.com"];
-
-// Randomized warning messages
-const messages = {
-  badword: [
-    "Please maintain respect in this group.",
-    "Offensive words are not tolerated here.",
-    "Language matters. Kindly watch your words.",
-    "This is your warning for using bad language."
-  ],
-  racist: [
-    "Racist or discriminatory remarks are strictly prohibited.",
-    "Respect diversity. Avoid racist language.",
-    "This group does not tolerate any form of discrimination.",
-    "Be mindful. Racist terms will not be accepted here."
-  ],
-  link: [
-    "Unauthorized links are not allowed in this group.",
-    "Please refrain from sharing suspicious links.",
-    "Links outside the allowed list are prohibited.",
-    "Your message contains an unauthorized link."
-  ]
-};
-
-function pickRandom(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-// Helper para laging fresh username
-async function getUserName(uid, api) {
-  try {
-    const info = await api.getUserInfo(uid);
-    if (info && info[uid]?.name) return info[uid].name;
-    return "User";
-  } catch {
-    return "User";
-  }
-}
-
-// Format warning UI
-function formatWarning(name, type, note, count) {
-  return `╭━[⚠️WARNING ISSUED]━╮
-┃ 👤 User: @${name}
-┃ 🚫 Violation: ${type}
-┃ 📝 Note: ${note}
-┃
-┃ ⚠️ Your current warning count: ${count}
-╰━━━━━━━━━━━━━━━━━━╯`;
-}
-
-module.exports.config = {
-  name: "warning",
-  version: "3.0.0",
-  hasPermission: 1,
-  credits: "ChatGPT + NN",
-  description: "Auto warning system with per-thread DB + Admin notify",
-  commandCategory: "system",
-  usages: "/warning check @mention | /warning list",
-  cooldowns: 5
-};
-
-// 📌 COMMANDS
-module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID, mentions } = event;
-
-  if (args.length === 0) {
-    return api.sendMessage("❌ Usage: /warning check @mention | /warning list", threadID, messageID);
-  }
-
-  const sub = args[0].toLowerCase();
-
-  // /warning check @mention
-  if (sub === "check") {
-    const uid = Object.keys(mentions)[0];
-    if (!uid) return api.sendMessage("❌ Please mention a user.", threadID, messageID);
-
-    const warnings = await getData(`warnings/${threadID}/${uid}`) || { count: 0 };
-    const name = await getUserName(uid, api);
-
-    return api.sendMessage(
-      `👤 User: ${name}\n⚠️ Warning Count: ${warnings.count}`,
-      threadID,
-      messageID
-    );
-  }
-
-  // /warning list
-  if (sub === "list") {
-    let msg = "📋 Warning List:\n\n";
-    let found = false;
-
-    const all = await getData(`warnings/${threadID}/_all`) || [];
-    for (const uid of all) {
-      const warnings = await getData(`warnings/${threadID}/${uid}`);
-      if (warnings && warnings.count > 0) {
-        const name = await getUserName(uid, api);
-        msg += `• ${name}: ${warnings.count} warnings\n`;
-        found = true;
-      }
-    }
-
-    if (!found) msg += "Wala pang na-warning.";
-
-    return api.sendMessage(msg, threadID, messageID);
-  }
-};
-
-// 📌 AUTO-DETECTION
+// 📌 AUTO-DETECTION WITH AUTO-KICK
 module.exports.handleEvent = async function({ api, event }) {
   const { threadID, messageID, senderID, body } = event;
   if (!body) return;
 
   const text = body.toLowerCase();
+
+  // Split message into words (remove punctuation)
+  const words = text.replace(/[^\w\s]/g, "").split(/\s+/);
+
   let violationType = null;
   let note = "";
 
-  // Detect badwords
-  if (badwords.some(word => text.includes(word))) {
+  // Detect badwords (whole word only)
+  if (badwords.some(word => words.includes(word))) {
     violationType = "Bad Language";
     note = pickRandom(messages.badword);
   }
 
-  // Detect racist words
-  if (racistWords.some(word => text.includes(word))) {
+  // Detect racist words (whole word only)
+  if (racistWords.some(word => words.includes(word))) {
     violationType = "Racist/Discriminatory Term";
     note = pickRandom(messages.racist);
   }
 
   // Detect unauthorized links
-  if (text.includes("http") || text.includes("www.")) {
+  const allowedLinks = [
+    "facebook.com",
+    "fb.com",
+    "facebook.com/groups",
+    "fb.com/groups",
+    "m.me/j",
+    "tiktok.com",
+    "youtube.com",
+    "youtu.be",
+    "roblox.com"
+  ];
+
+  if (/https?:\/\/|www\./.test(text)) {
     const isAllowed = allowedLinks.some(link => text.includes(link));
     if (!isAllowed) {
       violationType = "Unauthorized Link";
@@ -151,14 +46,13 @@ module.exports.handleEvent = async function({ api, event }) {
 
   if (!violationType) return;
 
-  // Get warnings
+  // Get and update warnings
   let warnings = await getData(`warnings/${threadID}/${senderID}`);
   if (!warnings) warnings = { count: 0 };
-
   warnings.count++;
   await setData(`warnings/${threadID}/${senderID}`, warnings);
 
-  // Track sa list of warned users para sa /warning list
+  // Track warned users for /warning list
   let all = await getData(`warnings/${threadID}/_all`) || [];
   if (!all.includes(senderID)) {
     all.push(senderID);
@@ -180,19 +74,25 @@ module.exports.handleEvent = async function({ api, event }) {
     }
   }
 
-  // Limit displayed admins (text only)
-  let displayAdmins = adminMentions.slice(0, MAX_DISPLAY_ADMINS);
-  let extraCount = adminMentions.length - displayAdmins.length;
-
+  const displayAdmins = adminMentions.slice(0, MAX_DISPLAY_ADMINS);
+  const extraCount = adminMentions.length - displayAdmins.length;
   const adminLine =
     displayAdmins.map(m => m.tag).join(" | ") +
     (extraCount > 0 ? ` ... (+${extraCount} more)` : "");
+
+  // Format warning message
+  let warningNote = formatWarning(name, violationType, note, warnings.count);
+
+  // If user reached 5 warnings, add auto-kick info
+  if (warnings.count >= 5) {
+    warningNote += "\n\n⚠️ You have reached 5 warnings. Auto Kick will be applied!";
+  }
 
   // Send warning with admin notification
   api.sendMessage(
     {
       body:
-        formatWarning(name, violationType, note, warnings.count) +
+        warningNote +
         (adminMentions.length > 0
           ? `\n\n📢 Notifying admins: ${adminLine}`
           : ""),
@@ -202,4 +102,23 @@ module.exports.handleEvent = async function({ api, event }) {
     null,
     messageID
   );
+
+  // Auto-kick at 5 warnings
+  if (warnings.count >= 5) {
+    try {
+      await api.removeUserFromGroup(threadID, senderID);
+      await api.sendMessage(
+        `⚠️ User @${name} has been removed from the group due to 5 warnings.`,
+        threadID,
+        null,
+        messageID,
+        { mentions: [{ tag: `@${name}`, id: senderID }] }
+      );
+
+      // Optional: reset warnings after kick
+      await setData(`warnings/${threadID}/${senderID}`, { count: 0 });
+    } catch (err) {
+      console.error("Failed to kick user:", err);
+    }
+  }
 };
