@@ -2,10 +2,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "petredeem",
-  version: "1.4.0",
+  version: "1.5.0",
   hasPermsion: 0,
-  description: "Add pets (admin only) and redeem using coins",
-  usages: "/petredeem add <name> <age> <weight> <price>\n/petredeem\n/petredeem <number>",
+  description: "Add/remove pets (admin only) and redeem using coins",
+  usages: "/petredeem add <name> <age> <weight> <price>\n/petredeem\n/petredeem <number>\n/petredeem remove <number>",
   commandCategory: "economy",
 };
 
@@ -53,6 +53,34 @@ module.exports.run = async function({ api, event, args }) {
 
     return api.sendMessage(
       `✅ Successfully added pet!\n\n🐾 Name: ${name}\n🎂 Age: ${age} years\n⚖️ Weight: ${weight} kg\n💰 Price: ${price} coins`,
+      threadID,
+      messageID
+    );
+  }
+
+  // ---------------- REMOVE PET (Admin Only) ----------------
+  if (args[0]?.toLowerCase() === "remove") {
+    const threadInfo = await api.getThreadInfo(threadID);
+    const adminIDs = threadInfo.adminIDs.map(a => a.id);
+
+    if (!adminIDs.includes(senderID)) {
+      return api.sendMessage("❌ Only group admins can remove pets.", threadID, messageID);
+    }
+
+    if (!args[1] || isNaN(args[1])) {
+      return api.sendMessage("❌ Usage: /petredeem remove <number>", threadID, messageID);
+    }
+
+    const index = parseInt(args[1]) - 1;
+    if (index < 0 || index >= petsData.length) {
+      return api.sendMessage("❌ Invalid pet number.", threadID, messageID);
+    }
+
+    const removed = petsData.splice(index, 1)[0];
+    await setData(`petredeem/${threadID}/pets`, petsData);
+
+    return api.sendMessage(
+      `🗑️ Successfully removed pet:\n\n🐾 ${removed.name} (Age: ${removed.age}, Weight: ${removed.weight}, Price: ${removed.price})`,
       threadID,
       messageID
     );
