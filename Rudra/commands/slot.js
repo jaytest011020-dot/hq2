@@ -2,8 +2,8 @@ const { getData, setData } = require("../../database.js");
 const fs = require("fs");
 const path = require("path");
 
-// Slot symbols
-const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎"];
+// Slot symbols (3 new ones added)
+const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎", "🍉", "🍊", "🍌"];
 
 // 🔑 Fetch username
 async function getUserName(uid, api, Users) {
@@ -30,7 +30,7 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "slot",
-  version: "2.4.2",
+  version: "2.4.3",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Play slot machine with coins (per GC bank system) with admin toggle + global maintenance respect",
@@ -71,7 +71,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
     }
   }
 
-  // 🔒 Check global maintenance (path matches maintenance.js)
+  // 🔒 Check global maintenance
   const maintenance = (await getData("/maintenance")) || { enabled: false };
   if (maintenance.enabled) {
     const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg");
@@ -104,7 +104,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
   // Deduct bet
   userBank.balance -= bet;
 
-  // Roll slots
+  // Roll slots (3 reels)
   const roll = [
     symbols[Math.floor(Math.random() * symbols.length)],
     symbols[Math.floor(Math.random() * symbols.length)],
