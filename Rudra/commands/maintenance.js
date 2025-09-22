@@ -4,10 +4,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "maintenance",
-  version: "3.1.0",
+  version: "3.1.1",
   hasPermssion: 2,
   credits: "Jaylord + ChatGPT",
-  description: "Toggle bot maintenance mode with MP4 broadcast",
+  description: "Toggle bot maintenance mode with image broadcast",
   commandCategory: "system",
   usages: "/maintenance on | off | status",
   cooldowns: 5
@@ -43,12 +43,12 @@ module.exports.run = async function({ api, event, args }) {
     return api.sendMessage("⚙️ Usage: /maintenance on | off | status", threadID, messageID);
   }
 
-  // absolute path to your MP4 file
-  const mp4Path = path.join(__dirname, "cache", "AI data.mp4");
+  // absolute path to your maintenance image
+  const imgPath = path.join(__dirname, "cache", "maintenance.jpeg");
 
   if (sub === "on") {
     await setData("/maintenance", { enabled: true });
-    await broadcast(api, "🚧 Bot is now under MAINTENANCE. Some features are disabled.", mp4Path);
+    await broadcast(api, "🚧 Bot is now under MAINTENANCE. Some features are disabled.", imgPath);
     return api.sendMessage("✅ Maintenance mode ON. Broadcast sent.", threadID, messageID);
   }
 
