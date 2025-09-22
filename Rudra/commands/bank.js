@@ -5,7 +5,7 @@ const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
-  version: "3.3.1",
+  version: "3.3.2",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
   description: "Bank system per group chat with toggle by GC admin or bot admin",
@@ -39,9 +39,9 @@ async function getUserName(uid, api, Users) {
 
 // 🏦 Format balance message
 function formatBalance(user, balance) {
-  return `🏦 𝗕𝗮𝗻𝗸 𝗔𝗰𝗰𝗼𝘂𝗻𝘁 🏦\n\n` +
-         `👤 𝗨𝘀𝗲𝗿: ${user}\n` +
-         `💰 𝗕𝗮𝗹𝗮𝗻𝗰𝗲: ${balance.toLocaleString()} coins`;
+  return `🏦 BANK ACCOUNT 🏦\n\n` +
+         `👤 User: ${user}\n` +
+         `💰 Balance: ${balance.toLocaleString()} coins`;
 }
 
 module.exports.run = async function({ api, event, args, Users }) {
@@ -51,11 +51,11 @@ module.exports.run = async function({ api, event, args, Users }) {
   try {
     const maintenance = await getData("/maintenance");
     if (maintenance?.enabled) {
-      const mp4Path = path.join(__dirname, "cache", "AI data.mp4"); // relative path
+      const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg"); // new attachment
       return api.sendMessage(
         {
           body: "🚧 Bot is currently under maintenance. Bank commands are temporarily disabled.",
-          attachment: fs.createReadStream(mp4Path),
+          attachment: fs.existsSync(attachmentPath) ? fs.createReadStream(attachmentPath) : null,
         },
         threadID,
         messageID
@@ -113,7 +113,7 @@ module.exports.run = async function({ api, event, args, Users }) {
 
     results.sort((a, b) => b.balance - a.balance);
 
-    let msg = `📋 𝗕𝗮𝗻𝗸 𝗔𝗰𝗰𝗼𝘂𝗻𝘁𝘀 (Total: ${results.length}) 📋\n\n`;
+    let msg = `📋 BANK ACCOUNTS (Total: ${results.length}) 📋\n\n`;
     results.forEach((user, i) => {
       const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
       msg += `${medal} ${user.name} — 💰 ${user.balance.toLocaleString()} coins\n`;
