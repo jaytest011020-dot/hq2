@@ -1,5 +1,6 @@
 const { getData, setData } = require("../../database.js");
 const fs = require("fs");
+const path = require("path");
 
 // Slot symbols
 const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎"];
@@ -29,7 +30,7 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "slot",
-  version: "2.4.0",
+  version: "2.4.1",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Play slot machine with coins (per GC bank system) with admin toggle + global maintenance respect",
@@ -73,11 +74,11 @@ module.exports.run = async function ({ api, event, args, Users }) {
   // 🔒 Check global maintenance
   const maintenance = (await getData("system/maintenance")) || { enabled: false };
   if (maintenance.enabled) {
-    const videoPath = __dirname + "/../../cache/AI data.mp4";
+    const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg"); // new attachment
     return api.sendMessage(
       {
         body: "⚠️ Bot is under maintenance. Please try again later.",
-        attachment: fs.createReadStream(videoPath)
+        attachment: fs.existsSync(attachmentPath) ? fs.createReadStream(attachmentPath) : null
       },
       threadID
     );
