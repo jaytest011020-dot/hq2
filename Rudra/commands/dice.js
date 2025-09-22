@@ -4,11 +4,11 @@ const path = require("path");
 
 module.exports.config = {
   name: "dice",
-  version: "2.0.0",
+  version: "2.0.1",
   credits: "ChatGPT + NN",
   hasPermission: 0,
   description: "Roll a dice and bet coins (1–4 lose, 5 x2, 6 x3, per GC toggle)",
-  usages: "/dice <bet amount> | /dice on | /dice off",
+  usages: "/dice <bet amount> | /dice on | /dice off | /dice status",
   commandCategory: "games",
   cooldowns: 5
 };
@@ -43,9 +43,9 @@ function formatDiceMessage(userName, diceNumber, bet, multiplier, balance) {
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID } = event;
 
-  // 🔹 Maintenance check
-  const maintenance = await getData("/maintenance");
-  if (maintenance?.enabled) {
+  // 🔹 Global maintenance check
+  const maintenance = (await getData("/maintenance")) || { enabled: false };
+  if (maintenance.enabled) {
     const mp4Path = path.join(__dirname, "cache", "AI data.mp4");
     return api.sendMessage(
       { body: "🚧 Bot under maintenance. Dice game disabled.", attachment: fs.existsSync(mp4Path) ? fs.createReadStream(mp4Path) : null },
@@ -54,18 +54,24 @@ module.exports.run = async function({ api, event, args, Users }) {
     );
   }
 
-  // 🔹 Handle on/off toggle per GC (admins only)
-  if (args[0]?.toLowerCase() === "on" || args[0]?.toLowerCase() === "off") {
+  // 🔹 Handle GC toggle: on/off/status (admins only)
+  const command = args[0]?.toLowerCase();
+  if (["on", "off", "status"].includes(command)) {
     const threadInfo = await api.getThreadInfo(threadID);
     const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
     if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle dice.", threadID, messageID);
 
-    const enabled = args[0].toLowerCase() === "on";
+    if (command === "status") {
+      const diceStatus = (await getData(`dice/status/${threadID}`)) || { enabled: true };
+      return api.sendMessage(`🎲 Dice game is ${diceStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`, threadID, messageID);
+    }
+
+    const enabled = command === "on";
     await setData(`dice/status/${threadID}`, { enabled });
     return api.sendMessage(`🎲 Dice game is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`, threadID, messageID);
   }
 
-  // 🔹 Check if dice is enabled
+  // 🔹 Check if dice is enabled in GC
   const diceStatus = (await getData(`dice/status/${threadID}`)) || { enabled: true };
   if (!diceStatus.enabled) return api.sendMessage("❌ Dice game is disabled in this group.", threadID, messageID);
 
@@ -82,8 +88,7 @@ module.exports.run = async function({ api, event, args, Users }) {
   // 🔹 Roll dice & determine multiplier
   const diceNumber = rollDice();
   let multiplier = 0;
-  if (diceNumber >= 1 && diceNumber <= 4) multiplier = 0;
-  else if (diceNumber === 5) multiplier = 2;
+  if (diceNumber === 5) multiplier = 2;
   else if (diceNumber === 6) multiplier = 3;
 
   // 🔹 Update balance
