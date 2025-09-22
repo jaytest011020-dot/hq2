@@ -23,7 +23,7 @@ module.exports.run = async function ({ api, event, args }) {
   const command = args[0]?.toLowerCase();
 
   // 🔹 Check maintenance
-  const maintenance = (await getData(`system/maintenance`)) || { enabled: false };
+  const maintenance = (await getData(`/maintenance`)) || { enabled: false };
   if (maintenance.enabled) {
     const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg");
     return api.sendMessage(
