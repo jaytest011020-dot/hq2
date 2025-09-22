@@ -8,7 +8,7 @@ const cooldowns = new Map();
 
 module.exports.config = {
   name: "music",
-  version: "2.2.0",
+  version: "2.3.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Search and play full music with GC admin toggle on/off",
@@ -20,6 +20,20 @@ module.exports.config = {
 module.exports.run = async ({ api, event, args }) => {
   const { threadID, messageID, senderID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
+
+  // 🔍 Maintenance check (block all manual commands if enabled)
+  const status = await getData("/maintenance");
+  if (status?.enabled) {
+    const mp4Path = path.join(__dirname, "cache", "AI data.mp4");
+    return api.sendMessage(
+      {
+        body: "🚧 Bot is under MAINTENANCE. Music is temporarily disabled.",
+        attachment: fs.existsSync(mp4Path) ? fs.createReadStream(mp4Path) : null
+      },
+      threadID,
+      messageID
+    );
+  }
 
   // 🔹 Handle /music on/off toggle (GC admin only)
   if (command === "on" || command === "off") {
