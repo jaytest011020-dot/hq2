@@ -4,7 +4,7 @@ const path = require("path");
 
 module.exports.config = {
   name: "cg",
-  version: "1.1.0",
+  version: "1.3.0",
   credits: "ChatGPT + Jaylord",
   hasPermission: 0,
   description: "Color game with betting system (uses bank balance)",
@@ -13,15 +13,17 @@ module.exports.config = {
   cooldowns: 5
 };
 
-// 🎨 Available colors
-const colors = ["red", "blue", "green", "yellow", "purple", "orange"];
+// 🎨 Available colors (8 total)
+const colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "black"];
 const colorEmojis = {
   red: "🔴",
   blue: "🔵",
   green: "🟢",
   yellow: "🟡",
   purple: "🟣",
-  orange: "🟠"
+  orange: "🟠",
+  pink: "🌸",
+  black: "⚫"
 };
 
 // 🎲 Draw 3 random colors
@@ -127,7 +129,6 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   // 📝 Format result
   let msg = `🎨✨ COLOR GAME ✨🎨\n\n`;
-  // Drawn colors: emoji only
   msg += `🎲 Drawn colors: ${drawnColors.map(c => colorEmojis[c]).join(" | ")}\n\n`;
   msg += `👤 Player: ${userName}\n💰 Bet: ${bet.toLocaleString()} coins\n🎯 Your color: ${colorEmojis[chosenColor]}\n\n`;
 
@@ -138,7 +139,7 @@ module.exports.run = async function({ api, event, args, Users }) {
   }
 
   msg += `🏦 New Balance: ${userData.balance.toLocaleString()} coins\n\n`;
-  msg += `💡 Tip: 1 match ×2 | 2 matches ×3 | 3 matches ×5`;
+  msg += `💡 Tip: 1 match ×2 | 2 matches ×3 | 3 matches ×5 (jackpot)`;
 
   return api.sendMessage(msg, threadID, messageID);
 };
