@@ -143,21 +143,4 @@
         "creation": "2025-09-22T23:27:42.304Z",
         "lastAccessed": "2025-09-22T23:27:42.304Z"
     }
-]        "value": "v2%3Bclient_version%3A2930%3Btimestamp%3A1758583032",
-        "domain": "facebook.com",
-        "path": "/",
-        "hostOnly": false,
-        "creation": "2025-09-22T23:17:16.905Z",
-        "lastAccessed": "2025-09-22T23:17:16.905Z"
-    },
-    {
-        "key": "fbl_st",
-        "value": "101738821%3BT%3A29309717",
-        "domain": "facebook.com",
-        "path": "/",
-        "hostOnly": false,
-        "creation": "2025-09-22T23:17:16.905Z",
-        "lastAccessed": "2025-09-22T23:17:16.905Z"
-    }
 ]
-
