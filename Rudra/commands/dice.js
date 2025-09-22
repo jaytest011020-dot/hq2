@@ -4,130 +4,95 @@ const path = require("path");
 
 module.exports.config = {
   name: "dice",
-  version: "1.9.0",
+  version: "2.0.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
-  description: "Roll a dice and win coins with multipliers, per-GC toggle, respects maintenance mode",
-  usages: "/dice <bet> | /dice on | /dice off",
+  description: "Roll a dice and bet coins (1–4 lose, 5 x2, 6 x3, per GC toggle)",
+  usages: "/dice <bet amount> | /dice on | /dice off",
   commandCategory: "games",
   cooldowns: 5
 };
 
-async function getUserName(uid, api, Users) {
-  let cachedName = global.data.userName.get(uid);
-  if (cachedName) return cachedName;
-
-  try {
-    const userInfo = await api.getUserInfo(uid);
-    const name = Object.values(userInfo)[0]?.name || `FB-User(${uid})`;
-    global.data.userName.set(uid, name);
-    return name;
-  } catch (err) {}
-
-  try {
-    const name = await Users.getName(uid) || `FB-User(${uid})`;
-    global.data.userName.set(uid, name);
-    return name;
-  } catch (err) {}
-
-  const fallbackName = `FB-User(${uid})`;
-  global.data.userName.set(uid, fallbackName);
-  return fallbackName;
-}
-
+// Dice emojis
 function diceEmoji(number) {
   const emojis = ["\u2680", "\u2681", "\u2682", "\u2683", "\u2684", "\u2685"];
   return emojis[number - 1] || "🎲";
 }
 
+// Roll dice
 function rollDice() {
   return Math.floor(Math.random() * 6) + 1;
 }
 
+// Format result message
 function formatDiceMessage(userName, diceNumber, bet, multiplier, balance) {
-  let msg = "🎲✨ Dice Game Result ✨🎲\n\n";
-  msg += "👤 Player: " + userName + "\n";
-  msg += "🎲 Dice Roll: " + diceEmoji(diceNumber) + " (" + diceNumber + ")\n\n";
+  let resultText = "❌ You lost!";
+  if (multiplier === 2) resultText = "🌟 You won ×2!";
+  else if (multiplier === 3) resultText = "🔥 You won ×3!";
 
-  msg += "💰 Bet: " + bet.toLocaleString() + " coins\n";
-  if (multiplier > 0) {
-    msg += `🎯 Result: You won ×${multiplier}!\n`;
-    msg += "🏦 New Balance: " + balance.toLocaleString() + " coins\n";
-  } else {
-    msg += "🎯 Result: You lost.\n";
-    msg += "🏦 New Balance: " + balance.toLocaleString() + " coins\n";
-  }
-
-  if (diceNumber === 6) msg += "\n🔥 Lucky roll! Maximum dice!";
-  else if (diceNumber >= 1 && diceNumber <= 3) msg += "\n❄️ Unlucky roll! Dice too low.";
-  else msg += "\n🙂 Nice roll!";
-
-  return msg;
+  return (
+    `🎲 Dice Game Result ✨🎲\n\n` +
+    `👤 Player: ${userName}\n` +
+    `🎲 Dice Roll: ${diceEmoji(diceNumber)} (${diceNumber})\n\n` +
+    `💰 Bet: ${bet.toLocaleString()} coins\n` +
+    `➡️ Result: ${resultText}\n` +
+    `🏦 New Balance: ${balance.toLocaleString()} coins`
+  );
 }
 
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID } = event;
 
   // 🔹 Maintenance check
-  try {
-    const maintenance = await getData("/maintenance");
-    if (maintenance?.enabled) {
-      const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg");
-      return api.sendMessage(
-        {
-          body: "🚧 Bot is under maintenance. Dice temporarily disabled.",
-          attachment: fs.existsSync(attachmentPath) ? fs.createReadStream(attachmentPath) : undefined
-        },
-        threadID,
-        messageID
-      );
-    }
-  } catch (err) {
-    console.error(err);
+  const maintenance = await getData("/maintenance");
+  if (maintenance?.enabled) {
+    const mp4Path = path.join(__dirname, "cache", "AI data.mp4");
+    return api.sendMessage(
+      { body: "🚧 Bot under maintenance. Dice game disabled.", attachment: fs.existsSync(mp4Path) ? fs.createReadStream(mp4Path) : null },
+      threadID,
+      messageID
+    );
   }
 
-  // 🔹 Handle per-GC toggle
-  const command = args[0] ? args[0].toLowerCase() : "";
-  if (command === "on" || command === "off") {
-    try {
-      const threadInfo = await api.getThreadInfo(threadID);
-      const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
-      if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle the dice game.", threadID, messageID);
+  // 🔹 Handle on/off toggle per GC (admins only)
+  if (args[0]?.toLowerCase() === "on" || args[0]?.toLowerCase() === "off") {
+    const threadInfo = await api.getThreadInfo(threadID);
+    const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+    if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle dice.", threadID, messageID);
 
-      const enabled = command === "on";
-      await setData(`dice/status/${threadID}`, { enabled });
-
-      return api.sendMessage(`🎲 Dice game is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`, threadID, messageID);
-    } catch (err) {
-      console.error(err);
-      return api.sendMessage("⚠️ Failed to toggle dice game.", threadID, messageID);
-    }
+    const enabled = args[0].toLowerCase() === "on";
+    await setData(`dice/status/${threadID}`, { enabled });
+    return api.sendMessage(`🎲 Dice game is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`, threadID, messageID);
   }
 
-  // 🔹 Check if dice is enabled in this GC
+  // 🔹 Check if dice is enabled
   const diceStatus = (await getData(`dice/status/${threadID}`)) || { enabled: true };
-  if (!diceStatus.enabled) return api.sendMessage("❌ Dice game is currently disabled in this group.", threadID, messageID);
+  if (!diceStatus.enabled) return api.sendMessage("❌ Dice game is disabled in this group.", threadID, messageID);
 
-  // 🔹 Roll dice
-  const freshName = await getUserName(senderID, api, Users);
-  let userData = (await getData(`bank/${threadID}/${senderID}`)) || { name: freshName, balance: 0 };
-  userData.name = freshName;
+  // 🔹 Load user data
+  const userName = await Users.getName(senderID) || `FB-User(${senderID})`;
+  let userData = (await getData(`bank/${threadID}/${senderID}`)) || { name: userName, balance: 0 };
+  userData.name = userName;
 
+  // 🔹 Check bet
   const bet = parseInt(args[0]);
-  if (isNaN(bet) || bet <= 0) return api.sendMessage("❌ Please specify a valid bet amount.", threadID, messageID);
-  if (bet > userData.balance) return api.sendMessage("❌ Not enough coins to bet.", threadID, messageID);
+  if (isNaN(bet) || bet <= 0) return api.sendMessage("❌ Specify a valid bet. Usage: /dice <bet amount>", threadID, messageID);
+  if (bet > userData.balance) return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
 
+  // 🔹 Roll dice & determine multiplier
   const diceNumber = rollDice();
   let multiplier = 0;
-
-  if (diceNumber >= 4 && diceNumber <= 5) multiplier = 2;
+  if (diceNumber >= 1 && diceNumber <= 4) multiplier = 0;
+  else if (diceNumber === 5) multiplier = 2;
   else if (diceNumber === 6) multiplier = 3;
 
-  if (multiplier > 0) userData.balance += bet * multiplier;
-  else userData.balance -= bet;
+  // 🔹 Update balance
+  if (multiplier === 0) userData.balance -= bet;
+  else userData.balance += bet * multiplier;
 
   await setData(`bank/${threadID}/${senderID}`, userData);
 
-  const msg = formatDiceMessage(freshName, diceNumber, bet, multiplier, userData.balance);
+  // 🔹 Send result
+  const msg = formatDiceMessage(userName, diceNumber, bet, multiplier, userData.balance);
   return api.sendMessage(msg, threadID, messageID);
 };
