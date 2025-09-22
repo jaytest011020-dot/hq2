@@ -130,7 +130,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
   // 📝 Format result
   let msg = `🎨✨ COLOR GAME ✨🎨\n\n`;
-  msg += `🎲 Drawn colors: ${drawnColors.map(c => colorEmojis[c]).join(" | ")}\n\n`;
+  msg += `🎲Drawn colors:${drawnColors.map(c => colorEmojis[c]).join(" | ")}\n\n`;
   msg += `👤 Player: ${userName}\n💰 Bet: ${bet.toLocaleString()} coins\n🎯 Your color: ${colorEmojis[chosenColor]}\n\n`;
 
   if (count > 0) {
