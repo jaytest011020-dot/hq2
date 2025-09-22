@@ -5,10 +5,10 @@ const path = require("path");
 
 module.exports.config = {
   name: "dice",
-  version: "2.1.0",
+  version: "2.2.0",
   credits: "ChatGPT + NN",
   hasPermission: 0,
-  description: "Roll a dice and bet coins (1–4 lose, 5×2, 6×2) with per-GC toggle & maintenance check",
+  description: "Roll a dice and bet coins (1–4 lose, 5×2, 6×3) with per-GC toggle & maintenance check",
   usages: "/dice <bet> | /dice on | /dice off | /dice status",
   commandCategory: "games",
   cooldowns: 5
@@ -57,7 +57,7 @@ function formatDiceMessage(userName, diceNumber, bet, resultText, balance) {
   msg += `➡️ Result: ${resultText}\n`;
   msg += `🏦 New Balance: ${balance.toLocaleString()} coins\n`;
 
-  if (diceNumber === 6) msg += "\n🔥 Lucky roll! Max dice!";
+  if (diceNumber === 6) msg += "\n🔥 Lucky roll! Maximum dice!";
   else if (diceNumber === 1) msg += "\n❄️ Unlucky roll! Minimum dice!";
   else msg += "\n🙂 Better luck next time!";
 
@@ -135,11 +135,11 @@ module.exports.run = async function({ api, event, args, Users }) {
     userData.balance -= bet;
     resultText = `😢 You lost ${bet.toLocaleString()} coins.`;
   } else if (diceNumber === 5) {
-    userData.balance += bet; // win ×2 = original bet + bet
+    userData.balance += bet; // net gain = +bet (×2 total)
     resultText = `🌟 You won ×2! (+${bet.toLocaleString()} coins)`;
   } else if (diceNumber === 6) {
-    userData.balance += bet; // win ×2 = original bet + bet
-    resultText = `🔥 You won ×2! (+${bet.toLocaleString()} coins)`;
+    userData.balance += bet * 2; // net gain = +2× bet (×3 total)
+    resultText = `🔥 JACKPOT! You won ×3! (+${(bet * 2).toLocaleString()} coins)`;
   }
 
   await setData(`bank/${threadID}/${senderID}`, userData);
