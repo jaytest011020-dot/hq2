@@ -4,11 +4,11 @@ const path = require("path");
 
 module.exports.config = {
   name: "race",
-  version: "1.2.1",
+  version: "1.3.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Horse race betting game with countdown & prize pool",
-  usages: "/race <amount>",
+  description: "Horse race betting game with countdown & prize pool, GC toggle & maintenance",
+  usages: "/race <amount> | /race on | /race off",
   commandCategory: "games",
   cooldowns: 3,
 };
@@ -20,15 +20,15 @@ function renderRace(progress, trackLength = 10) {
 
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, senderID, messageID } = event;
-  const bet = parseInt(args[0]);
+  const command = args[0]?.toLowerCase();
 
-  // 🔹 Check maintenance system
+  // 🔹 Check maintenance
   const maintenance = (await getData(`system/maintenance`)) || { enabled: false };
   if (maintenance.enabled) {
-    const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg"); // new attachment
+    const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg");
     return api.sendMessage(
       {
-        body: "⚠️ Bot is under maintenance.\n\nPlease try again later.",
+        body: "🚧 Bot is under maintenance. Race command temporarily disabled.",
         attachment: fs.existsSync(attachmentPath) ? fs.createReadStream(attachmentPath) : null
       },
       threadID,
@@ -36,42 +36,67 @@ module.exports.run = async function ({ api, event, args }) {
     );
   }
 
-  if (!bet || bet <= 0) {
-    return api.sendMessage("❌ Usage: /race <bet amount>", threadID, messageID);
+  // 🔹 Handle /race on/off toggle (GC admin only)
+  if (command === "on" || command === "off") {
+    try {
+      const threadInfo = await api.getThreadInfo(threadID);
+      const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+      if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle the race command.", threadID, messageID);
+
+      const enabled = command === "on";
+      await setData(`race/status/${threadID}`, { enabled });
+      return api.sendMessage(
+        `🏇 Race system is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+        threadID,
+        messageID
+      );
+    } catch (err) {
+      console.error("[RACE] Toggle error:", err);
+      return api.sendMessage("⚠️ Failed to toggle race system.", threadID, messageID);
+    }
   }
 
-  // Load race state
-  let raceData = (await getData(`race/${threadID}`)) || { ongoing: false };
+  // 🔹 Check if race is enabled in this GC
+  const raceStatus = (await getData(`race/status/${threadID}`)) || { enabled: true };
+  if (!raceStatus.enabled) return api.sendMessage("❌ Race command is disabled by GC admin.", threadID, messageID);
 
-  // If race ongoing, join instead
+  // 🔹 Validate bet amount
+  const bet = parseInt(args[0]);
+  if (!bet || bet <= 0) return api.sendMessage("❌ Usage: /race <bet amount>", threadID, messageID);
+
+  // Load race state
+  let raceData = (await getData(`race/${threadID}`)) || { ongoing: false, bet: 0, players: [] };
+
+  // 🔹 Prevent multiple races
   if (raceData.ongoing) {
+    // Check if user already joined
     if (raceData.players.find(p => p.id === senderID)) {
-      return api.sendMessage("❌ You already joined the race!", threadID, messageID);
+      return api.sendMessage("❌ You already joined the ongoing race!", threadID, messageID);
     }
 
     // Deduct from player bank
     let playerData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0, name: "Unknown" };
-    if (playerData.balance < bet) {
-      return api.sendMessage(`❌ You need at least ${bet} coins to join. Your balance: ${playerData.balance}`, threadID, messageID);
+    if (playerData.balance < raceData.bet) {
+      return api.sendMessage(`❌ You need at least ${raceData.bet} coins to join. Your balance: ${playerData.balance}`, threadID, messageID);
     }
 
-    playerData.balance -= bet;
+    playerData.balance -= raceData.bet;
     await setData(`bank/${threadID}/${senderID}`, playerData);
 
-    raceData.players.push({ id: senderID, name: playerData.name, bet });
+    raceData.players.push({ id: senderID, name: playerData.name, bet: raceData.bet });
     await setData(`race/${threadID}`, raceData);
 
     return api.sendMessage(
-      `✅ ${playerData.name} joined the race!\n💸 -${bet} coins\n💰 Remaining balance: ${playerData.balance}`,
+      `✅ ${playerData.name} joined the race!\n💸 -${raceData.bet} coins\n💰 Remaining balance: ${playerData.balance}`,
       threadID,
       messageID
     );
   }
 
-  // New race
+  // 🔹 Start a new race
   let playerData = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0, name: "Unknown" };
   if (playerData.balance < bet) {
-    return api.sendMessage(`❌ You need at least ${bet} coins to join. Your balance: ${playerData.balance}`, threadID, messageID);
+    return api.sendMessage(`❌ You need at least ${bet} coins to start a race. Your balance: ${playerData.balance}`, threadID, messageID);
   }
 
   playerData.balance -= bet;
@@ -85,7 +110,7 @@ module.exports.run = async function ({ api, event, args }) {
   await setData(`race/${threadID}`, raceData);
 
   api.sendMessage(
-    `🏇 A new horse race has started!\n💰 Entry fee: ${bet} coins\n\nType /race ${bet} to join!\n\n⏳ Race will start in 1 minute...`,
+    `🏇 A new horse race has started!\n💰 Entry fee: ${bet} coins\n\nType /race ${bet} to join!\n⏳ Race will start in 1 minute...`,
     threadID,
     messageID
   );
@@ -99,7 +124,6 @@ module.exports.run = async function ({ api, event, args }) {
       return api.sendMessage("❌ Race cancelled. Not enough players (need at least 2).", threadID);
     }
 
-    // 3-second countdown
     api.sendMessage("⏳ The race is about to begin!\n3...", threadID);
     setTimeout(() => api.sendMessage("2...", threadID), 1000);
     setTimeout(() => api.sendMessage("1...", threadID), 2000);
@@ -115,7 +139,7 @@ module.exports.run = async function ({ api, event, args }) {
       // Update random horses
       for (let i = 0; i < progress.length; i++) {
         if (progress[i] < trackLength) {
-          if (Math.random() > 0.4) progress[i] += 1; // chance to move forward
+          if (Math.random() > 0.4) progress[i] += 1;
         }
       }
 
@@ -135,14 +159,12 @@ module.exports.run = async function ({ api, event, args }) {
         const prize = prizePool;
         const winner = raceData.players[winnerIndex];
 
-        // Add prize to winner
         let winnerData = (await getData(`bank/${threadID}/${winner.id}`)) || { balance: 0, name: winner.name };
         winnerData.balance += prize;
         await setData(`bank/${threadID}/${winner.id}`, winnerData);
 
         msg += `\n\n🎉 Winner: ${winner.name} 🏆\n💰 Prize: ${prize} coins`;
 
-        // Reset race
         raceData.ongoing = false;
         await setData(`race/${threadID}`, raceData);
 
@@ -150,10 +172,10 @@ module.exports.run = async function ({ api, event, args }) {
       }
 
       api.sendMessage(msg, threadID, () => {
-        setTimeout(updateRace, 5000); // update every 5s
+        setTimeout(updateRace, 5000);
       });
     }
 
-    setTimeout(updateRace, 3500); // start after countdown
-  }, 60000); // 1 min join time
+    setTimeout(updateRace, 3500);
+  }, 60000);
 };
