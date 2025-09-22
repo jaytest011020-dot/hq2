@@ -4,7 +4,7 @@ const path = require("path");
 
 module.exports.config = {
   name: "dice",
-  version: "2.0.1",
+  version: "2.0.2",
   credits: "ChatGPT + NN",
   hasPermission: 0,
   description: "Roll a dice and bet coins (1–4 lose, 5 x2, 6 x3, per GC toggle)",
@@ -13,18 +13,15 @@ module.exports.config = {
   cooldowns: 5
 };
 
-// Dice emojis
 function diceEmoji(number) {
   const emojis = ["\u2680", "\u2681", "\u2682", "\u2683", "\u2684", "\u2685"];
   return emojis[number - 1] || "🎲";
 }
 
-// Roll dice
 function rollDice() {
   return Math.floor(Math.random() * 6) + 1;
 }
 
-// Format result message
 function formatDiceMessage(userName, diceNumber, bet, multiplier, balance) {
   let resultText = "❌ You lost!";
   if (multiplier === 2) resultText = "🌟 You won ×2!";
@@ -43,9 +40,9 @@ function formatDiceMessage(userName, diceNumber, bet, multiplier, balance) {
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID } = event;
 
-  // 🔹 Global maintenance check
-  const maintenance = (await getData("/maintenance")) || { enabled: false };
-  if (maintenance.enabled) {
+  // 🔹 Maintenance check
+  const maintenance = await getData("/maintenance");
+  if (maintenance?.enabled) {
     const mp4Path = path.join(__dirname, "cache", "AI data.mp4");
     return api.sendMessage(
       { body: "🚧 Bot under maintenance. Dice game disabled.", attachment: fs.existsSync(mp4Path) ? fs.createReadStream(mp4Path) : null },
@@ -81,9 +78,9 @@ module.exports.run = async function({ api, event, args, Users }) {
   userData.name = userName;
 
   // 🔹 Check bet
-  const bet = parseInt(args[0]);
-  if (isNaN(bet) || bet <= 0) return api.sendMessage("❌ Specify a valid bet. Usage: /dice <bet amount>", threadID, messageID);
-  if (bet > userData.balance) return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
+  const betArg = parseInt(args[0]);
+  if (isNaN(betArg) || betArg <= 0) return api.sendMessage("❌ Specify a valid bet. Usage: /dice <bet amount>", threadID, messageID);
+  if (betArg > userData.balance) return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
 
   // 🔹 Roll dice & determine multiplier
   const diceNumber = rollDice();
@@ -92,12 +89,12 @@ module.exports.run = async function({ api, event, args, Users }) {
   else if (diceNumber === 6) multiplier = 3;
 
   // 🔹 Update balance
-  if (multiplier === 0) userData.balance -= bet;
-  else userData.balance += bet * multiplier;
+  if (multiplier === 0) userData.balance -= betArg;
+  else userData.balance += betArg * multiplier;
 
   await setData(`bank/${threadID}/${senderID}`, userData);
 
   // 🔹 Send result
-  const msg = formatDiceMessage(userName, diceNumber, bet, multiplier, userData.balance);
+  const msg = formatDiceMessage(userName, diceNumber, betArg, multiplier, userData.balance);
   return api.sendMessage(msg, threadID, messageID);
 };
