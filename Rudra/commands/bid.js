@@ -1,8 +1,12 @@
 const fs = require("fs");
 const path = require("path");
-const auctionFile = path.join(__dirname, "auctions.json");
+const { setData, getData } = require("../../database.js");
 
-// Ensure file exists
+// Paths
+const auctionFile = path.join(__dirname, "auctions.json");
+const maintenanceMp4 = path.join(__dirname, "cache", "AI data.mp4");
+
+// Ensure auctions file exists
 if (!fs.existsSync(auctionFile)) fs.writeFileSync(auctionFile, JSON.stringify({}, null, 2), "utf8");
 
 // Load/save auctions
@@ -22,7 +26,7 @@ function generateID() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Usage Example Helper
+// Usage example
 function usageExample(api, threadID, messageID) {
   return api.sendMessage(
     `❌ Wrong usage!\n\n📌 Correct Usage:\n/bid start <item> <starting_amount>\n/bid end <auction_id>\n/bid resend <auction_id>\n\n💡 Examples:\n/bid start Raccoon 200\n/bid end 123456\n/bid resend 654321`,
@@ -31,14 +35,11 @@ function usageExample(api, threadID, messageID) {
   );
 }
 
-// --- Load database functions for maintenance ---
-const { getData } = require("../../database.js"); // adjust path if needed
-
 module.exports.config = {
   name: "bid",
   version: "3.1.2",
   hasPermssion: 0,
-  credits: "ChatGPT + Jaylord",
+  credits: "ChatGPT + You",
   description: "Auction system with 6-digit IDs, auto-end in 24h, and resend option",
   commandCategory: "gag tools",
   usages: "/bid start <item> <amount> | /bid end <id> | /bid resend <id>",
@@ -52,11 +53,10 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
   try {
     const maintenance = await getData("/maintenance");
     if (maintenance?.enabled) {
-      const mp4Path = path.join(__dirname, "cache", "AI data.mp4"); // relative path
       return api.sendMessage(
         {
-          body: "🚧 Bot is currently under maintenance. Auction commands are temporarily disabled.",
-          attachment: fs.createReadStream(mp4Path),
+          body: "🚧 Bot is currently under maintenance. /bid command is temporarily disabled.",
+          attachment: fs.createReadStream(maintenanceMp4),
         },
         threadID,
         messageID
@@ -71,25 +71,147 @@ module.exports.run = async function ({ api, event, args, Users, Threads }) {
 
   const sub = args[0]?.toLowerCase();
 
-  // ... [rest of the auction logic stays the same]
-  // start, end, resend, and default usage code remain unchanged
+  // --- Start auction
+  if (sub === "start") {
+    const match = args.join(" ").match(/start\s+(.+)\s+(\d+)$/i);
+    if (!match) return usageExample(api, threadID, messageID);
+
+    const item = match[1].trim();
+    const startAmount = parseInt(match[2]);
+    if (!item || isNaN(startAmount)) return usageExample(api, threadID, messageID);
+
+    const hostName = await Users.getNameUser(senderID);
+    const newAuction = {
+      id: generateID(),
+      active: true,
+      item,
+      highest: startAmount,
+      bidder: null,
+      bidderID: null,
+      postID: null,
+      hostID: senderID,
+      hostName,
+      endTime: Date.now() + 24 * 60 * 60 * 1000
+    };
+
+    auctions[threadID].push(newAuction);
+    saveAuctions(auctions);
+
+    return api.sendMessage(
+      `📢 Auction Started!\n📦 Item: ${item}\n💵 Starting Bid: ${startAmount}\n👑 Host: ${hostName}\n🆔 Auction ID: ${newAuction.id}\n\n📝 Reply to this message with your bid!`,
+      threadID,
+      (err, info) => {
+        if (!err) {
+          newAuction.postID = info.messageID;
+          saveAuctions(auctions);
+        }
+      }
+    );
+  }
+
+  // --- End auction
+  if (sub === "end") {
+    const auctionID = args[1];
+    if (!auctionID) return usageExample(api, threadID, messageID);
+
+    const auction = auctions[threadID]?.find(a => a.id === auctionID && a.active);
+    if (!auction) return api.sendMessage("⚠️ Auction not found or already ended.", threadID, messageID);
+
+    const threadInfo = await Threads.getInfo(threadID);
+    const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+
+    if (auction.hostID !== senderID && !isAdmin) {
+      return api.sendMessage("❌ Only the host or a group admin can end this auction.", threadID, messageID);
+    }
+
+    const winner = auction.bidder
+      ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
+      : `❌ No valid bids were placed for ${auction.item}.`;
+
+    auction.active = false;
+    saveAuctions(auctions);
+
+    return api.sendMessage(`📌 Auction Ended!\n${winner}`, threadID);
+  }
+
+  // --- Resend auction
+  if (sub === "resend") {
+    const auctionID = args[1];
+    if (!auctionID) return usageExample(api, threadID, messageID);
+
+    const auction = auctions[threadID]?.find(a => a.id === auctionID && a.active);
+    if (!auction) return api.sendMessage("⚠️ Auction not found or already ended.", threadID, messageID);
+
+    return api.sendMessage(
+      `📢 Auction Resent!\n📦 Item: ${auction.item}\n💵 Current Highest: ${auction.highest}\n👤 Bidder: ${auction.bidder || "None"}\n👑 Host: ${auction.hostName}\n🆔 Auction ID: ${auction.id}\n\n📝 Reply to this message with your bid!`,
+      threadID,
+      (err, info) => {
+        if (!err) {
+          auction.postID = info.messageID;
+          saveAuctions(auctions);
+        }
+      }
+    );
+  }
+
+  // --- Wrong usage
+  return usageExample(api, threadID, messageID);
 };
 
+// --- Handle replies for bidding
 module.exports.handleEvent = async function ({ api, event, Users }) {
   const { threadID, messageID, senderID, body, messageReply } = event;
   if (!body) return;
 
-  // --- Maintenance check ---
-  try {
-    const { getData } = require("../../database.js");
-    const maintenance = await getData("/maintenance");
-    if (maintenance?.enabled) return; // skip any auction activity during maintenance
-  } catch (err) {
-    console.error("Maintenance check failed:", err);
-  }
-
   let auctions = loadAuctions();
   if (!auctions[threadID]) return;
 
-  // ... [rest of handleEvent logic stays the same]
+  // Auto-remove expired auctions
+  for (const auction of auctions[threadID]) {
+    if (auction.active && Date.now() > auction.endTime) {
+      const winner = auction.bidder
+        ? `🏆 Winner: ${auction.bidder}\n📦 Item: ${auction.item}\n💵 Final Bid: ${auction.highest}`
+        : `❌ No valid bids were placed for ${auction.item}.`;
+
+      auction.active = false;
+      api.sendMessage(`📌 Auction Ended (24h Auto)!\n${winner}`, threadID);
+    }
+  }
+
+  if (auctions[threadID].every(a => !a.active)) delete auctions[threadID];
+  saveAuctions(auctions);
+
+  if (!messageReply) return;
+  const auction = auctions[threadID]?.find(a => a.active && a.postID === messageReply.messageID);
+  if (!auction) return;
+
+  const match = body.match(/\d+/);
+  if (!match) return api.sendMessage("⚠️ Please enter a valid number for your bid.", threadID, messageID);
+
+  const bidAmount = parseInt(match[0]);
+  if (bidAmount <= auction.highest) {
+    return api.sendMessage(
+      `⚠️ Your bid (${bidAmount}) must be higher than the current highest bid: ${auction.highest}.`,
+      threadID,
+      messageID
+    );
+  }
+
+  const name = await Users.getNameUser(senderID);
+  auction.highest = bidAmount;
+  auction.bidder = name;
+  auction.bidderID = senderID;
+
+  saveAuctions(auctions);
+
+  api.sendMessage(
+    `📢 New Highest Bid!\n📦 Item: ${auction.item}\n💵 Bid: ${bidAmount}\n👤 Bidder: ${name}\n👑 Host: ${auction.hostName}\n🆔 Auction ID: ${auction.id}\n\n📝 Reply to this message to bid higher!`,
+    threadID,
+    (err, info) => {
+      if (!err) {
+        auction.postID = info.messageID;
+        saveAuctions(auctions);
+      }
+    }
+  );
 };
