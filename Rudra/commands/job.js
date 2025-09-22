@@ -1,41 +1,25 @@
 const { setData, getData } = require("../../database.js");
+const fs = require("fs");
+const path = require("path");
 
-// ✅ Job definitions (dinagdagan pa)
+// ✅ Job definitions
 const JOBS = [
-  { name: "Farmer", min: 50, max: 100 },
-  { name: "Miner", min: 80, max: 150 },
-  { name: "Teacher", min: 70, max: 120 },
-  { name: "Chef", min: 60, max: 110 },
-  { name: "Driver", min: 50, max: 100 },
-  { name: "Artist", min: 40, max: 90 },
-  { name: "Musician", min: 50, max: 100 },
-  { name: "Builder", min: 60, max: 120 },
-  { name: "Programmer", min: 70, max: 130 },
-  { name: "Doctor", min: 80, max: 150 },
-  { name: "Nurse", min: 50, max: 100 },
-  { name: "Engineer", min: 80, max: 150 },
-  { name: "Scientist", min: 100, max: 200 },
-  { name: "Lawyer", min: 90, max: 180 },
-  { name: "Police", min: 60, max: 120 },
-  { name: "Firefighter", min: 50, max: 110 },
-  { name: "Pilot", min: 120, max: 250 },
-  { name: "Soldier", min: 70, max: 140 },
-  { name: "Hacker", min: 300, max: 500, rare: true },
-  { name: "CEO", min: 500, max: 1000, rare: true },
-
-  // 🔹 New jobs added
-  { name: "Fisherman", min: 40, max: 100 },
-  { name: "Barber", min: 60, max: 120 },
-  { name: "Mechanic", min: 80, max: 160 },
-  { name: "Janitor", min: 30, max: 70 },
-  { name: "Delivery Rider", min: 50, max: 120 },
-  { name: "Waiter", min: 40, max: 90 },
-  { name: "Dancer", min: 60, max: 110 },
-  { name: "Actor", min: 100, max: 200 },
-  { name: "Streamer", min: 80, max: 180 },
-  { name: "Athlete", min: 90, max: 200 },
-  { name: "Astronaut", min: 300, max: 600, rare: true },
-  { name: "President", min: 700, max: 1200, rare: true }
+  { name: "Farmer", min: 50, max: 100 }, { name: "Miner", min: 80, max: 150 },
+  { name: "Teacher", min: 70, max: 120 }, { name: "Chef", min: 60, max: 110 },
+  { name: "Driver", min: 50, max: 100 }, { name: "Artist", min: 40, max: 90 },
+  { name: "Musician", min: 50, max: 100 }, { name: "Builder", min: 60, max: 120 },
+  { name: "Programmer", min: 70, max: 130 }, { name: "Doctor", min: 80, max: 150 },
+  { name: "Nurse", min: 50, max: 100 }, { name: "Engineer", min: 80, max: 150 },
+  { name: "Scientist", min: 100, max: 200 }, { name: "Lawyer", min: 90, max: 180 },
+  { name: "Police", min: 60, max: 120 }, { name: "Firefighter", min: 50, max: 110 },
+  { name: "Pilot", min: 120, max: 250 }, { name: "Soldier", min: 70, max: 140 },
+  { name: "Hacker", min: 300, max: 500, rare: true }, { name: "CEO", min: 500, max: 1000, rare: true },
+  { name: "Fisherman", min: 40, max: 100 }, { name: "Barber", min: 60, max: 120 },
+  { name: "Mechanic", min: 80, max: 160 }, { name: "Janitor", min: 30, max: 70 },
+  { name: "Delivery Rider", min: 50, max: 120 }, { name: "Waiter", min: 40, max: 90 },
+  { name: "Dancer", min: 60, max: 110 }, { name: "Actor", min: 100, max: 200 },
+  { name: "Streamer", min: 80, max: 180 }, { name: "Athlete", min: 90, max: 200 },
+  { name: "Astronaut", min: 300, max: 600, rare: true }, { name: "President", min: 700, max: 1200, rare: true }
 ];
 
 // Job emojis
@@ -51,22 +35,15 @@ const JOB_EMOJIS = {
 
 // Fun phrases
 const FUN_PHRASES = [
-  "You worked hard today!",
-  "Luck is on your side!",
-  "Great job!",
-  "Keep it up!",
-  "You're unstoppable!",
-  "That was amazing!",
-  "You crushed it!",
-  "The grind is paying off!"
+  "You worked hard today!", "Luck is on your side!", "Great job!", "Keep it up!",
+  "You're unstoppable!", "That was amazing!", "You crushed it!", "The grind is paying off!"
 ];
 
-// ⏳ Global cooldown (30 minutes)
-const GLOBAL_COOLDOWN = 30 * 60 * 1000;
+const GLOBAL_COOLDOWN = 30 * 60 * 1000; // 30m
 
 module.exports.config = {
   name: "job",
-  version: "5.4.0",
+  version: "5.4.1",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Random job system with GC admin toggle, 30m cooldown, buffs, rare jobs, critical bonus, emojis, and fun phrases",
@@ -90,6 +67,25 @@ async function getUserName(uid, api) {
 
 module.exports.run = async function({ api, event, args }) {
   const { senderID, threadID, messageID } = event;
+
+  // --- Maintenance check ---
+  try {
+    const maintenance = await getData("/maintenance");
+    if (maintenance?.enabled) {
+      const mp4Path = path.join(__dirname, "cache", "AI data.mp4"); // relative path
+      return api.sendMessage(
+        {
+          body: "🚧 Bot is currently under maintenance. /job command is temporarily disabled.",
+          attachment: fs.createReadStream(mp4Path),
+        },
+        threadID,
+        messageID
+      );
+    }
+  } catch (err) {
+    console.error("Maintenance check failed:", err);
+  }
+
   const now = Date.now();
   const command = args[0] ? args[0].toLowerCase() : "";
 
@@ -162,7 +158,6 @@ module.exports.run = async function({ api, event, args }) {
   let job = JOBS[Math.floor(Math.random() * JOBS.length)];
   let isRare = job.rare || false;
 
-  // 10% chance for rare job
   if (!isRare && Math.random() <= 0.10) {
     const rareJobs = JOBS.filter(j => j.rare);
     job = rareJobs[Math.floor(Math.random() * rareJobs.length)];
@@ -177,7 +172,6 @@ module.exports.run = async function({ api, event, args }) {
     usedItems.push("🍀 Lucky Charm (+5% Critical chance)");
   }
 
-  // Random earnings
   let earned = randomInt(job.min, job.max);
   let critical = false;
   if (Math.random() <= critChance) {
@@ -185,25 +179,17 @@ module.exports.run = async function({ api, event, args }) {
     critical = true;
   }
 
-  // Update bank
+  // Update bank & last job
   bankData.balance += earned;
   await setData(`bank/${threadID}/${senderID}`, bankData);
-
-  // Update last job time
   userData.lastTime = now;
   await setData(`job/${threadID}/${senderID}`, userData);
 
-  // Get username
   const userName = await getUserName(senderID, api);
-
-  // Used items text
   const usedItemsText = usedItems.length > 0 ? usedItems.map(u => `🛠️ ${u}`).join("\n") + "\n" : "";
-
-  // Emoji & fun phrase
   const emoji = JOB_EMOJIS[job.name] || "💼";
   const funText = FUN_PHRASES[Math.floor(Math.random() * FUN_PHRASES.length)];
 
-  // Final message
   const msg =
 `${emoji} ${userName} did the ${job.name} job! ${isRare ? "✨" : ""}
 
