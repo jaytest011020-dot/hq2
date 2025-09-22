@@ -30,7 +30,7 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "slot",
-  version: "2.4.1",
+  version: "2.4.2",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Play slot machine with coins (per GC bank system) with admin toggle + global maintenance respect",
@@ -71,10 +71,10 @@ module.exports.run = async function ({ api, event, args, Users }) {
     }
   }
 
-  // 🔒 Check global maintenance
-  const maintenance = (await getData("system/maintenance")) || { enabled: false };
+  // 🔒 Check global maintenance (path matches maintenance.js)
+  const maintenance = (await getData("/maintenance")) || { enabled: false };
   if (maintenance.enabled) {
-    const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg"); // new attachment
+    const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg");
     return api.sendMessage(
       {
         body: "⚠️ Bot is under maintenance. Please try again later.",
