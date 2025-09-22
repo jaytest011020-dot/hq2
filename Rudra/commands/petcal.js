@@ -1,11 +1,13 @@
 const { setData, getData } = require("../../database.js");
+const fs = require("fs-extra");
+const path = require("path");
 
 module.exports.config = {
   name: "petcal",
-  version: "2.4.0",
+  version: "2.5.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
-  description: "Calculate pet weights (with GC admin toggle on/off, Firebase support)",
+  description: "Calculate pet weights (with GC admin toggle on/off, Firebase support, maintenance respect)",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/petcal <ageLevel> <weightKgAtThatAge> | /petcal on | /petcal off",
@@ -24,6 +26,20 @@ function usageExample(api, threadID, messageID) {
 module.exports.run = async function ({ api, event, args }) {
   const { senderID, threadID, messageID } = event;
   const command = args[0] ? args[0].toLowerCase() : "";
+
+  // 🔹 Check maintenance system
+  const maintenance = (await getData(`system/maintenance`)) || { enabled: false };
+  if (maintenance.enabled) {
+    const videoPath = path.join(__dirname, "cache", "AI data.mp4");
+    return api.sendMessage(
+      {
+        body: "⚠️ Bot is under maintenance.\n\nPlease try again later.",
+        attachment: fs.existsSync(videoPath) ? fs.createReadStream(videoPath) : null
+      },
+      threadID,
+      messageID
+    );
+  }
 
   // 🔹 Handle /petcal on/off toggle (GC admin only)
   if (command === "on" || command === "off") {
