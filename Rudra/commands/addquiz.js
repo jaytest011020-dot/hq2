@@ -2,30 +2,30 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "addquiz",
-  version: "1.0.0",
+  version: "1.0.1",
   credits: "ChatGPT + Jaylord La Peña",
   description: "Add a new multiple-choice question to the quiz database",
-  usages: "/addquiz |question| |A| |B| |C| |D| |answer|",
+  usages: "/addquiz question-a-b-c-d-answer",
   commandCategory: "games",
   cooldowns: 3
 };
 
 module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID, senderID } = event;
+  const { threadID, messageID } = event;
 
   const content = args.join(" ");
-  const parts = content.split("|").map(p => p.trim());
+  const parts = content.split("-").map(p => p.trim());
 
   if (parts.length !== 6) {
     return api.sendMessage(
-      "❌ Invalid format!\nUsage:\n/addquiz |question| |A| |B| |C| |D| |answer|\nExample:\n/addquiz |What is 2+2?| |3| |4| |5| |6| |b|",
+      "❌ Invalid format!\nUsage:\n/addquiz question-a-b-c-d-answer\nExample:\n/addquiz What is 2+2?-3-4-5-6-b",
       threadID,
       messageID
     );
   }
 
   const [question, a, b, c, d, answer] = parts;
-  if (!["a","b","c","d"].includes(answer.toLowerCase())) {
+  if (!["a", "b", "c", "d"].includes(answer.toLowerCase())) {
     return api.sendMessage("❌ Answer must be one of a/b/c/d", threadID, messageID);
   }
 
