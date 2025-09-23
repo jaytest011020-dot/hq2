@@ -71,15 +71,24 @@ module.exports.run = async function({ api, event, Users }) {
     );
   }
 
-  if (event.args.length < 2)
+  // Log the args to see what values are being passed
+  console.log("Received args:", event.args);
+
+  // Validate if there are exactly two arguments
+  if (event.args.length !== 2)
     return api.sendMessage("❌ Usage: /lotto <num1> <num2>\nNumbers must be 1-40.", threadID, messageID);
 
   let num1 = parseInt(event.args[0]);
   let num2 = parseInt(event.args[1]);
   const bet = 500; // fixed bet
 
+  // Validate if numbers are between 1 and 40
   if (isNaN(num1) || isNaN(num2) || num1 < 1 || num1 > 40 || num2 < 1 || num2 > 40)
     return api.sendMessage("❌ Numbers must be between 1 and 40.", threadID, messageID);
+
+  // Validate if the two numbers are the same
+  if (num1 === num2)
+    return api.sendMessage("❌ Numbers must be different.", threadID, messageID);
 
   // 🔹 Load user bank
   const userName = await getUserName(senderID, api, Users);
