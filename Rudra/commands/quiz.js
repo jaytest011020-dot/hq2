@@ -4,7 +4,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "quiz",
-  version: "1.5.0",
+  version: "1.6.0",
   credits: "ChatGPT + Jaylord La Peña",
   description: "Multiplayer quiz with coin betting integrated with bank system",
   usages: "/quiz <bet> to start, /quiz to join",
@@ -121,7 +121,6 @@ async function askQuestion(api, threadID, Users) {
 
   let msg = `❓ Question ${quiz.currentQ + 1}/${quiz.questions.length} ❓\n\n${q.question}\n\n`;
   msg += `A. ${q.a}\nB. ${q.b}\nC. ${q.c}\nD. ${q.d}\n\n`;
-  msg += `📝 Players:\n${uids.map(uid => userInfo[uid]).join(", ")}\n\n`;
   msg += `⏱ You have 30 seconds to answer! Reply with A/B/C/D`;
 
   api.sendMessage(msg, threadID, (err, info) => {
@@ -132,28 +131,7 @@ async function askQuestion(api, threadID, Users) {
   quiz.timer = setTimeout(() => {
     processQuestionResult(api, threadID, Users);
   }, 30000);
-}
-
-// Resend question reminders
-async function sendQuestionWithReminders(api, threadID, Users) {
-  const quiz = activeQuizzes[threadID];
-  if (!quiz || quiz.currentQ >= quiz.questions.length) return;
-
-  const q = quiz.questions[quiz.currentQ];
-  const uids = Object.keys(quiz.players);
-  const userInfo = {};
-  for (let uid of uids) userInfo[uid] = await getUserName(uid, api, Users);
-
-  let msg = `❓ Question ${quiz.currentQ + 1}/${quiz.questions.length} ❓\n\n${q.question}\n\n`;
-  msg += `A. ${q.a}\nB. ${q.b}\nC. ${q.c}\nD. ${q.d}\n\n`;
-  msg += `📝 Answered:\n`;
-  uids.forEach(uid => { if (quiz.answers[uid]) msg += `${userInfo[uid]} ✅\n`; });
-
-  const remaining = uids.filter(uid => !quiz.answers[uid]);
-  if (remaining.length) msg += `\n⏱ Waiting for: ${remaining.map(uid => userInfo[uid]).join(", ")}\n`;
-
-  api.sendMessage(msg, threadID);
-}
+                 } 
 // Process question results
 async function processQuestionResult(api, threadID, Users) {
   const quiz = activeQuizzes[threadID];
@@ -224,7 +202,7 @@ async function endQuiz(api, threadID, Users) {
 
 // Handle player replies
 module.exports.handleEvent = async function({ api, event, Users }) {
-  const { threadID, senderID, body, messageReply } = event;
+  const { threadID, senderID, body, messageID } = event;
   if (!body) return;
 
   const quiz = activeQuizzes[threadID];
@@ -235,14 +213,12 @@ module.exports.handleEvent = async function({ api, event, Users }) {
 
   quiz.answers[senderID] = answer;
 
-  // Send updated question reminders
-  await sendQuestionWithReminders(api, threadID, Users);
+  // Reply **only to the player** to confirm answer received
+  const userName = await getUserName(senderID, api, Users);
+  api.sendMessage(
+    `✅ ${userName}, your answer has been received!`,
+    threadID,
+    messageID // reply to player's message
+  );
 
   // Check if all players answered
-  const uids = Object.keys(quiz.players);
-  const allAnswered = uids.every(uid => quiz.answers[uid]);
-  if (allAnswered) {
-    if (quiz.timer) clearTimeout(quiz.timer); // stop 30-second timer
-    processQuestionResult(api, threadID, Users);
-  }
-};
