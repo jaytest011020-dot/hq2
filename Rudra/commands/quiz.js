@@ -4,7 +4,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "quiz",
-  version: "1.4.0",
+  version: "1.5.0",
   credits: "ChatGPT + Jaylord La Peña",
   description: "Multiplayer quiz with coin betting integrated with bank system",
   usages: "/quiz <bet> to start, /quiz to join",
@@ -35,11 +35,10 @@ function shuffleArray(arr) {
   return arr;
 }
 
-module.exports.run = async function({ api, event, args, Users, body }) {
+module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID } = event;
 
   if (!activeQuizzes[threadID]) {
-    // Starting a new quiz
     const bet = parseInt(args[0]);
     if (isNaN(bet) || bet <= 0)
       return api.sendMessage("❌ Usage: /quiz <bet> to start a new quiz.", threadID);
@@ -64,7 +63,8 @@ module.exports.run = async function({ api, event, args, Users, body }) {
       questions,
       players: { [senderID]: { correct: 0 } },
       answers: {},
-      currentPostID: null
+      currentPostID: null,
+      timer: null
     };
 
     // Start quiz after 1 minute
@@ -74,7 +74,6 @@ module.exports.run = async function({ api, event, args, Users, body }) {
 
       const playerIDs = Object.keys(quiz.players);
       if (playerIDs.length <= 1) {
-        // Refund starter
         const starterBank = (await getData(`bank/${threadID}/${quiz.starter}`)) || { balance: 0 };
         starterBank.balance += quiz.bet;
         await setData(`bank/${threadID}/${quiz.starter}`, starterBank);
@@ -91,7 +90,6 @@ module.exports.run = async function({ api, event, args, Users, body }) {
       threadID
     );
   } else {
-    // Joining existing quiz
     const quiz = activeQuizzes[threadID];
     if (quiz.started) return api.sendMessage("❌ Quiz already started!", threadID);
     if (quiz.players[senderID]) return api.sendMessage("❌ You already joined!", threadID);
@@ -113,7 +111,8 @@ async function askQuestion(api, threadID, Users) {
   if (!quiz) return;
   if (quiz.currentQ >= quiz.questions.length) return endQuiz(api, threadID, Users);
 
-  quiz.answers = {}; // reset answers
+  quiz.answers = {};
+  if (quiz.timer) clearTimeout(quiz.timer);
 
   const q = quiz.questions[quiz.currentQ];
   const uids = Object.keys(quiz.players);
@@ -122,8 +121,6 @@ async function askQuestion(api, threadID, Users) {
 
   let msg = `❓ Question ${quiz.currentQ + 1}/${quiz.questions.length} ❓\n\n${q.question}\n\n`;
   msg += `A. ${q.a}\nB. ${q.b}\nC. ${q.c}\nD. ${q.d}\n\n`;
-
-  // List players
   msg += `📝 Players:\n${uids.map(uid => userInfo[uid]).join(", ")}\n\n`;
   msg += `⏱ You have 30 seconds to answer! Reply with A/B/C/D`;
 
@@ -131,28 +128,13 @@ async function askQuestion(api, threadID, Users) {
     if (!err) quiz.currentPostID = info.messageID;
   });
 
-  // Timer for 30 seconds
-  setTimeout(async () => {
-    const correctAnswer = q.answer.toLowerCase();
-    let resultMsg = `✅ Correct Answer: ${correctAnswer.toUpperCase()}\n\n`;
-
-    uids.forEach(uid => {
-      if (quiz.answers[uid] === correctAnswer) quiz.players[uid].correct += 1;
-      resultMsg += `${userInfo[uid]} - ${quiz.answers[uid] === correctAnswer ? "✅" : "❌"}\n`;
-    });
-
-    // Leaderboard
-    resultMsg += `\n📊 Leaderboard:\n`;
-    const leaderboard = uids.sort((a,b) => quiz.players[b].correct - quiz.players[a].correct);
-    leaderboard.forEach(uid => resultMsg += `${userInfo[uid]} - ${quiz.players[uid].correct} correct\n`);
-
-    api.sendMessage(resultMsg, threadID);
-    quiz.currentQ += 1;
-    setTimeout(() => askQuestion(api, threadID, Users), 5000);
+  // 30-second timer
+  quiz.timer = setTimeout(() => {
+    processQuestionResult(api, threadID, Users);
   }, 30000);
 }
 
-// Resend question with reminders
+// Resend question reminders
 async function sendQuestionWithReminders(api, threadID, Users) {
   const quiz = activeQuizzes[threadID];
   if (!quiz || quiz.currentQ >= quiz.questions.length) return;
@@ -164,7 +146,6 @@ async function sendQuestionWithReminders(api, threadID, Users) {
 
   let msg = `❓ Question ${quiz.currentQ + 1}/${quiz.questions.length} ❓\n\n${q.question}\n\n`;
   msg += `A. ${q.a}\nB. ${q.b}\nC. ${q.c}\nD. ${q.d}\n\n`;
-
   msg += `📝 Answered:\n`;
   uids.forEach(uid => { if (quiz.answers[uid]) msg += `${userInfo[uid]} ✅\n`; });
 
@@ -172,6 +153,35 @@ async function sendQuestionWithReminders(api, threadID, Users) {
   if (remaining.length) msg += `\n⏱ Waiting for: ${remaining.map(uid => userInfo[uid]).join(", ")}\n`;
 
   api.sendMessage(msg, threadID);
+}
+// Process question results
+async function processQuestionResult(api, threadID, Users) {
+  const quiz = activeQuizzes[threadID];
+  if (!quiz) return;
+  if (quiz.timer) clearTimeout(quiz.timer);
+
+  const q = quiz.questions[quiz.currentQ];
+  const uids = Object.keys(quiz.players);
+  const userInfo = {};
+  for (let uid of uids) userInfo[uid] = await getUserName(uid, api, Users);
+
+  const correctAnswer = q.answer.toLowerCase();
+  let resultMsg = `✅ Correct Answer: ${correctAnswer.toUpperCase()}\n\n`;
+
+  uids.forEach(uid => {
+    if (quiz.answers[uid] === correctAnswer) quiz.players[uid].correct += 1;
+    resultMsg += `${userInfo[uid]} - ${quiz.answers[uid] === correctAnswer ? "✅" : "❌"}\n`;
+  });
+
+  resultMsg += `\n📊 Leaderboard:\n`;
+  const leaderboard = uids.sort((a, b) => quiz.players[b].correct - quiz.players[a].correct);
+  leaderboard.forEach(uid => resultMsg += `${userInfo[uid]} - ${quiz.players[uid].correct} correct\n`);
+
+  api.sendMessage(resultMsg, threadID);
+  quiz.currentQ += 1;
+
+  // Proceed to next question after 5 seconds
+  setTimeout(() => askQuestion(api, threadID, Users), 5000);
 }
 
 // End quiz
@@ -212,7 +222,7 @@ async function endQuiz(api, threadID, Users) {
   delete activeQuizzes[threadID];
 }
 
-// Handle replies for answers
+// Handle player replies
 module.exports.handleEvent = async function({ api, event, Users }) {
   const { threadID, senderID, body, messageReply } = event;
   if (!body) return;
@@ -223,9 +233,16 @@ module.exports.handleEvent = async function({ api, event, Users }) {
   const answer = body.trim().toLowerCase();
   if (!["a","b","c","d"].includes(answer)) return;
 
-  // Optional: accept only replies to bot question
-  // if (messageReply?.messageID !== quiz.currentPostID) return;
-
   quiz.answers[senderID] = answer;
+
+  // Send updated question reminders
   await sendQuestionWithReminders(api, threadID, Users);
+
+  // Check if all players answered
+  const uids = Object.keys(quiz.players);
+  const allAnswered = uids.every(uid => quiz.answers[uid]);
+  if (allAnswered) {
+    if (quiz.timer) clearTimeout(quiz.timer); // stop 30-second timer
+    processQuestionResult(api, threadID, Users);
+  }
 };
