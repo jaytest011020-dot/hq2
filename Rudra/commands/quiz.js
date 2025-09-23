@@ -222,3 +222,11 @@ module.exports.handleEvent = async function({ api, event, Users }) {
   );
 
   // Check if all players answered
+// Check if all players answered
+  const uids = Object.keys(quiz.players);
+  const allAnswered = uids.every(uid => quiz.answers[uid]);
+  if (allAnswered) {
+    if (quiz.timer) clearTimeout(quiz.timer); // stop 30-second timer
+    processQuestionResult(api, threadID, Users);
+  }
+};
