@@ -1,13 +1,13 @@
 module.exports.config = {
   name: "antirobberyEvent",
   eventType: ["log:thread-admins", "log:unsubscribe"],
-  version: "2.0.0",
+  version: "2.0.1",
   credits: "ChatGPT + NN",
-  description: "Protects specific admin from removal or kick",
+  description: "Protects specific admins from removal or kick",
 };
 
-// 👑 Protected Admin UID (ilagay mo dito yung Facebook ID mo)
-const PROTECTED_ADMIN = "61559999326713";
+// 👑 Protected Admins UID (ilagay lahat ng Facebook ID mo dito)
+const PROTECTED_ADMINS = ["61559999326713", "61563731477181"];
 
 module.exports.run = async function({ api, event }) {
   const { threadID, logMessageType, logMessageData, author } = event;
@@ -17,17 +17,19 @@ module.exports.run = async function({ api, event }) {
     if (
       logMessageType === "log:thread-admins" &&
       logMessageData.ADMIN_EVENT === "remove_admin" &&
-      logMessageData.TARGET_ID === PROTECTED_ADMIN
+      PROTECTED_ADMINS.includes(logMessageData.TARGET_ID)
     ) {
+      const protectedAdmin = logMessageData.TARGET_ID;
+
       // 1. Demote attacker agad
       await api.changeAdminStatus(threadID, author, false);
 
       // 2. Ibalik si protected admin
-      await api.changeAdminStatus(threadID, PROTECTED_ADMIN, true);
+      await api.changeAdminStatus(threadID, protectedAdmin, true);
 
       // 3. Fetch names
-      const info = await api.getUserInfo([PROTECTED_ADMIN, author]);
-      const protectedName = info[PROTECTED_ADMIN]?.name || "Protected Admin";
+      const info = await api.getUserInfo([protectedAdmin, author]);
+      const protectedName = info[protectedAdmin]?.name || "Protected Admin";
       const attackerName = info[author]?.name || "Attacker";
 
       // 4. Notify GC
@@ -40,20 +42,22 @@ module.exports.run = async function({ api, event }) {
     // Case 2: Protected admin kicked from group
     if (
       logMessageType === "log:unsubscribe" &&
-      logMessageData.leftParticipantFbId === PROTECTED_ADMIN
+      PROTECTED_ADMINS.includes(logMessageData.leftParticipantFbId)
     ) {
+      const protectedAdmin = logMessageData.leftParticipantFbId;
+
       // 1. Demote attacker agad
       await api.changeAdminStatus(threadID, author, false);
 
       // 2. Ibalik sa GC si protected admin
-      await api.addUserToGroup(PROTECTED_ADMIN, threadID);
+      await api.addUserToGroup(protectedAdmin, threadID);
 
       // 3. Promote ulit as admin
-      await api.changeAdminStatus(threadID, PROTECTED_ADMIN, true);
+      await api.changeAdminStatus(threadID, protectedAdmin, true);
 
       // 4. Fetch names
-      const info = await api.getUserInfo([PROTECTED_ADMIN, author]);
-      const protectedName = info[PROTECTED_ADMIN]?.name || "Protected Admin";
+      const info = await api.getUserInfo([protectedAdmin, author]);
+      const protectedName = info[protectedAdmin]?.name || "Protected Admin";
       const attackerName = info[author]?.name || "Attacker";
 
       // 5. Notify GC
