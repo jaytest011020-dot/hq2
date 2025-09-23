@@ -1,7 +1,7 @@
 module.exports.config = {
   name: "antirobberyEvent",
   eventType: ["log:thread-admins", "log:unsubscribe"],
-  version: "2.0.1",
+  version: "2.0.2",
   credits: "ChatGPT + NN",
   description: "Protects specific admins from removal or kick",
 };
@@ -13,6 +13,8 @@ module.exports.run = async function({ api, event }) {
   const { threadID, logMessageType, logMessageData, author } = event;
 
   try {
+    const botID = api.getCurrentUserID(); // Bot's own UID
+
     // Case 1: Protected admin removed as admin
     if (
       logMessageType === "log:thread-admins" &&
@@ -21,20 +23,20 @@ module.exports.run = async function({ api, event }) {
     ) {
       const protectedAdmin = logMessageData.TARGET_ID;
 
-      // 1. Demote attacker agad
-      await api.changeAdminStatus(threadID, author, false);
+      // Demote attacker agad, but not if bot itself
+      if (author !== botID) await api.changeAdminStatus(threadID, author, false);
 
-      // 2. Ibalik si protected admin
+      // Ibalik si protected admin
       await api.changeAdminStatus(threadID, protectedAdmin, true);
 
-      // 3. Fetch names
+      // Fetch names
       const info = await api.getUserInfo([protectedAdmin, author]);
       const protectedName = info[protectedAdmin]?.name || "Protected Admin";
       const attackerName = info[author]?.name || "Attacker";
 
-      // 4. Notify GC
+      // Notify GC
       api.sendMessage(
-        `⚠️ Anti-Robbery Activated!\n\n👑 ${protectedName} has been restored as admin.\n❌ ${attackerName} has been demoted for removing protected admin.`,
+        `⚠️ Anti-Robbery Activated!\n\n👑 ${protectedName} has been restored as admin.\n❌ ${author !== botID ? `${attackerName} has been demoted for removing protected admin.` : ""}`,
         threadID
       );
     }
@@ -46,23 +48,23 @@ module.exports.run = async function({ api, event }) {
     ) {
       const protectedAdmin = logMessageData.leftParticipantFbId;
 
-      // 1. Demote attacker agad
-      await api.changeAdminStatus(threadID, author, false);
+      // Demote attacker agad, but not if bot itself
+      if (author !== botID) await api.changeAdminStatus(threadID, author, false);
 
-      // 2. Ibalik sa GC si protected admin
+      // Ibalik sa GC si protected admin
       await api.addUserToGroup(protectedAdmin, threadID);
 
-      // 3. Promote ulit as admin
+      // Promote ulit as admin
       await api.changeAdminStatus(threadID, protectedAdmin, true);
 
-      // 4. Fetch names
+      // Fetch names
       const info = await api.getUserInfo([protectedAdmin, author]);
       const protectedName = info[protectedAdmin]?.name || "Protected Admin";
       const attackerName = info[author]?.name || "Attacker";
 
-      // 5. Notify GC
+      // Notify GC
       api.sendMessage(
-        `⚠️ Anti-Kick Activated!\n\n👑 ${protectedName} has been re-added and restored as admin.\n❌ ${attackerName} has been demoted for kicking protected admin.`,
+        `⚠️ Anti-Kick Activated!\n\n👑 ${protectedName} has been re-added and restored as admin.\n❌ ${author !== botID ? `${attackerName} has been demoted for kicking protected admin.` : ""}`,
         threadID
       );
     }
