@@ -2,16 +2,25 @@ const { getData } = require("../../database.js");
 
 module.exports.config = {
   name: "listquiz",
-  version: "1.1.0",
+  version: "1.3.0",
   credits: "ChatGPT + Jaylord La Peña",
-  description: "List all quiz questions in the database",
+  description: "List all quiz questions in the database (restricted users only)",
   usages: "/listquiz",
   commandCategory: "games",
   cooldowns: 3
 };
 
+const ALLOWED_USERS = [
+  "61559999326713",
+  "61563731477181"
+];
+
 module.exports.run = async function({ api, event }) {
-  const { threadID, messageID } = event;
+  const { threadID, messageID, senderID } = event;
+
+  if (!ALLOWED_USERS.includes(senderID)) {
+    return api.sendMessage("❌ You are not allowed to use this command.", threadID, messageID);
+  }
 
   const quizData = (await getData("/quiz/qna")) || [];
 
@@ -33,7 +42,7 @@ module.exports.run = async function({ api, event }) {
     msg += `A: ${a}\nB: ${b}\nC: ${c}\nD: ${d}\n✅ Answer: ${answer}\n\n`;
   });
 
-  // Split long messages into chunks if necessary (Facebook Messenger has limits)
+  // Split long messages
   const chunkSize = 4000;
   for (let i = 0; i < msg.length; i += chunkSize) {
     api.sendMessage(msg.slice(i, i + chunkSize), threadID, messageID);
