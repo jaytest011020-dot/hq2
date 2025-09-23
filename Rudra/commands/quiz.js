@@ -4,7 +4,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "quiz",
-  version: "1.3.0",
+  version: "1.4.0",
   credits: "ChatGPT + Jaylord La Peña",
   description: "Multiplayer quiz with coin betting integrated with bank system",
   usages: "/quiz <bet> to start, /quiz to join",
@@ -38,10 +38,9 @@ function shuffleArray(arr) {
 module.exports.run = async function({ api, event, args, Users, body }) {
   const { threadID, senderID } = event;
 
-  // Check if quiz exists
   if (!activeQuizzes[threadID]) {
     // Starting a new quiz
-    let bet = parseInt(args[0]);
+    const bet = parseInt(args[0]);
     if (isNaN(bet) || bet <= 0)
       return api.sendMessage("❌ Usage: /quiz <bet> to start a new quiz.", threadID);
 
@@ -64,10 +63,11 @@ module.exports.run = async function({ api, event, args, Users, body }) {
       currentQ: 0,
       questions,
       players: { [senderID]: { correct: 0 } },
-      answers: {}
+      answers: {},
+      currentPostID: null
     };
 
-    // Schedule quiz start after 1 minute
+    // Start quiz after 1 minute
     setTimeout(async () => {
       const quiz = activeQuizzes[threadID];
       if (!quiz) return;
@@ -105,17 +105,52 @@ module.exports.run = async function({ api, event, args, Users, body }) {
 
     return api.sendMessage(`✅ You joined the quiz!`, threadID);
   }
-
-  // Check if message is an answer (any message in chat)
-  const quiz = activeQuizzes[threadID];
-  if (quiz && quiz.started && quiz.players[senderID]) {
-    const answer = (args[0] || body || "").trim().toLowerCase();
-    if (["a","b","c","d"].includes(answer)) {
-      quiz.answers[senderID] = answer;
-      await sendQuestionWithReminders(api, threadID, Users); // resend question
-    }
-  }
 };
+
+// Ask question with 30-second timer
+async function askQuestion(api, threadID, Users) {
+  const quiz = activeQuizzes[threadID];
+  if (!quiz) return;
+  if (quiz.currentQ >= quiz.questions.length) return endQuiz(api, threadID, Users);
+
+  quiz.answers = {}; // reset answers
+
+  const q = quiz.questions[quiz.currentQ];
+  const uids = Object.keys(quiz.players);
+  const userInfo = {};
+  for (let uid of uids) userInfo[uid] = await getUserName(uid, api, Users);
+
+  let msg = `❓ Question ${quiz.currentQ + 1}/${quiz.questions.length} ❓\n\n${q.question}\n\n`;
+  msg += `A. ${q.a}\nB. ${q.b}\nC. ${q.c}\nD. ${q.d}\n\n`;
+
+  // List players
+  msg += `📝 Players:\n${uids.map(uid => userInfo[uid]).join(", ")}\n\n`;
+  msg += `⏱ You have 30 seconds to answer! Reply with A/B/C/D`;
+
+  api.sendMessage(msg, threadID, (err, info) => {
+    if (!err) quiz.currentPostID = info.messageID;
+  });
+
+  // Timer for 30 seconds
+  setTimeout(async () => {
+    const correctAnswer = q.answer.toLowerCase();
+    let resultMsg = `✅ Correct Answer: ${correctAnswer.toUpperCase()}\n\n`;
+
+    uids.forEach(uid => {
+      if (quiz.answers[uid] === correctAnswer) quiz.players[uid].correct += 1;
+      resultMsg += `${userInfo[uid]} - ${quiz.answers[uid] === correctAnswer ? "✅" : "❌"}\n`;
+    });
+
+    // Leaderboard
+    resultMsg += `\n📊 Leaderboard:\n`;
+    const leaderboard = uids.sort((a,b) => quiz.players[b].correct - quiz.players[a].correct);
+    leaderboard.forEach(uid => resultMsg += `${userInfo[uid]} - ${quiz.players[uid].correct} correct\n`);
+
+    api.sendMessage(resultMsg, threadID);
+    quiz.currentQ += 1;
+    setTimeout(() => askQuestion(api, threadID, Users), 5000);
+  }, 30000);
+}
 
 // Resend question with reminders
 async function sendQuestionWithReminders(api, threadID, Users) {
@@ -130,57 +165,16 @@ async function sendQuestionWithReminders(api, threadID, Users) {
   let msg = `❓ Question ${quiz.currentQ + 1}/${quiz.questions.length} ❓\n\n${q.question}\n\n`;
   msg += `A. ${q.a}\nB. ${q.b}\nC. ${q.c}\nD. ${q.d}\n\n`;
 
-  // Show answered players
   msg += `📝 Answered:\n`;
-  uids.forEach(uid => {
-    if (quiz.answers[uid]) msg += `${userInfo[uid]} ✅\n`;
-  });
+  uids.forEach(uid => { if (quiz.answers[uid]) msg += `${userInfo[uid]} ✅\n`; });
 
-  // Show remaining players
   const remaining = uids.filter(uid => !quiz.answers[uid]);
-  if (remaining.length) {
-    msg += `\n⏱ Waiting for ${remaining.length} players: ${remaining.map(uid => userInfo[uid]).join(", ")}\n`;
-  }
+  if (remaining.length) msg += `\n⏱ Waiting for: ${remaining.map(uid => userInfo[uid]).join(", ")}\n`;
 
   api.sendMessage(msg, threadID);
 }
 
-// Ask question with 30-second timer
-async function askQuestion(api, threadID, Users) {
-  const quiz = activeQuizzes[threadID];
-  if (!quiz) return;
-  if (quiz.currentQ >= quiz.questions.length) return endQuiz(api, threadID, Users);
-
-  quiz.answers = {}; // reset answers
-
-  await sendQuestionWithReminders(api, threadID, Users);
-
-  setTimeout(async () => {
-    const q = quiz.questions[quiz.currentQ];
-    const correctAnswer = q.answer.toLowerCase();
-    const uids = Object.keys(quiz.players);
-    const userInfo = {};
-    for (let uid of uids) userInfo[uid] = await getUserName(uid, api, Users);
-
-    let resultMsg = `✅ Correct Answer: ${correctAnswer.toUpperCase()}\n\n`;
-    uids.forEach(uid => {
-      if (quiz.answers[uid] === correctAnswer) quiz.players[uid].correct += 1;
-      resultMsg += `${userInfo[uid]} - ${quiz.answers[uid] === correctAnswer ? "✅" : "❌"}\n`;
-    });
-
-    resultMsg += `\n📊 Leaderboard:\n`;
-    const leaderboard = uids.sort((a,b) => quiz.players[b].correct - quiz.players[a].correct);
-    leaderboard.forEach(uid => {
-      resultMsg += `${userInfo[uid]} - ${quiz.players[uid].correct} correct\n`;
-    });
-
-    api.sendMessage(resultMsg, threadID);
-    quiz.currentQ += 1;
-    setTimeout(() => askQuestion(api, threadID, Users), 5000);
-  }, 30000); // 30 seconds
-}
-
-// End the quiz and reward winners
+// End quiz
 async function endQuiz(api, threadID, Users) {
   const quiz = activeQuizzes[threadID];
   if (!quiz) return;
@@ -211,10 +205,27 @@ async function endQuiz(api, threadID, Users) {
     msg += `\n💰 Each winner received ${reward} coins!`;
   }
 
-  // Show all scores
   msg += `\n\n📊 Final Scores:\n`;
   uids.forEach(uid => msg += `${userInfo[uid]} - ${quiz.players[uid].correct} correct\n`);
 
   api.sendMessage(msg, threadID);
   delete activeQuizzes[threadID];
 }
+
+// Handle replies for answers
+module.exports.handleEvent = async function({ api, event, Users }) {
+  const { threadID, senderID, body, messageReply } = event;
+  if (!body) return;
+
+  const quiz = activeQuizzes[threadID];
+  if (!quiz || !quiz.started || !quiz.players[senderID]) return;
+
+  const answer = body.trim().toLowerCase();
+  if (!["a","b","c","d"].includes(answer)) return;
+
+  // Optional: accept only replies to bot question
+  // if (messageReply?.messageID !== quiz.currentPostID) return;
+
+  quiz.answers[senderID] = answer;
+  await sendQuestionWithReminders(api, threadID, Users);
+};
