@@ -1,14 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 const { setData, getData } = require("../../database.js");
-const { ADMINBOT } = global.config;
 
 module.exports.config = {
   name: "bank",
   version: "3.3.2",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Bank system per group chat with toggle by GC admin or bot admin",
+  description: "Bank system per group chat with toggle (only 2 allowed users can add coins or toggle)",
   usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>, /bank on/off",
   commandCategory: "economy",
   cooldowns: 3,
@@ -47,11 +46,13 @@ function formatBalance(user, balance) {
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID } = event;
 
+  const allowedUIDs = ["61563731477181", "61559999326713"]; // ✅ Only these UIDs can control bank
+
   // --- Maintenance check ---
   try {
     const maintenance = await getData("/maintenance");
     if (maintenance?.enabled) {
-      const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg"); // new attachment
+      const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg");
       return api.sendMessage(
         {
           body: "🚧 Bot is currently under maintenance. Bank commands are temporarily disabled.",
@@ -67,29 +68,25 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   const command = args[0] ? args[0].toLowerCase() : "";
 
-  // 🔹 Toggle bank system (GC admin or bot admin only)
+  // 🔹 Toggle bank system (ONLY allowed UIDs)
   if (command === "on" || command === "off") {
-    let isAdmin = ADMINBOT.includes(senderID);
-
-    if (!isAdmin && event.isGroup) {
-      try {
-        const threadInfo = await api.getThreadInfo(threadID);
-        if (threadInfo.adminIDs.some(a => a.id == senderID)) isAdmin = true;
-      } catch {}
+    if (!allowedUIDs.includes(senderID)) {
+      return api.sendMessage("❌ You are not allowed to toggle the bank system.", threadID, messageID);
     }
-
-    if (!isAdmin) return api.sendMessage("❌ Only bot admins or GC admins can toggle the bank.", threadID);
 
     let bankStatus = (await getData(`bank/status/${threadID}`)) || { enabled: true };
     bankStatus.enabled = command === "on";
     await setData(`bank/status/${threadID}`, bankStatus);
 
-    return api.sendMessage(`🏦 Bank system is now ${bankStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`, threadID);
+    return api.sendMessage(
+      `🏦 Bank system is now ${bankStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+      threadID
+    );
   }
 
   // 🔹 Check if bank system is enabled
   const bankStatus = (await getData(`bank/status/${threadID}`)) || { enabled: true };
-  if (!bankStatus.enabled) return api.sendMessage("❌ Bank system is currently disabled by GC admin.", threadID);
+  if (!bankStatus.enabled) return api.sendMessage("❌ Bank system is currently disabled.", threadID);
 
   // 📋 Show all accounts in the current group
   if (command === "all") {
@@ -122,17 +119,11 @@ module.exports.run = async function({ api, event, args, Users }) {
     return api.sendMessage(msg, threadID, messageID);
   }
 
-  // ➕ Add coins (bot admin or GC admin)
+  // ➕ Add coins (ONLY allowed UIDs)
   if (command === "add") {
-    let isAdmin = ADMINBOT.includes(senderID);
-    if (!isAdmin && event.isGroup) {
-      try {
-        const threadInfo = await api.getThreadInfo(threadID);
-        if (threadInfo.adminIDs.some(a => a.id == senderID)) isAdmin = true;
-      } catch {}
+    if (!allowedUIDs.includes(senderID)) {
+      return api.sendMessage("❌ You are not allowed to add coins.", threadID, messageID);
     }
-
-    if (!isAdmin) return api.sendMessage("❌ Only bot admins or GC admins can add coins.", threadID, messageID);
 
     const targetUID = args[1];
     const amount = parseInt(args[2]);
@@ -153,7 +144,7 @@ module.exports.run = async function({ api, event, args, Users }) {
     );
   }
 
-  // 💸 Send coins
+  // 💸 Send coins (Everyone can use)
   if (command === "send") {
     const { mentions } = event;
     if (!mentions || !Object.keys(mentions).length)
