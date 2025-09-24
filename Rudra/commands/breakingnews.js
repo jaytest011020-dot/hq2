@@ -1,71 +1,55 @@
 const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const { getData } = require("../../database.js");
-
-const OWNER_UID = "61559999326713";
 
 module.exports.config = {
-  name: "flashnews",
+  name: "breakingnews",
   version: "1.0.0",
   credits: "ChatGPT + Jaylord La Peña",
-  description: "Send flash news image via API",
-  usages: "/flashnews @mention|channel|title|headline",
-  commandCategory: "vip",
-  cooldowns: 3
+  description: "Send breaking news style image",
+  usages: "/breakingnews @mention|channel|title|headline",
+  commandCategory: "fun",
+  cooldowns: 5,
 };
 
-module.exports.run = async function({ api, event, args, mentions }) {
-  const { threadID, senderID } = event;
+module.exports.run = async function({ api, event, args }) {
+  const { threadID, messageID } = event;
+  const mentions = event.mentions;
 
-  // --- VIP Check ---
-  const vips = (await getData("/vip")) || [];
-  const isVIP = vips.some(v => v.uid === senderID) || senderID === OWNER_UID;
-  if (!isVIP) return api.sendMessage("❌ You are not allowed to use this command.", threadID);
-
-  // --- Check mention ---
-  if (!mentions || Object.keys(mentions).length === 0) 
-    return api.sendMessage("❌ Please mention a user for the flash news.", threadID);
-
-  const targetUID = Object.keys(mentions)[0]; // Get UID from mention
-  const mentionName = Object.values(mentions)[0];
-
-  // --- Combine all args and split by "|" ---
-  const input = args.join(" ").split("|");
-  if (input.length < 4) {
-    return api.sendMessage("❌ Usage: /flashnews @mention|channel|title|headline", threadID);
+  // 🔹 Check if user mentioned
+  if (!mentions || Object.keys(mentions).length === 0) {
+    return api.sendMessage("❌ Please mention a user.\nUsage: /breakingnews @mention|channel|title|headline", threadID, messageID);
   }
 
-  const channel = input[1].trim();
-  const title = input[2].trim();
-  const headline = input[3].trim();
+  // 🔹 Get first mentioned user
+  const targetUID = Object.keys(mentions)[0];
+  const mentionName = mentions[targetUID];
 
-  // --- Call API ---
-  const apiURL = `https://betadash-api-swordslush-production.up.railway.app/breaking-news`;
+  // 🔹 Split args by "|"
+  const input = args.join(" ").split("|");
+  if (input.length < 4) {
+    return api.sendMessage("❌ Usage: /breakingnews @mention|channel|title|headline", threadID, messageID);
+  }
+
+  const channel = input[1]?.trim();
+  const title = input[2]?.trim();
+  const headline = input[3]?.trim();
+
+  // 🔹 API URL
+  const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/breaking-news?userid=${targetUID}&channel=${encodeURIComponent(channel)}&title=${encodeURIComponent(title)}&headline=${encodeURIComponent(headline)}`;
+
   try {
-    const res = await axios.get(apiURL, {
-      params: {
-        userid: targetUID,
-        channel,
-        title,
-        headline
+    // Fetch image
+    const response = await axios.get(apiUrl, { responseType: "stream" });
+
+    return api.sendMessage(
+      {
+        body: `📰 Flash News Report!\n\n👤 Reporter: ${mentionName}\n📺 Channel: ${channel}\n📝 ${title}\n\n${headline}`,
+        attachment: response.data
       },
-      responseType: "arraybuffer"
-    });
-
-    // --- Save image temporarily ---
-    const imgPath = path.join(__dirname, "cache", `flashnews_${Date.now()}.jpeg`);
-    fs.writeFileSync(imgPath, Buffer.from(res.data, "binary"));
-
-    // --- Send image ---
-    api.sendMessage(
-      { body: `📰 Flash News for ${mentionName}`, attachment: fs.createReadStream(imgPath) },
       threadID,
-      () => fs.unlinkSync(imgPath) // Delete after sending
+      messageID
     );
-
   } catch (err) {
-    console.error(err);
-    return api.sendMessage("⚠️ Failed to fetch flash news image.", threadID);
+    console.error("[FLASHNEWS] API Error:", err.message || err);
+    return api.sendMessage("⚠️ Failed to fetch flash news image. Please try again later.", threadID, messageID);
   }
 };
