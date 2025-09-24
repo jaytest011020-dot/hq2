@@ -50,7 +50,7 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   const msg = `💖 Donator List (Total: ${donators.length})\n┌─────────────\n${donators
     .map(d => `│ ${d.name} - ${d.link}`)
-    .join("\n")}\n└─────────────`;
+    .join("\n\n")}\n└─────────────`;
 
   return api.sendMessage(msg, threadID);
 };
