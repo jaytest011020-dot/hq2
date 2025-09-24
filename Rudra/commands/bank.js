@@ -4,11 +4,11 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "3.4.0",
+  version: "3.5.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Bank system per group chat with toggle (only 2 allowed users can add coins or toggle)",
-  usages: "/bank, /bank all, /bank add <uid> <amount>, /bank on/off",
+  description: "Bank system per group chat with toggle and pet skill boosts",
+  usages: "/bank | /bank all | /bank add <uid> <amount> | /bank on/off",
   commandCategory: "economy",
   cooldowns: 3,
 };
@@ -102,7 +102,11 @@ module.exports.run = async function({ api, event, args, Users }) {
       // Check for pet boost
       const userPet = (await getData(`pets/${threadID}/${uid}`)) || null;
       let petBoost = 0;
-      if (userPet) petBoost = Math.floor(allData[uid].balance * (userPet.skills.bankBoost || 0));
+      if (userPet && userPet.skill?.type === "bankBoost") {
+        // Skill max cap at 30%
+        const skillPercent = Math.min(userPet.skill.value, 0.3);
+        petBoost = Math.floor(allData[uid].balance * skillPercent);
+      }
 
       results.push({
         uid,
@@ -159,11 +163,11 @@ module.exports.run = async function({ api, event, args, Users }) {
   // Apply pet boost per hour
   const pet = (await getData(`pets/${threadID}/${senderID}`)) || null;
   let hourlyBoost = 0;
-  if (pet) {
+  if (pet && pet.skill?.type === "bankBoost") {
+    const skillPercent = Math.min(pet.skill.value, 0.3); // max 30%
     const now = Date.now();
     const hoursPassed = Math.floor((now - (userData.lastBankBoost || now)) / (1000 * 60 * 60));
-    const boostPercent = pet.skills.bankBoost || 0;
-    hourlyBoost = Math.floor(userData.balance * boostPercent);
+    hourlyBoost = Math.floor(userData.balance * skillPercent);
 
     if (hoursPassed > 0 && hourlyBoost > 0) {
       const coinsToAdd = hourlyBoost * hoursPassed;
