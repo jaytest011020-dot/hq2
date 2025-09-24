@@ -35,10 +35,10 @@ const GLOBAL_COOLDOWN = 20 * 60 * 1000; // 20 minutes
 
 module.exports.config = {
   name: "job",
-  version: "5.8.0",
+  version: "5.8.1",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Random job system with pet boost, high-paying jobs, cooldown, emojis, and fun phrases",
+  description: "Random job system with pet boost (max 30%), high-paying jobs, cooldown, emojis, and fun phrases",
   commandCategory: "economy",
   usages: "/job | /job on | /job off | /job status",
   cooldowns: 3
@@ -126,11 +126,13 @@ module.exports.run = async function({ api, event, args }) {
     return api.sendMessage(`❌ ${await getUserName(senderID, api)}, your job application for ${job.name} was rejected! No earnings this time.`, threadID, messageID);
   }
 
-  // 🔹 Earnings & pet boost
+  // 🔹 Earnings & pet boost (max 30%)
   let earnedBase = randomInt(job.min, job.max);
   let petBonus = 0;
-  if (pet && pet.skills.jobBoost) {
-    petBonus = Math.floor(earnedBase * pet.skills.jobBoost); // extra from pet
+  let boostPercent = 0;
+  if (pet && pet.skills?.jobBoost) {
+    boostPercent = Math.min(pet.skills.jobBoost, 0.3); // cap at 30%
+    petBonus = Math.floor(earnedBase * boostPercent);
   }
   const totalEarned = earnedBase + petBonus;
 
@@ -149,7 +151,7 @@ module.exports.run = async function({ api, event, args }) {
 `${emoji} ${userName} did the ${job.name} job!
 
 💰 Base Earnings: ${earnedBase} coins
-✨ Pet Bonus: +${petBonus} coins
+✨ Pet Bonus: +${petBonus} coins (${Math.floor(boostPercent * 100)}%)
 🏦 Total Balance: ${bankData.balance.toLocaleString()} coins
 ⏳ Next job available in: ${Math.floor(GLOBAL_COOLDOWN/60000)}m
 
