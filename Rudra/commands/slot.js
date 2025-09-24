@@ -2,10 +2,10 @@ const { getData, setData } = require("../../database.js");
 const fs = require("fs");
 const path = require("path");
 
-// Slot symbols (3 new ones added)
+// Slot symbols
 const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎", "🍉", "🍊", "🍌"];
 
-// 🔑 Fetch username
+// 🔑 Fetch username with cache
 async function getUserName(uid, api, Users) {
   let cachedName = global.data.userName.get(uid);
   if (cachedName) return cachedName;
@@ -30,10 +30,10 @@ async function getUserName(uid, api, Users) {
 
 module.exports.config = {
   name: "slot",
-  version: "2.4.3",
-  hasPermssion: 0,
+  version: "2.5.0",
+  hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Play slot machine with coins (per GC bank system) with admin toggle + global maintenance respect",
+  description: "Play slot machine with coins (per GC bank system) with admin toggle, maintenance check, and pet boosts",
   commandCategory: "Games",
   usages: "/slot <bet> | /slot on | /slot off | /slot status",
   cooldowns: 5,
@@ -71,7 +71,7 @@ module.exports.run = async function ({ api, event, args, Users }) {
     }
   }
 
-  // 🔒 Check global maintenance
+  // 🔒 Global maintenance
   const maintenance = (await getData("/maintenance")) || { enabled: false };
   if (maintenance.enabled) {
     const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg");
@@ -86,11 +86,9 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
   // 🔹 Check if slot is enabled for this GC
   const slotStatus = (await getData(`slot/status/${threadID}`)) || { enabled: true };
-  if (!slotStatus.enabled) {
-    return api.sendMessage("❌ Slot is currently disabled by GC admin.", threadID);
-  }
+  if (!slotStatus.enabled) return api.sendMessage("❌ Slot is currently disabled by GC admin.", threadID);
 
-  // ✅ Load player balance
+  // ✅ Load player bank
   let userBank = (await getData(`bank/${threadID}/${senderID}`)) || {
     balance: 0,
     name: await getUserName(senderID, api, Users)
@@ -98,13 +96,12 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
   const bet = parseInt(args[0]);
   if (isNaN(bet) || bet <= 0) return api.sendMessage("❌ Usage: /slot <bet>", threadID);
-
   if (userBank.balance < bet) return api.sendMessage("⚠️ You don't have enough coins!", threadID);
 
-  // Deduct bet
+  // 🔹 Deduct bet
   userBank.balance -= bet;
 
-  // Roll slots (3 reels)
+  // 🔹 Roll slots
   const roll = [
     symbols[Math.floor(Math.random() * symbols.length)],
     symbols[Math.floor(Math.random() * symbols.length)],
@@ -113,20 +110,34 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
   let resultMsg = `🎰 SLOT MACHINE 🎰\n[ ${roll.join(" | ")} ]\n\n`;
 
-  // Check winnings
+  // 🔹 Load pet & boost
+  const pet = (await getData(`pets/${threadID}/${senderID}`)) || null;
+  const petCoinBoost = pet?.skills?.coinBoost || 0; // e.g., 0.10 = +10% coins
+
+  // 🔹 Check winnings
+  let baseWin = 0;
+  let petBonus = 0;
+
   if (roll[0] === roll[1] && roll[1] === roll[2]) {
-    const win = bet * 5;
-    userBank.balance += win;
-    resultMsg += `✨ JACKPOT! 3 in a row! You won 💰 ${win.toLocaleString()} coins.`;
+    baseWin = bet * 5;
+    if (petCoinBoost > 0) petBonus = Math.floor(baseWin * petCoinBoost);
+    userBank.balance += baseWin + petBonus;
+    resultMsg += `✨ JACKPOT! 3 in a row! You won 💰 ${baseWin.toLocaleString()} coins`;
+    if (petBonus > 0) resultMsg += ` + Pet Bonus 💰 ${petBonus.toLocaleString()}`;
+    resultMsg += "!";
   } else if (roll[0] === roll[1] || roll[1] === roll[2] || roll[0] === roll[2]) {
-    const win = bet * 2;
-    userBank.balance += win;
-    resultMsg += `✅ 2 matches! You won 💰 ${win.toLocaleString()} coins.`;
+    baseWin = bet * 2;
+    if (petCoinBoost > 0) petBonus = Math.floor(baseWin * petCoinBoost);
+    userBank.balance += baseWin + petBonus;
+    resultMsg += `✅ 2 matches! You won 💰 ${baseWin.toLocaleString()} coins`;
+    if (petBonus > 0) resultMsg += ` + Pet Bonus 💰 ${petBonus.toLocaleString()}`;
+    resultMsg += "!";
   } else {
+    userBank.balance -= 0; // loss already deducted
     resultMsg += `❌ You lost your bet of ${bet.toLocaleString()} coins.`;
   }
 
-  // ✅ Save updated balance
+  // ✅ Save updated bank
   userBank.name = await getUserName(senderID, api, Users);
   await setData(`bank/${threadID}/${senderID}`, userBank);
 
