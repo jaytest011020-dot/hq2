@@ -1,165 +1,138 @@
-const { getData, setData } = require("../../database.js");
 const fs = require("fs");
+const path = require("path");
+const { setData, getData } = require("../../database.js");
+
+// Cost per feed
+const FEED_COST = 100;
+const MAX_LEVEL = 100;
+
+// Pet rarities and their attributes
+const PET_RARITIES = [
+  { name: "Common", minPrice: 500, maxPrice: 1000, skills: { coinBoost: 0.05, bankBoost: 0.02, jobBoost: 0.03 } },
+  { name: "Rare", minPrice: 1000, maxPrice: 5000, skills: { coinBoost: 0.10, bankBoost: 0.05, jobBoost: 0.05 } },
+  { name: "Epic", minPrice: 15000, maxPrice: 25000, skills: { coinBoost: 0.15, bankBoost: 0.08, jobBoost: 0.10 } },
+  { name: "Legendary", minPrice: 25000, maxPrice: 50000, skills: { coinBoost: 0.20, bankBoost: 0.10, jobBoost: 0.15 } },
+  { name: "Devine", minPrice: 50000, maxPrice: 100000, skills: { coinBoost: 0.25, bankBoost: 0.15, jobBoost: 0.20 } },
+  { name: "Prismatic", minPrice: 100000, maxPrice: 500000, skills: { coinBoost: 0.30, bankBoost: 0.20, jobBoost: 0.25 } },
+];
+
+// Helper to get random price within rarity
+function getRandomPrice(rarity) {
+  return Math.floor(Math.random() * (rarity.maxPrice - rarity.minPrice + 1)) + rarity.minPrice;
+}
+
+// Helper to calculate XP needed for next level (e.g., 100 * level)
+function getNextLevelXP(level) {
+  return level * 100;
+}
 
 module.exports.config = {
   name: "pet",
   version: "1.0.0",
   credits: "ChatGPT + Jaylord La Peña",
-  description: "Pet system: buy, feed, sell, level, XP, skills, rarity",
-  usages: "/pet buy | /pet feed | /pet sell | /pet info",
+  description: "Pet system with buy, feed, stats, sell, rarity and skills",
+  usages: "/pet buy | /pet feed | /pet stats | /pet sell",
   commandCategory: "economy",
   cooldowns: 3,
 };
 
-// Pet definitions
-const PETS = [
-  { name: "Cat", rarity: "Common", skill: "Bank Boost", priceRange: [500, 1000] },
-  { name: "Dog", rarity: "Common", skill: "Coin Boost", priceRange: [500, 1000] },
-  { name: "Rabbit", rarity: "Common", skill: "Job Boost", priceRange: [500, 1000] },
-  { name: "Hamster", rarity: "Common", skill: "Bank Boost", priceRange: [500, 1000] },
-  { name: "Parrot", rarity: "Rare", skill: "Coin Boost", priceRange: [1000, 5000] },
-  { name: "Snake", rarity: "Rare", skill: "Job Boost", priceRange: [1000, 5000] },
-  { name: "Wolf", rarity: "Epic", skill: "Bank Boost", priceRange: [15000, 25000] },
-  { name: "Tiger", rarity: "Epic", skill: "Coin Boost", priceRange: [15000, 25000] },
-  { name: "Lion", rarity: "Legendary", skill: "Job Boost", priceRange: [25000, 50000] },
-  { name: "Dragon", rarity: "Legendary", skill: "Bank Boost", priceRange: [25000, 50000] },
-  { name: "Phoenix", rarity: "Devine", skill: "Coin Boost", priceRange: [50000, 100000] },
-  { name: "Unicorn", rarity: "Devine", skill: "Job Boost", priceRange: [50000, 100000] },
-  { name: "Prismatic Dragon", rarity: "Prismatic", skill: "Bank Boost", priceRange: [100000, 500000] },
-  { name: "Prismatic Phoenix", rarity: "Prismatic", skill: "Coin Boost", priceRange: [100000, 500000] }
-];
-
-// Helper function: random integer
-function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-// XP requirement formula (linear)
-function requiredXP(level) {
-  return 10 + level; // each level requires 1 more XP than previous, starting at 11 XP
-}
-
-// Main command
-module.exports.run = async function({ api, event, args }) {
+module.exports.run = async function({ api, event, args, Users }) {
   const { senderID, threadID, messageID } = event;
+  const command = args[0]?.toLowerCase();
 
-  const userPetKey = `pet/${senderID}`;
-  const userBankKey = `bank/${threadID}/${senderID}`;
+  const userBank = (await getData(`bank/${threadID}/${senderID}`)) || { balance: 0 };
 
-  // Load user data
-  let petData = (await getData(userPetKey)) || null;
-  let bankData = (await getData(userBankKey)) || { balance: 0 };
+  // Load user's pet
+  let pet = (await getData(`pets/${threadID}/${senderID}`)) || null;
 
-  const command = args[0]?.toLowerCase() || "";
-
-  // --- BUY PET ---
+  // ------------------ BUY ------------------
   if (command === "buy") {
-    if (petData) return api.sendMessage("❌ You already have a pet. Sell it first to buy a new one.", threadID, messageID);
-
-    let msg = "🛒 Available Pets to Buy:\n\n";
-    PETS.forEach((p, i) => {
-      const price = randomInt(p.priceRange[0], p.priceRange[1]);
-      msg += `${i + 1}. ${p.name} [${p.rarity}] - ${price.toLocaleString()} coins | Skill: ${p.skill}\n`;
+    let msg = "╔══ Available Pets ══\n";
+    PET_RARITIES.forEach((r, i) => {
+      const price = getRandomPrice(r);
+      msg += `║ ${i+1}. ${r.name} - Price: ${price.toLocaleString()} coins - Skills: Coin+${r.skills.coinBoost*100}%, Bank+${r.skills.bankBoost*100}%, Job+${r.skills.jobBoost*100}%\n`;
     });
-    msg += `\nReply with the number of the pet to buy.`;
+    msg += "╚═════════════════\nUse: /pet buy <rarity>";
+    return api.sendMessage(msg, threadID, messageID);
+  }
 
-    // Save a temporary buy list in memory
-    global.buyPetList = global.buyPetList || {};
-    global.buyPetList[senderID] = PETS.map(p => ({ ...p, price: randomInt(p.priceRange[0], p.priceRange[1]) }));
+  // Buy a pet by rarity
+  if (args[0] && args[0].toLowerCase() === "buy" && args[1]) {
+    if (pet) return api.sendMessage("❌ You already have a pet. Sell it before buying a new one.", threadID, messageID);
+
+    const rarityInput = args[1].toLowerCase();
+    const rarity = PET_RARITIES.find(r => r.name.toLowerCase() === rarityInput);
+    if (!rarity) return api.sendMessage("❌ Invalid rarity.", threadID, messageID);
+
+    const price = getRandomPrice(rarity);
+    if (userBank.balance < price) return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
+
+    userBank.balance -= price;
+    await setData(`bank/${threadID}/${senderID}`, userBank);
+
+    pet = {
+      name: rarity.name + " Pet",
+      rarity: rarity.name,
+      skills: rarity.skills,
+      xp: 0,
+      level: 1
+    };
+    await setData(`pets/${threadID}/${senderID}`, pet);
+
+    return api.sendMessage(`✅ You bought a ${rarity.name} pet for ${price.toLocaleString()} coins!`, threadID, messageID);
+  }
+
+  // ------------------ FEED ------------------
+  if (command === "feed") {
+    if (!pet) return api.sendMessage("❌ You don't have a pet to feed.", threadID, messageID);
+    if (userBank.balance < FEED_COST) return api.sendMessage(`❌ You need ${FEED_COST} coins to feed your pet.`, threadID, messageID);
+
+    userBank.balance -= FEED_COST;
+    pet.xp += 1;
+
+    // Level up
+    const nextXP = getNextLevelXP(pet.level);
+    if (pet.xp >= nextXP && pet.level < MAX_LEVEL) {
+      pet.level += 1;
+      pet.xp = 0;
+    }
+
+    await setData(`bank/${threadID}/${senderID}`, userBank);
+    await setData(`pets/${threadID}/${senderID}`, pet);
+
+    return api.sendMessage(`🍖 You fed your pet! Level: ${pet.level}, XP: ${pet.xp}/${getNextLevelXP(pet.level)}\n💰 Coins left: ${userBank.balance.toLocaleString()}`, threadID, messageID);
+  }
+
+  // ------------------ STATS ------------------
+  if (command === "stats") {
+    if (!pet) return api.sendMessage("❌ You don't have a pet.", threadID, messageID);
+
+    const msg = `🐾 Pet Stats
+Name: ${pet.name}
+Rarity: ${pet.rarity}
+Level: ${pet.level}
+XP: ${pet.xp}/${getNextLevelXP(pet.level)}
+Skills:
+💰 Coin Boost: ${pet.skills.coinBoost*100}%
+🏦 Bank Boost: ${pet.skills.bankBoost*100}%
+💼 Job Boost: ${pet.skills.jobBoost*100}%`;
 
     return api.sendMessage(msg, threadID, messageID);
   }
 
-  // --- FEED PET ---
-  if (command === "feed") {
-    if (!petData) return api.sendMessage("❌ You don't have a pet to feed.", threadID, messageID);
-    if (bankData.balance < 100) return api.sendMessage("❌ You need at least 100 coins to feed your pet.", threadID, messageID);
-
-    bankData.balance -= 100;
-    petData.xp = (petData.xp || 0) + 1;
-
-    // Level up if XP meets requirement
-    let leveledUp = false;
-    while (petData.level < 100 && petData.xp >= requiredXP(petData.level)) {
-      petData.xp -= requiredXP(petData.level);
-      petData.level += 1;
-      leveledUp = true;
-    }
-
-    await setData(userPetKey, petData);
-    await setData(userBankKey, bankData);
-
-    return api.sendMessage(
-      `🍖 You fed your pet ${petData.name}.\n💰 100 coins deducted.\n` +
-      `✨ Current Level: ${petData.level} | XP: ${petData.xp}/${requiredXP(petData.level)}\n` +
-      `${leveledUp ? "🎉 Your pet leveled up!" : ""}`,
-      threadID,
-      messageID
-    );
-  }
-
-  // --- SELL PET ---
+  // ------------------ SELL ------------------
   if (command === "sell") {
-    if (!petData) return api.sendMessage("❌ You don't have a pet to sell.", threadID, messageID);
+    if (!pet) return api.sendMessage("❌ You don't have a pet to sell.", threadID, messageID);
 
-    // Calculate sell price based on rarity and level (simple formula)
-    let basePrice = Math.floor((petData.price || 0) * (1 + petData.level / 100));
-    bankData.balance += basePrice;
+    const sellPrice = getRandomPrice(PET_RARITIES.find(r => r.name === pet.rarity));
+    userBank.balance += sellPrice;
 
-    await setData(userBankKey, bankData);
-    await setData(userPetKey, null);
+    await setData(`bank/${threadID}/${senderID}`, userBank);
+    await setData(`pets/${threadID}/${senderID}`, null);
 
-    return api.sendMessage(
-      `💰 You sold your pet ${petData.name} for ${basePrice.toLocaleString()} coins.`,
-      threadID,
-      messageID
-    );
+    return api.sendMessage(`💰 You sold your ${pet.rarity} pet for ${sellPrice.toLocaleString()} coins!`, threadID, messageID);
   }
 
-  // --- PET INFO ---
-  if (command === "info") {
-    if (!petData) return api.sendMessage("❌ You don't have a pet.", threadID, messageID);
-
-    return api.sendMessage(
-      `🐾 Your Pet Info:\n` +
-      `Name: ${petData.name}\n` +
-      `Rarity: ${petData.rarity}\n` +
-      `Skill: ${petData.skill}\n` +
-      `Level: ${petData.level}\n` +
-      `XP: ${petData.xp}/${requiredXP(petData.level)}\n`,
-      threadID,
-      messageID
-    );
-  }
-
-  // --- HANDLE BUY REPLY ---
-  if (!isNaN(command) && global.buyPetList?.[senderID]) {
-    const index = parseInt(command) - 1;
-    const petToBuy = global.buyPetList[senderID][index];
-    if (!petToBuy) return api.sendMessage("❌ Invalid selection.", threadID, messageID);
-    if (bankData.balance < petToBuy.price) return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
-
-    bankData.balance -= petToBuy.price;
-    petData = { ...petToBuy, level: 1, xp: 0 };
-
-    await setData(userBankKey, bankData);
-    await setData(userPetKey, petData);
-
-    delete global.buyPetList[senderID];
-
-    return api.sendMessage(
-      `🎉 You bought ${petData.name} [${petData.rarity}]!\nSkill: ${petData.skill}\nLevel: 1 | XP: 0\n💰 Coins left: ${bankData.balance.toLocaleString()}`,
-      threadID,
-      messageID
-    );
-  }
-
-  // --- DEFAULT ---
-  if (!petData) return api.sendMessage("❌ You don't have a pet. Use /pet buy to get one.", threadID, messageID);
-  return api.sendMessage(
-    `🐾 Your Pet Info:\n` +
-    `Name: ${petData.name}\nRarity: ${petData.rarity}\nSkill: ${petData.skill}\nLevel: ${petData.level}\nXP: ${petData.xp}/${requiredXP(petData.level)}`,
-    threadID,
-    messageID
-  );
+  // Default message
+  return api.sendMessage("❌ Invalid pet command. Use /pet buy | /pet feed | /pet stats | /pet sell", threadID, messageID);
 };
