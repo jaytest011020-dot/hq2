@@ -4,7 +4,7 @@ const path = require("path");
 
 module.exports.config = {
   name: "dice",
-  version: "2.3.0",
+  version: "2.3.1",
   credits: "ChatGPT + NN",
   hasPermission: 0,
   description: "Roll a dice, bet coins, and apply pet coin boost",
@@ -84,7 +84,7 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   // 🔹 Load user pet
   const pet = (await getData(`pets/${threadID}/${senderID}`)) || null;
-  const petCoinBoost = pet?.skills?.coinBoost || 0;
+  const petCoinBoost = (pet?.skill?.type === "coinBoost") ? Math.min(pet.skill.value, 0.3) : 0; // max 30%
 
   // 🔹 Validate bet
   if (isNaN(bet) || bet <= 0)
