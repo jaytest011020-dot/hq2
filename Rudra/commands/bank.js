@@ -4,11 +4,11 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "3.5.0",
+  version: "3.3.2",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Bank system per group chat with toggle and pet skill boosts",
-  usages: "/bank | /bank all | /bank add <uid> <amount> | /bank on/off",
+  description: "Bank system per group chat with toggle (only 2 allowed users can add coins or toggle)",
+  usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>, /bank on/off",
   commandCategory: "economy",
   cooldowns: 3,
 };
@@ -37,18 +37,16 @@ async function getUserName(uid, api, Users) {
 }
 
 // 🏦 Format balance message
-function formatBalance(user, balance, hourlyBoost = 0) {
-  let msg = `🏦 BANK ACCOUNT 🏦\n\n` +
-            `👤 User: ${user}\n` +
-            `💰 Balance: ${balance.toLocaleString()} coins`;
-  if (hourlyBoost > 0) msg += `\n✨ Passive Bank Boost: +${hourlyBoost.toLocaleString()} coins/hr (from your pet)`;
-  return msg;
+function formatBalance(user, balance) {
+  return `🏦 BANK ACCOUNT 🏦\n\n` +
+         `👤 User: ${user}\n` +
+         `💰 Balance: ${balance.toLocaleString()} coins`;
 }
 
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID } = event;
-  const allowedUIDs = ["61563731477181", "61559999326713"]; // Only these UIDs can control bank
-  const command = args[0] ? args[0].toLowerCase() : "";
+
+  const allowedUIDs = ["61563731477181", "61559999326713"]; // ✅ Only these UIDs can control bank
 
   // --- Maintenance check ---
   try {
@@ -68,11 +66,14 @@ module.exports.run = async function({ api, event, args, Users }) {
     console.error("Maintenance check failed:", err);
   }
 
+  const command = args[0] ? args[0].toLowerCase() : "";
+
   // 🔹 Toggle bank system (ONLY allowed UIDs)
   if (command === "on" || command === "off") {
     if (!allowedUIDs.includes(senderID)) {
       return api.sendMessage("❌ You are not allowed to toggle the bank system.", threadID, messageID);
     }
+
     let bankStatus = (await getData(`bank/status/${threadID}`)) || { enabled: true };
     bankStatus.enabled = command === "on";
     await setData(`bank/status/${threadID}`, bankStatus);
@@ -98,21 +99,10 @@ module.exports.run = async function({ api, event, args, Users }) {
         allData[uid].name = freshName;
         await setData(`bank/${threadID}/${uid}`, allData[uid]);
       }
-
-      // Check for pet boost
-      const userPet = (await getData(`pets/${threadID}/${uid}`)) || null;
-      let petBoost = 0;
-      if (userPet && userPet.skill?.type === "bankBoost") {
-        // Skill max cap at 30%
-        const skillPercent = Math.min(userPet.skill.value, 0.3);
-        petBoost = Math.floor(allData[uid].balance * skillPercent);
-      }
-
       results.push({
         uid,
         name: freshName,
-        balance: allData[uid].balance || 0,
-        boost: petBoost
+        balance: allData[uid].balance || 0
       });
     }
 
@@ -123,9 +113,7 @@ module.exports.run = async function({ api, event, args, Users }) {
     let msg = `📋 BANK ACCOUNTS (Total: ${results.length}) 📋\n\n`;
     results.forEach((user, i) => {
       const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
-      msg += `${medal} ${user.name} — 💰 ${user.balance.toLocaleString()} coins`;
-      if (user.boost > 0) msg += ` (Boost: +${user.boost.toLocaleString()}/hr)`;
-      msg += "\n";
+      msg += `${medal} ${user.name} — 💰 ${user.balance.toLocaleString()} coins\n`;
     });
 
     return api.sendMessage(msg, threadID, messageID);
@@ -156,28 +144,55 @@ module.exports.run = async function({ api, event, args, Users }) {
     );
   }
 
-  // 👤 Default: show own balance with passive boost
-  const freshName = await getUserName(senderID, api, Users);
-  let userData = (await getData(`bank/${threadID}/${senderID}`)) || { name: freshName, balance: 0 };
+  // 💸 Send coins (Everyone can use)
+  if (command === "send") {
+    const { mentions } = event;
+    if (!mentions || !Object.keys(mentions).length)
+      return api.sendMessage("❌ Please mention a user to send coins.", threadID, messageID);
 
-  // Apply pet boost per hour
-  const pet = (await getData(`pets/${threadID}/${senderID}`)) || null;
-  let hourlyBoost = 0;
-  if (pet && pet.skill?.type === "bankBoost") {
-    const skillPercent = Math.min(pet.skill.value, 0.3); // max 30%
-    const now = Date.now();
-    const hoursPassed = Math.floor((now - (userData.lastBankBoost || now)) / (1000 * 60 * 60));
-    hourlyBoost = Math.floor(userData.balance * skillPercent);
+    const recipientID = Object.keys(mentions)[0];
+    if (recipientID === senderID)
+      return api.sendMessage("❌ You cannot send coins to yourself.", threadID, messageID);
 
-    if (hoursPassed > 0 && hourlyBoost > 0) {
-      const coinsToAdd = hourlyBoost * hoursPassed;
-      userData.balance += coinsToAdd;
-      userData.lastBankBoost = now;
-    }
+    let mentionName = Object.values(mentions)[0];
+    const amountText = args.slice(1).join(" ").replace(mentionName, "").trim();
+    const amount = parseInt(amountText);
+
+    if (isNaN(amount) || amount <= 0)
+      return api.sendMessage("❌ Please specify a valid number of coins.", threadID, messageID);
+
+    let senderData = (await getData(`bank/${threadID}/${senderID}`)) || {
+      name: await getUserName(senderID, api, Users),
+      balance: 0
+    };
+
+    if (senderData.balance < amount)
+      return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
+
+    let recipientData = (await getData(`bank/${threadID}/${recipientID}`)) || {
+      name: await getUserName(recipientID, api, Users),
+      balance: 0
+    };
+
+    senderData.balance -= amount;
+    recipientData.balance += amount;
+
+    await setData(`bank/${threadID}/${senderID}`, senderData);
+    await setData(`bank/${threadID}/${recipientID}`, recipientData);
+
+    return api.sendMessage(
+      `✅ You sent 💰 ${amount.toLocaleString()} coins to ${recipientData.name}.\n` +
+      `Your new balance: 💰 ${senderData.balance.toLocaleString()} coins`,
+      threadID,
+      messageID
+    );
   }
 
+  // 👤 Default: show own balance
+  const freshName = await getUserName(senderID, api, Users);
+  let userData = (await getData(`bank/${threadID}/${senderID}`)) || { name: freshName, balance: 0 };
   userData.name = freshName;
   await setData(`bank/${threadID}/${senderID}`, userData);
 
-  return api.sendMessage(formatBalance(userData.name, userData.balance, hourlyBoost), threadID, messageID);
+  return api.sendMessage(formatBalance(userData.name, userData.balance), threadID, messageID);
 };
