@@ -4,12 +4,11 @@ const path = require("path");
 const { setData, getData } = require("../../database.js");
 
 const OWNER_UID = "61559999326713"; // Owner UID
-
 const cooldowns = new Map();
 
 module.exports.config = {
   name: "music",
-  version: "2.5.0",
+  version: "2.6.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Search and play full music with VIP/GC admin only toggle",
@@ -47,9 +46,11 @@ module.exports.run = async ({ api, event, args }) => {
     return api.sendMessage("❌ Only VIPs, GC admins, or bot owner can use this command.", threadID, messageID);
   }
 
-  // --- Handle /music on/off toggle (GC admin only) ---
+  // --- Handle /music on/off toggle ---
   if (command === "on" || command === "off") {
-    if (!isAdmin && !isOwner) return api.sendMessage("❌ Only GC admins or owner can toggle the music command.", threadID, messageID);
+    if (!isAdmin && !isOwner) {
+      return api.sendMessage("❌ Only GC admins or owner can toggle the music command.", threadID, messageID);
+    }
     const enabled = command === "on";
     await setData(`music/status/${threadID}`, { enabled });
     return api.sendMessage(
@@ -69,7 +70,9 @@ module.exports.run = async ({ api, event, args }) => {
   const now = Date.now();
   const userCooldown = cooldowns.get(senderID) || 0;
   const remaining = Math.ceil((userCooldown - now) / 1000);
-  if (remaining > 0) return api.sendMessage(`❗ Please wait ${remaining}s before using /music again.`, threadID, messageID);
+  if (remaining > 0) {
+    return api.sendMessage(`❗ Please wait ${remaining}s before using /music again.`, threadID, messageID);
+  }
   cooldowns.set(senderID, now + 60 * 1000);
 
   // --- Music search ---
@@ -82,8 +85,28 @@ module.exports.run = async ({ api, event, args }) => {
         const apiURL = `https://betadash-api-swordslush-production.up.railway.app/sc?search=${encodeURIComponent(query)}`;
         const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.mp3`);
 
-        const audioBuffer = (await axios.get(apiURL, { responseType: "arraybuffer" })).data;
-        fs.writeFileSync(tmpPath, Buffer.from(audioBuffer, "binary"));
+        const response = await axios.get(apiURL, {
+          responseType: "arraybuffer",
+          timeout: 20000
+        });
+
+        const contentType = response.headers["content-type"] || "";
+
+        // ✅ If JSON error instead of audio
+        if (!contentType.includes("audio")) {
+          try {
+            const errorText = Buffer.from(response.data).toString();
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.error) {
+              throw new Error(errorJson.error);
+            }
+          } catch {
+            throw new Error("Invalid response from music API.");
+          }
+        }
+
+        // ✅ Save audio file
+        fs.writeFileSync(tmpPath, Buffer.from(response.data, "binary"));
 
         api.unsendMessage(info.messageID);
 
@@ -97,12 +120,12 @@ module.exports.run = async ({ api, event, args }) => {
           messageID
         );
       } catch (err) {
-        console.error("❌ Music Command Error:", err);
-        api.sendMessage("⚠️ Error fetching music.", threadID, messageID);
+        console.error("❌ Music Command Error:", err.message || err);
+        api.sendMessage(`⚠️ ${err.message || "Error fetching music. Try another title."}`, threadID, messageID);
       }
     });
   } catch (err) {
-    console.error("❌ Music Command Error:", err);
-    api.sendMessage("⚠️ Error fetching music.", threadID, messageID);
+    console.error("❌ Music Command Error:", err.message || err);
+    api.sendMessage(`⚠️ ${err.message || "Error fetching music."}`, threadID, messageID);
   }
 };
