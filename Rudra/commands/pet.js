@@ -60,7 +60,7 @@ module.exports.run = async function({ api, event, args, Users }) {
       let msg = "╔══ Available Pets ══\n";
       PET_SHOP.forEach((p, i) => {
         const price = getRandomPrice(p);
-        msg += `║ ${i+1}. ${p.name} (${p.rarity}) - Price: ${price.toLocaleString()} coins - Skill: ${p.skill.type}+${(p.skill.value*100).toFixed(2)}%\n`;
+        msg += `║ ${i+1}. ${p.name} (${p.rarity}) - Price: ${price.toLocaleString()} coins - Skill: ${p.skill.type}+${(p.skill.value*100).toFixed(2)}%\n\n`;
       });
       msg += "╚═════════════════\nUse: /pet buy <pet_name>";
       return api.sendMessage(msg, threadID, messageID);
