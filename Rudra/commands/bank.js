@@ -4,11 +4,11 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "bank",
-  version: "4.0.1",
+  version: "4.1.0",
   credits: "Jaylord La Peña + ChatGPT",
   hasPermission: 0,
-  description: "Bank system synced with Firebase user coins (only coins are updated)",
-  usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>",
+  description: "Bank system synced with Firebase user coins (only coins are updated, no auto-create)",
+  usages: "/bank, /bank all, /bank add <uid> <amount>, /bank send @mention <coins>, /bank on/off",
   commandCategory: "economy",
   cooldowns: 3,
 };
@@ -45,7 +45,6 @@ module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, senderID, messageID } = event;
 
   const allowedUIDs = ["61563731477181", "61559999326713"]; // ✅ Only these UIDs can control bank
-
   const command = args[0] ? args[0].toLowerCase() : "";
 
   // --- Maintenance check ---
@@ -86,7 +85,7 @@ module.exports.run = async function({ api, event, args, Users }) {
   const bankStatus = (await getData(`bank/status/${threadID}`)) || { enabled: true };
   if (!bankStatus.enabled) return api.sendMessage("❌ Bank system is currently disabled.", threadID);
 
-  // 📋 Show all accounts in the current group
+  // 📋 Show all accounts in the app (not per thread anymore)
   if (command === "all") {
     const allData = (await getData(`user`)) || {};
     const results = [];
@@ -94,14 +93,10 @@ module.exports.run = async function({ api, event, args, Users }) {
     for (const uid in allData) {
       const freshName = await getUserName(uid, api, Users);
       const balance = parseInt(allData[uid].coins) || 0;
-      results.push({
-        uid,
-        name: freshName,
-        balance
-      });
+      results.push({ uid, name: freshName, balance });
     }
 
-    if (!results.length) return api.sendMessage("🏦 No accounts found in this group.", threadID, messageID);
+    if (!results.length) return api.sendMessage("🏦 No accounts found in the app.", threadID, messageID);
 
     results.sort((a, b) => b.balance - a.balance);
 
@@ -125,23 +120,19 @@ module.exports.run = async function({ api, event, args, Users }) {
     if (!targetUID || isNaN(amount) || amount <= 0)
       return api.sendMessage("❌ Usage: /bank add <uid> <amount>", threadID, messageID);
 
-    const freshName = await getUserName(targetUID, api, Users);
-
-    // Check if the user exists in the database
-    let userData = (await getData(`user/${targetUID}`)) || null;
+    const userData = await getData(`user/${targetUID}`);
     if (!userData) {
       return api.sendMessage("❌ Wala pang bank account ang user na ito sa app.", threadID, messageID);
     }
 
-    let currentBalance = parseInt(userData.coins) || 0;
-    userData.coins = currentBalance + amount;
-    userData.name = freshName;
+    const freshName = await getUserName(targetUID, api, Users);
+    const currentBalance = parseInt(userData.coins) || 0;
+    const newBalance = currentBalance + amount;
 
-    // Only update the coins field, not other fields
-    await setData(`user/${targetUID}/coins`, userData.coins);
+    await setData(`user/${targetUID}/coins`, newBalance);
 
     return api.sendMessage(
-      `✅ Added 💰 ${amount.toLocaleString()} coins to ${userData.name}'s account.`,
+      `✅ Added 💰 ${amount.toLocaleString()} coins to ${freshName}'s account.`,
       threadID,
       messageID
     );
@@ -164,31 +155,28 @@ module.exports.run = async function({ api, event, args, Users }) {
     if (isNaN(amount) || amount <= 0)
       return api.sendMessage("❌ Please specify a valid number of coins.", threadID, messageID);
 
-    let senderData = (await getData(`user/${senderID}`)) || {
-      name: await getUserName(senderID, api, Users),
-      coins: 0
-    };
-    let recipientData = (await getData(`user/${recipientID}`)) || {
-      name: await getUserName(recipientID, api, Users),
-      coins: 0
-    };
+    const senderData = await getData(`user/${senderID}`);
+    const recipientData = await getData(`user/${recipientID}`);
 
-    let senderBalance = parseInt(senderData.coins) || 0;
-    let recipientBalance = parseInt(recipientData.coins) || 0;
+    if (!senderData) {
+      return api.sendMessage("❌ Wala ka pang bank account sa app.", threadID, messageID);
+    }
+    if (!recipientData) {
+      return api.sendMessage("❌ Wala pang bank account ang taong ito sa app.", threadID, messageID);
+    }
+
+    const senderBalance = parseInt(senderData.coins) || 0;
+    const recipientBalance = parseInt(recipientData.coins) || 0;
 
     if (senderBalance < amount)
       return api.sendMessage("❌ You don't have enough coins.", threadID, messageID);
 
-    senderData.coins = senderBalance - amount;
-    recipientData.coins = recipientBalance + amount;
-
-    // Only update the coins field
-    await setData(`user/${senderID}/coins`, senderData.coins);
-    await setData(`user/${recipientID}/coins`, recipientData.coins);
+    await setData(`user/${senderID}/coins`, senderBalance - amount);
+    await setData(`user/${recipientID}/coins`, recipientBalance + amount);
 
     return api.sendMessage(
-      `✅ You sent 💰 ${amount.toLocaleString()} coins to ${recipientData.name}.\n` +
-      `Your new balance: 💰 ${(senderData.coins).toLocaleString()} coins`,
+      `✅ You sent 💰 ${amount.toLocaleString()} coins to ${await getUserName(recipientID, api, Users)}.\n` +
+      `Your new balance: 💰 ${(senderBalance - amount).toLocaleString()} coins`,
       threadID,
       messageID
     );
@@ -196,13 +184,12 @@ module.exports.run = async function({ api, event, args, Users }) {
 
   // 👤 Default: show own balance
   const freshName = await getUserName(senderID, api, Users);
-  let userData = (await getData(`user/${senderID}`)) || { name: freshName, coins: 0 };
+  const userData = await getData(`user/${senderID}`);
 
-  let balance = parseInt(userData.coins) || 0;
-  userData.coins = balance;
-  userData.name = freshName;
+  if (!userData) {
+    return api.sendMessage("❌ Wala ka pang bank account sa app.", threadID, messageID);
+  }
 
-  await setData(`user/${senderID}/coins`, balance);
-
-  return api.sendMessage(formatBalance(userData.name, balance), threadID, messageID);
+  const balance = parseInt(userData.coins) || 0;
+  return api.sendMessage(formatBalance(freshName, balance), threadID, messageID);
 };
