@@ -6,12 +6,12 @@ const { getData } = require("../../database.js");
 const OWNER_UID = "61559999326713";
 
 module.exports.config = {
-  name: "breakingnews",
-  version: "1.2.0",
+  name: "flashnews",
+  version: "1.0.0",
   credits: "ChatGPT + Jaylord La Peña",
-  description: "Send breaking news image via API (VIP/Owner only)",
-  usages: "/breakingnews @mention <channel> <title> <headline>",
-  commandCategory: "admin",
+  description: "Send flash news image via API",
+  usages: "/flashnews @mention|channel|title|headline",
+  commandCategory: "vip",
   cooldowns: 3
 };
 
@@ -25,22 +25,20 @@ module.exports.run = async function({ api, event, args, mentions }) {
 
   // --- Check mention ---
   if (!mentions || Object.keys(mentions).length === 0) 
-    return api.sendMessage("❌ Please mention a user for the breaking news.", threadID);
+    return api.sendMessage("❌ Please mention a user for the flash news.", threadID);
 
-  const targetUID = Object.keys(mentions)[0]; // Get first mention UID
-
-  // --- Validate args ---
-  if (args.length < 4) 
-    return api.sendMessage("❌ Usage: /breakingnews @mention <channel> <title> <headline>", threadID);
-
-  // Remove mention text from args
+  const targetUID = Object.keys(mentions)[0]; // Get UID from mention
   const mentionName = Object.values(mentions)[0];
-  const mentionIndex = args.indexOf(mentionName);
-  if (mentionIndex > -1) args.splice(mentionIndex, 1);
 
-  const channel = args[0];
-  const title = args[1];
-  const headline = args.slice(2).join(" ");
+  // --- Combine all args and split by "|" ---
+  const input = args.join(" ").split("|");
+  if (input.length < 4) {
+    return api.sendMessage("❌ Usage: /flashnews @mention|channel|title|headline", threadID);
+  }
+
+  const channel = input[1].trim();
+  const title = input[2].trim();
+  const headline = input[3].trim();
 
   // --- Call API ---
   const apiURL = `https://betadash-api-swordslush-production.up.railway.app/breaking-news`;
@@ -56,18 +54,18 @@ module.exports.run = async function({ api, event, args, mentions }) {
     });
 
     // --- Save image temporarily ---
-    const imgPath = path.join(__dirname, "cache", `breakingnews_${Date.now()}.jpeg`);
+    const imgPath = path.join(__dirname, "cache", `flashnews_${Date.now()}.jpeg`);
     fs.writeFileSync(imgPath, Buffer.from(res.data, "binary"));
 
     // --- Send image ---
     api.sendMessage(
-      { body: `📰 Breaking news for ${mentionName}`, attachment: fs.createReadStream(imgPath) },
+      { body: `📰 Flash News for ${mentionName}`, attachment: fs.createReadStream(imgPath) },
       threadID,
       () => fs.unlinkSync(imgPath) // Delete after sending
     );
 
   } catch (err) {
     console.error(err);
-    return api.sendMessage("⚠️ Failed to fetch breaking news image.", threadID);
+    return api.sendMessage("⚠️ Failed to fetch flash news image.", threadID);
   }
 };
