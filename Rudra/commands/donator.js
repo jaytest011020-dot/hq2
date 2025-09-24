@@ -1,49 +1,58 @@
-const { setData, getData } = require("../../database.js");
+const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "donator",
-  version: "1.1.0",
+  version: "1.5.0",
   credits: "ChatGPT + Jaylord La Peña",
-  description: "Add and list official donators (Global)",
-  usages: "/donator add <Name> <FB link> | /donator",
+  description: "Manage global donators. Only owner can add.",
+  usages: "/donator add @mention | /donator",
   commandCategory: "admin",
-  cooldowns: 3,
+  cooldowns: 3
 };
 
-const OWNER_UID = "61559999326713"; // Only this UID can add
+// Owner UID
+const OWNER_UID = "61559999326713";
 
 module.exports.run = async function({ api, event, args, Users }) {
-  const { threadID, senderID, messageID } = event;
+  const { senderID, mentions, threadID } = event;
 
-  // Global path for donators
-  let donators = (await getData("/global/donators")) || [];
-
+  // --- Add donator ---
   if (args[0]?.toLowerCase() === "add") {
-    if (senderID !== OWNER_UID)
-      return api.sendMessage("❌ You are not allowed to add donators.", threadID, messageID);
+    if (senderID !== OWNER_UID) return api.sendMessage("❌ You are not allowed to add donators.", threadID);
 
-    const name = args[1];
-    const fbLink = args[2];
-    if (!name || !fbLink)
-      return api.sendMessage("❌ Usage: /donator add <Name> <FB link>", threadID, messageID);
+    if (!mentions || Object.keys(mentions).length === 0) return api.sendMessage("❌ Please mention the user to add as donator.", threadID);
 
-    // Add donator globally
-    donators.push({ name, fbLink });
-    await setData("/global/donators", donators);
+    const donators = (await getData("/donator")) || [];
 
-    return api.sendMessage(`✅ Donator added globally:\nName: ${name}\nFB: ${fbLink}`, threadID, messageID);
+    const added = [];
+    for (let uid in mentions) {
+      if (donators.find(d => d.uid === uid)) continue;
+
+      const name = await Users.getName(uid);
+      const link = `https://www.facebook.com/${uid}`;
+      donators.push({ uid, name, link });
+      added.push(name);
+    }
+
+    await setData("/donator", donators);
+
+    return api.sendMessage(
+      added.length > 0
+        ? `✅ Added Donators:\n┌─────────────\n${added.map(n => `│ ${n}`).join("\n")}\n└─────────────`
+        : "⚠️ All mentioned users are already donators.",
+      threadID
+    );
   }
 
-  // List donators with double line box UI
-  if (!donators.length)
-    return api.sendMessage("❌ No donators found.", threadID, messageID);
+  // --- List donators ---
+  const donators = (await getData("/donator")) || [];
+  if (!donators.length) return api.sendMessage("❌ No donators found.", threadID);
 
-  let msg = "💎 GLOBAL DONATORS 💎\n\n";
-  donators.forEach(d => {
-    const nameLine = `║ ${d.name.padEnd(17)} ║`;
-    const fbLine = `║ ${d.fbLink.padEnd(17)} ║`;
-    msg += `╔═══════════════════╗\n${nameLine}\n${fbLine}\n╚═══════════════════╝\n\n`;
+  let msg = "💎 Global Donators:\n┌──────────────────\n";
+  donators.forEach((d, i) => {
+    msg += `│ ${i + 1}. ${d.name} - ${d.link}\n`;
   });
+  msg += "└──────────────────";
 
-  api.sendMessage(msg.trim(), threadID, messageID);
+  api.sendMessage(msg, threadID);
 };
