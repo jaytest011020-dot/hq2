@@ -2,18 +2,10 @@ const { getData, setData } = require("../../database.js");
 const fs = require("fs");
 const path = require("path");
 
-module.exports.config = {
-  name: "dice",
-  version: "2.4.0",
-  credits: "ChatGPT + NN",
-  hasPermission: 0,
-  description: "Roll a dice, bet coins, and apply pet coin boost (capped at 30%)",
-  usages: "/dice <bet>",
-  commandCategory: "games",
-  cooldowns: 5
-};
+// Slot symbols
+const symbols = ["🍒", "🍋", "🍇", "🍀", "⭐", "💎", "🍉", "🍊", "🍌"];
 
-// 🔑 Get username with cache
+// 🔑 Fetch username with cache
 async function getUserName(uid, api, Users) {
   let cachedName = global.data.userName.get(uid);
   if (cachedName) return cachedName;
@@ -36,74 +28,118 @@ async function getUserName(uid, api, Users) {
   return fallbackName;
 }
 
-// 🎲 Dice emojis
-function diceEmoji(number) {
-  const emojis = ["\u2680", "\u2681", "\u2682", "\u2683", "\u2684", "\u2685"];
-  return emojis[number - 1] || "🎲";
-}
+module.exports.config = {
+  name: "slot",
+  version: "2.6.0",
+  hasPermission: 0,
+  credits: "Jaylord La Peña + ChatGPT",
+  description: "Play slot machine with coins (pet boosts capped at 30%)",
+  commandCategory: "games",
+  usages: "/slot <bet> | /slot on | /slot off | /slot status",
+  cooldowns: 5,
+};
 
-// 🎲 Roll dice
-function rollDice() {
-  return Math.floor(Math.random() * 6) + 1;
-}
+module.exports.run = async function ({ api, event, args, Users }) {
+  const { threadID, senderID } = event;
+  const command = args[0] ? args[0].toLowerCase() : "";
 
-// 🎲 Format result message
-function formatDiceMessage(userName, diceNumber, bet, baseWin, petBonus, balance) {
-  let msg = `🎲 Dice Game Result 🎲\n\n`;
-  msg += `👤 Player: ${userName}\n`;
-  msg += `🎲 Dice Roll: ${diceEmoji(diceNumber)} (${diceNumber})\n\n`;
-  msg += `💰 Bet: ${bet.toLocaleString()} coins\n`;
+  // 🔹 Handle /slot on/off/status toggle (GC admin only)
+  if (["on", "off", "status"].includes(command)) {
+    try {
+      if (command === "status") {
+        const slotStatus = (await getData(`slot/status/${threadID}`)) || { enabled: true };
+        return api.sendMessage(
+          `🎰 Slot system status: ${slotStatus.enabled ? "✅ ENABLED" : "❌ DISABLED"}`,
+          threadID
+        );
+      }
 
-  if (baseWin >= 0) {
-    msg += `➡️ Base Win: ${baseWin.toLocaleString()} coins\n`;
-    if (petBonus > 0) msg += `✨ Pet Bonus: ${petBonus.toLocaleString()} coins\n`;
-  } else {
-    msg += `➡️ Loss: ${Math.abs(baseWin).toLocaleString()} coins\n`;
+      const threadInfo = await api.getThreadInfo(threadID);
+      const isAdmin = threadInfo.adminIDs.some(a => a.id == senderID);
+      if (!isAdmin) return api.sendMessage("❌ Only GC admins can toggle slot.", threadID);
+
+      const enabled = command === "on";
+      await setData(`slot/status/${threadID}`, { enabled });
+
+      return api.sendMessage(
+        `🎰 Slot system is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
+        threadID
+      );
+    } catch (err) {
+      console.error("[SLOT] Toggle error:", err);
+      return api.sendMessage("⚠️ Failed to toggle slot.", threadID);
+    }
   }
 
-  msg += `🏦 New Balance: ${balance.toLocaleString()} coins\n`;
+  // 🔒 Global maintenance
+  const maintenance = (await getData("/maintenance")) || { enabled: false };
+  if (maintenance.enabled) {
+    const attachmentPath = path.join(__dirname, "cache", "maintenance.jpeg");
+    return api.sendMessage(
+      {
+        body: "⚠️ Bot is under maintenance. Please try again later.",
+        attachment: fs.existsSync(attachmentPath) ? fs.createReadStream(attachmentPath) : null
+      },
+      threadID
+    );
+  }
 
-  if (diceNumber === 6) msg += "\n🔥 Lucky roll! Maximum dice!";
-  else if (diceNumber === 1) msg += "\n❄️ Unlucky roll! Minimum dice!";
-  else msg += "\n🙂 Better luck next time!";
+  // 🔹 Check if slot is enabled for this GC
+  const slotStatus = (await getData(`slot/status/${threadID}`)) || { enabled: true };
+  if (!slotStatus.enabled) return api.sendMessage("❌ Slot is currently disabled by GC admin.", threadID);
 
-  return msg;
-}
-
-// ✅ Main command
-module.exports.run = async function({ api, event, args, Users }) {
-  const { threadID, senderID, messageID } = event;
+  // ✅ Load player bank
+  let userBank = (await getData(`bank/${threadID}/${senderID}`)) || {
+    balance: 0,
+    name: await getUserName(senderID, api, Users)
+  };
 
   const bet = parseInt(args[0]);
-  if (isNaN(bet) || bet <= 0)
-    return api.sendMessage("❌ Specify a valid bet. Usage: /dice <bet amount>", threadID, messageID);
+  if (isNaN(bet) || bet <= 0) return api.sendMessage("❌ Usage: /slot <bet>", threadID);
+  if (userBank.balance < bet) return api.sendMessage("⚠️ You don't have enough coins!", threadID);
 
-  const freshName = await getUserName(senderID, api, Users);
-  let userBank = (await getData(`bank/${threadID}/${senderID}`)) || { name: freshName, balance: 0 };
+  // 🔹 Deduct bet
+  userBank.balance -= bet;
 
-  if (userBank.balance < bet)
-    return api.sendMessage(`❌ You don't have enough coins! Your balance: ${userBank.balance}`, threadID, messageID);
+  // 🔹 Roll slots
+  const roll = [
+    symbols[Math.floor(Math.random() * symbols.length)],
+    symbols[Math.floor(Math.random() * symbols.length)],
+    symbols[Math.floor(Math.random() * symbols.length)],
+  ];
 
-  // 🎲 Roll dice & compute result
-  const diceNumber = rollDice();
-  let baseWin = 0;
-  if (diceNumber >= 1 && diceNumber <= 4) baseWin = -bet;
-  else if (diceNumber === 5) baseWin = bet;
-  else if (diceNumber === 6) baseWin = bet * 2;
+  let resultMsg = `🎰 SLOT MACHINE 🎰\n[ ${roll.join(" | ")} ]\n\n`;
 
-  // 🔹 Apply pet boost (capped at 30%)
+  // 🔹 Load pet & boost
   const pet = (await getData(`pets/${threadID}/${senderID}`)) || null;
+  let petCoinBoost = pet?.skills?.coinBoost || 0;
+  petCoinBoost = Math.min(petCoinBoost, 0.3); // cap at 30%
+
+  // 🔹 Check winnings
+  let baseWin = 0;
   let petBonus = 0;
-  if (baseWin > 0 && pet?.skills?.coinBoost) {
-    const boostPercent = Math.min(pet.skills.coinBoost, 0.3); // cap at 30%
-    petBonus = Math.floor(baseWin * boostPercent);
+
+  if (roll[0] === roll[1] && roll[1] === roll[2]) {
+    baseWin = bet * 5;
+  } else if (roll[0] === roll[1] || roll[1] === roll[2] || roll[0] === roll[2]) {
+    baseWin = bet * 2;
   }
 
-  // 🔹 Update balance
-  userBank.balance += baseWin + petBonus;
+  if (baseWin > 0) {
+    petBonus = Math.floor(baseWin * petCoinBoost);
+    userBank.balance += baseWin + petBonus;
+    resultMsg += `✅ You won 💰 ${baseWin.toLocaleString()} coins`;
+    if (petBonus > 0) resultMsg += ` + Pet Bonus 💰 ${petBonus.toLocaleString()}`;
+    resultMsg += "!";
+  } else {
+    resultMsg += `❌ You lost your bet of ${bet.toLocaleString()} coins.`;
+  }
+
+  // ✅ Save updated bank
+  userBank.name = await getUserName(senderID, api, Users);
   await setData(`bank/${threadID}/${senderID}`, userBank);
 
-  // 🔹 Send result
-  const msg = formatDiceMessage(freshName, diceNumber, bet, baseWin, petBonus, userBank.balance);
-  return api.sendMessage(msg, threadID, messageID);
+  resultMsg += `\n\n👤 ${userBank.name}\n💳 Balance: ${userBank.balance.toLocaleString()} coins`;
+
+  return api.sendMessage(resultMsg, threadID);
 };
