@@ -4,10 +4,10 @@ const path = require("path");
 
 module.exports.config = {
   name: "cg",
-  version: "1.3.0",
+  version: "1.2.0",
   credits: "ChatGPT + Jaylord",
   hasPermission: 0,
-  description: "Color game with betting system and pet coin boost",
+  description: "Color game with betting system (uses bank balance)",
   usages: "/cg <color> <bet>",
   commandCategory: "games",
   cooldowns: 5
@@ -108,10 +108,6 @@ module.exports.run = async function ({ api, event, args, Users }) {
   if (userData.balance < bet)
     return api.sendMessage(`❌ You don't have enough coins. Balance: ${userData.balance}`, threadID, messageID);
 
-  // 🔹 Load user pet
-  const pet = (await getData(`pets/${threadID}/${senderID}`)) || null;
-  const petCoinBoost = pet?.skill?.type === "coinBoost" ? Math.min(pet.skill.value, 0.3) : 0; // cap 30%
-
   // 🎲 Draw result
   const drawnColors = drawColors();
   const count = drawnColors.filter(c => c === chosenColor).length;
@@ -123,14 +119,9 @@ module.exports.run = async function ({ api, event, args, Users }) {
   else if (count === 3) multiplier = 5; // Jackpot 🎉
 
   let winnings = 0;
-  let petBonus = 0;
-
   if (multiplier > 0) {
     winnings = bet * multiplier;
-    if (petCoinBoost > 0) {
-      petBonus = Math.floor(winnings * petCoinBoost);
-    }
-    userData.balance += winnings + petBonus;
+    userData.balance += winnings;
   } else {
     userData.balance -= bet;
   }
@@ -139,13 +130,11 @@ module.exports.run = async function ({ api, event, args, Users }) {
 
   // 📝 Format result
   let msg = `🎨✨ COLOR GAME ✨🎨\n\n`;
-  msg += `🎲Drawn colors: ${drawnColors.map(c => colorEmojis[c]).join(" | ")}\n\n`;
+  msg += `🎲Drawn colors:${drawnColors.map(c => colorEmojis[c]).join(" | ")}\n\n`;
   msg += `👤 Player: ${userName}\n💰 Bet: ${bet.toLocaleString()} coins\n🎯 Your color: ${colorEmojis[chosenColor]}\n\n`;
 
   if (count > 0) {
-    msg += `🌟 Hits: ${count} time(s)\n💰 Multiplier: ×${multiplier}\n🏆 Winnings: ${winnings.toLocaleString()} coins`;
-    if (petBonus > 0) msg += `\n✨ Pet Bonus: +${petBonus.toLocaleString()} coins`;
-    msg += `\n\n`;
+    msg += `🌟 Hits: ${count} time(s)\n💰 Multiplier: ×${multiplier}\n🏆 Winnings: ${winnings.toLocaleString()} coins\n\n`;
   } else {
     msg += `❌ Your color did not appear. You lost ${bet.toLocaleString()} coins.\n\n`;
   }
