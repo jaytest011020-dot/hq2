@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stock",
-  version: "6.3.0",
+  version: "6.4.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Grow a Garden auto-stock with correct 5-min alignment",
@@ -39,7 +39,7 @@ async function fetchGardenData() {
 // Format items into string
 function formatSection(title, items) {
   if (!items || items.length === 0) return `❌ No ${title}`;
-  return items.map(i => `• ${i.emoji || ""} ${i.name} (${i.quantity})`).join("\n");
+  return items.map(i => `• ${i.emoji || ""} ${i.name} (${i.quantity || i.seen || "?"})`).join("\n");
 }
 
 // Get next 5-minute mark aligned to 1, 6, 11, 16...
@@ -76,6 +76,11 @@ async function sendStock(threadID, api) {
   const gear = formatSection("gear", data.gear?.items);
   const cosmetics = formatSection("cosmetics", data.cosmetics?.items);
 
+  const lastSeeds = formatSection("Seeds (Last Seen)", data.lastSeen?.Seeds);
+  const lastGears = formatSection("Gears (Last Seen)", data.lastSeen?.Gears);
+  const lastWeather = formatSection("Weather (Last Seen)", data.lastSeen?.Weather);
+  const lastEggs = formatSection("Eggs (Last Seen)", data.lastSeen?.Eggs);
+
   const stockMsg = `
 🌱 𝗔𝘂𝘁𝗼 𝗥𝗲𝘀𝘁𝗼𝗰𝗸 🌱
 ──────────────────────
@@ -94,6 +99,15 @@ ${gear}
 
 💄 𝗖𝗼𝘀𝗺𝗲𝘁𝗶𝗰𝘀
 ${cosmetics}
+
+📌 𝗟𝗮𝘀𝘁 𝗦𝗲𝗲𝗻
+${lastSeeds}
+
+${lastGears}
+
+${lastWeather}
+
+${lastEggs}
 ──────────────────────
   `.trim();
 
