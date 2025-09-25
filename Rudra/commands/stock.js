@@ -6,14 +6,13 @@ module.exports.config = {
   version: "6.4.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Grow a Garden auto-stock with correct 5-min alignment",
+  description: "Grow a Garden auto-stock with correct 5-min alignment and unique emojis",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
   cooldowns: 10,
 };
 
-// Special items to alert
 const SPECIAL_ITEMS = [
   "Grandmaster Sprinkler",
   "Master Sprinkler",
@@ -23,10 +22,48 @@ const SPECIAL_ITEMS = [
   "Medium Toy"
 ];
 
-// Auto-stock timers per GC
 const autoStockTimers = {};
 
-// Fetch stock data
+const DEFAULT_EMOJIS = {
+  seed: "🌱",
+  egg: "🥚",
+  gear: "🛠️",
+  cosmetics: "💄"
+};
+
+const ITEM_EMOJIS = {
+  "Carrot Seed": "🥕",
+  "Tomato Seed": "🍅",
+  "Lettuce Seed": "🥬",
+  "Chicken Egg": "🐔",
+  "Duck Egg": "🦆",
+  "Watering Can": "💧",
+  "Grandmaster Sprinkler": "💦",
+  "Cosmetic Hat": "🎩",
+  "Cosmetic Bag": "👜"
+};
+
+function guessEmoji(name, category) {
+  const lower = name.toLowerCase();
+  const keywords = {
+    carrot: "🥕",
+    tomato: "🍅",
+    lettuce: "🥬",
+    egg: "🥚",
+    chicken: "🐔",
+    duck: "🦆",
+    watering: "💧",
+    sprinkler: "💦",
+    hat: "🎩",
+    bag: "👜",
+    lollipop: "🍭",
+    toy: "🧸",
+    treat: "🍪"
+  };
+  for (let key in keywords) if (lower.includes(key)) return keywords[key];
+  return DEFAULT_EMOJIS[category] || "❔";
+}
+
 async function fetchGardenData() {
   try {
     const res = await axios.get("https://gagstock.gleeze.com/grow-a-garden");
@@ -36,34 +73,43 @@ async function fetchGardenData() {
   }
 }
 
-// Format items into string
-function formatSection(title, items) {
-  if (!items || items.length === 0) return `❌ No ${title}`;
-  return items.map(i => `• ${i.emoji || ""} ${i.name} (${i.quantity || i.seen || "?"})`).join("\n");
+async function saveNewItem(item, category) {
+  const path = `stock/items/${category}/${item.name}`;
+  const existing = await getData(path);
+  if (!existing) {
+    const emoji = ITEM_EMOJIS[item.name] || guessEmoji(item.name, category);
+    await setData(path, { name: item.name, emoji });
+    console.log(`🆕 New item added: ${emoji} ${item.name} (${category})`);
+    return emoji;
+  }
+  return existing.emoji;
 }
 
-// Get next 5-minute mark aligned to 1, 6, 11, 16...
+async function formatSection(title, items, category) {
+  if (!items || items.length === 0) return `❌ No ${title}`;
+  const lines = [];
+  for (let i of items) {
+    const emoji = await saveNewItem(i, category);
+    lines.push(`• ${emoji} ${i.name} (${i.quantity})`);
+  }
+  return lines.join("\n");
+}
+
 function getNext5Min(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
-
-  // Calculate next multiple of 5 + 1
   let nextMinutes = Math.floor(minutes / 5) * 5 + 1;
   if (nextMinutes <= minutes) nextMinutes += 5;
-
   const next = new Date(now);
   next.setMinutes(nextMinutes);
   next.setSeconds(0, 0);
-
   if (nextMinutes >= 60) {
     next.setHours(now.getHours() + 1);
     next.setMinutes(nextMinutes % 60);
   }
-
   return next;
 }
 
-// Send stock update to a GC
 async function sendStock(threadID, api) {
   const data = await fetchGardenData();
   if (!data) return;
@@ -71,15 +117,10 @@ async function sendStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min();
 
-  const eggs = formatSection("eggs", data.egg?.items);
-  const seeds = formatSection("seeds", data.seed?.items);
-  const gear = formatSection("gear", data.gear?.items);
-  const cosmetics = formatSection("cosmetics", data.cosmetics?.items);
-
-  const lastSeeds = formatSection("Seeds (Last Seen)", data.lastSeen?.Seeds);
-  const lastGears = formatSection("Gears (Last Seen)", data.lastSeen?.Gears);
-  const lastWeather = formatSection("Weather (Last Seen)", data.lastSeen?.Weather);
-  const lastEggs = formatSection("Eggs (Last Seen)", data.lastSeen?.Eggs);
+  const eggs = await formatSection("eggs", data.egg?.items, "egg");
+  const seeds = await formatSection("seeds", data.seed?.items, "seed");
+  const gear = await formatSection("gear", data.gear?.items, "gear");
+  const cosmetics = await formatSection("cosmetics", data.cosmetics?.items, "cosmetics");
 
   const stockMsg = `
 🌱 𝗔𝘂𝘁𝗼 𝗥𝗲𝘀𝘁𝗼𝗰𝗸 🌱
@@ -99,21 +140,11 @@ ${gear}
 
 💄 𝗖𝗼𝘀𝗺𝗲𝘁𝗶𝗰𝘀
 ${cosmetics}
-
-📌 𝗟𝗮𝘀𝘁 𝗦𝗲𝗲𝗻
-${lastSeeds}
-
-${lastGears}
-
-${lastWeather}
-
-${lastEggs}
 ──────────────────────
   `.trim();
 
   api.sendMessage(stockMsg, threadID);
 
-  // Special items alert
   const allItems = [
     ...(data.egg?.items || []),
     ...(data.seed?.items || []),
@@ -138,37 +169,32 @@ ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity})`).join("\n")}
   }
 }
 
-// Start auto-stock for a GC
 async function startAutoStock(threadID, api) {
-  if (autoStockTimers[threadID]) return; // prevent duplicate timers
+  if (autoStockTimers[threadID]) return;
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min(now);
   const delay = next.getTime() - now.getTime();
 
   setTimeout(() => {
-    sendStock(threadID, api); // first send
+    sendStock(threadID, api);
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
 }
 
-// Command: /stock
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
-  // Prevent duplicate manual usage
   if (gcData.enabled && option && option !== "off" && option !== "check") {
     return api.sendMessage("⚠️ Auto-stock is already active. No need to use /stock manually.", threadID, messageID);
   }
 
   if (option === "on") {
     if (gcData.enabled) return api.sendMessage("⚠️ Auto-stock already enabled.", threadID, messageID);
-
     gcData.enabled = true;
     await setData(`stock/${threadID}`, gcData);
-
     startAutoStock(threadID, api);
     return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes aligned to the next restock.", threadID, messageID);
   }
@@ -176,12 +202,10 @@ module.exports.run = async function({ api, event, args }) {
   if (option === "off") {
     gcData.enabled = false;
     await setData(`stock/${threadID}`, gcData);
-
     if (autoStockTimers[threadID]) {
       clearInterval(autoStockTimers[threadID]);
       delete autoStockTimers[threadID];
     }
-
     return api.sendMessage("❌ Auto-stock disabled.", threadID, messageID);
   }
 
@@ -193,7 +217,6 @@ module.exports.run = async function({ api, event, args }) {
   api.sendMessage("⚠️ Usage: /stock on|off|check", threadID, messageID);
 };
 
-// Auto-resume all enabled GCs on bot restart
 module.exports.onLoad = async function({ api }) {
   const allGCs = (await getData("stock")) || {};
   for (const tid in allGCs) {
