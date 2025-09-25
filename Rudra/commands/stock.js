@@ -1,12 +1,12 @@
-const axios = require("axios");
+const https = require("https");
 const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stock",
-  version: "6.4.0",
+  version: "6.7.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Grow a Garden auto-stock with correct 5-min alignment and unique emojis",
+  description: "GrowAGarden auto-stock with dynamic emojis and live alerts",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
@@ -24,26 +24,7 @@ const SPECIAL_ITEMS = [
 
 const autoStockTimers = {};
 
-const DEFAULT_EMOJIS = {
-  seed: "🌱",
-  egg: "🥚",
-  gear: "🛠️",
-  cosmetics: "💄"
-};
-
-const ITEM_EMOJIS = {
-  "Carrot Seed": "🥕",
-  "Tomato Seed": "🍅",
-  "Lettuce Seed": "🥬",
-  "Chicken Egg": "🐔",
-  "Duck Egg": "🦆",
-  "Watering Can": "💧",
-  "Grandmaster Sprinkler": "💦",
-  "Cosmetic Hat": "🎩",
-  "Cosmetic Bag": "👜"
-};
-
-function guessEmoji(name, category) {
+function guessEmojiFromName(name, category) {
   const lower = name.toLowerCase();
   const keywords = {
     carrot: "🥕",
@@ -58,26 +39,27 @@ function guessEmoji(name, category) {
     bag: "👜",
     lollipop: "🍭",
     toy: "🧸",
-    treat: "🍪"
+    treat: "🍪",
+    flower: "🌸",
+    fruit: "🍓",
+    seed: "🌱",
+    candy: "🍬",
+    chocolate: "🍫",
+    potion: "🧪",
+    box: "📦"
   };
-  for (let key in keywords) if (lower.includes(key)) return keywords[key];
-  return DEFAULT_EMOJIS[category] || "❔";
-}
 
-async function fetchGardenData() {
-  try {
-    const res = await axios.get("https://gagstock.gleeze.com/grow-a-garden");
-    return res.data?.data || {};
-  } catch {
-    return null;
-  }
+  for (const key in keywords) if (lower.includes(key)) return keywords[key];
+
+  const DEFAULT_EMOJIS = { seed: "🌱", egg: "🥚", gear: "🛠️", cosmetics: "💄" };
+  return DEFAULT_EMOJIS[category] || "❔";
 }
 
 async function saveNewItem(item, category) {
   const path = `stock/items/${category}/${item.name}`;
   const existing = await getData(path);
   if (!existing) {
-    const emoji = ITEM_EMOJIS[item.name] || guessEmoji(item.name, category);
+    const emoji = guessEmojiFromName(item.name, category);
     await setData(path, { name: item.name, emoji });
     console.log(`🆕 New item added: ${emoji} ${item.name} (${category})`);
     return emoji;
@@ -86,13 +68,48 @@ async function saveNewItem(item, category) {
 }
 
 async function formatSection(title, items, category) {
-  if (!items || items.length === 0) return `❌ No ${title}`;
+  if (!items || items.length === 0) return [`❌ No ${title}`];
   const lines = [];
   for (let i of items) {
     const emoji = await saveNewItem(i, category);
-    lines.push(`• ${emoji} ${i.name} (${i.quantity})`);
+    lines.push(`• ${emoji} ${i.name} (${i.value ?? i.quantity ?? "N/A"})`);
   }
-  return lines.join("\n");
+
+  // Split into multiple messages if too many items
+  const CHUNK_SIZE = 20;
+  const chunks = [];
+  for (let i = 0; i < lines.length; i += CHUNK_SIZE) {
+    chunks.push(lines.slice(i, i + CHUNK_SIZE).join("\n"));
+  }
+  return chunks;
+}
+
+function fetchStocks() {
+  const options = {
+    method: "GET",
+    hostname: "growagarden.gg",
+    path: "/api/stock",
+    headers: {
+      accept: "*/*",
+      "content-type": "application/json",
+      referer: "https://growagarden.gg/stocks"
+    }
+  };
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on("data", chunk => chunks.push(chunk));
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    req.on("error", e => reject(e));
+    req.end();
+  });
 }
 
 function getNext5Min(date = null) {
@@ -111,58 +128,50 @@ function getNext5Min(date = null) {
 }
 
 async function sendStock(threadID, api) {
-  const data = await fetchGardenData();
+  const data = await fetchStocks();
   if (!data) return;
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min();
 
-  const eggs = await formatSection("eggs", data.egg?.items, "egg");
-  const seeds = await formatSection("seeds", data.seed?.items, "seed");
-  const gear = await formatSection("gear", data.gear?.items, "gear");
-  const cosmetics = await formatSection("cosmetics", data.cosmetics?.items, "cosmetics");
+  const gearChunks = await formatSection("Gear", data.gearStock, "gear");
+  const eggChunks = await formatSection("Eggs", data.eggStock, "egg");
+  const cosmeticsChunks = await formatSection("Cosmetics", data.cosmeticsStock, "cosmetics");
+  const seedChunks = await formatSection("Seeds", data.seedsStock, "seed");
 
-  const stockMsg = `
-🌱 𝗔𝘂𝘁𝗼 𝗥𝗲𝘀𝘁𝗼𝗰𝗸 🌱
-──────────────────────
-🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
-🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
-──────────────────────
-
-🥚 𝗘𝗴𝗴𝘀
-${eggs}
-
-🌾 𝗦𝗲𝗲𝗱𝘀
-${seeds}
-
-🛠️ 𝗚𝗲𝗮𝗿
-${gear}
-
-💄 𝗖𝗼𝘀𝗺𝗲𝘁𝗶𝗰𝘀
-${cosmetics}
-──────────────────────
-  `.trim();
-
-  api.sendMessage(stockMsg, threadID);
-
-  const allItems = [
-    ...(data.egg?.items || []),
-    ...(data.seed?.items || []),
-    ...(data.gear?.items || []),
-    ...(data.cosmetics?.items || [])
+  const sections = [
+    { title: "🛠️ Gear", chunks: gearChunks },
+    { title: "🥚 Eggs", chunks: eggChunks },
+    { title: "💄 Cosmetics", chunks: cosmeticsChunks },
+    { title: "🌱 Seeds", chunks: seedChunks }
   ];
+
+  for (const section of sections) {
+    for (const msg of section.chunks) {
+      api.sendMessage(`${section.title}\n${msg}`, threadID);
+    }
+  }
+
+  // Special items
+  const allItems = [
+    ...(data.gearStock || []),
+    ...(data.eggStock || []),
+    ...(data.cosmeticsStock || []),
+    ...(data.seedsStock || [])
+  ];
+
   const foundSpecial = allItems.filter(i =>
     SPECIAL_ITEMS.some(si => i.name.toLowerCase().includes(si.toLowerCase()))
   );
 
   if (foundSpecial.length > 0) {
     const specialMsg = `
-🚨 𝗡𝗲𝘄 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 🚨
+🚨 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 🚨
 ──────────────────────
 🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
 🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
 ──────────────────────
-${foundSpecial.map(i => `✨ ${i.name} (${i.quantity})`).join("\n")}
+${foundSpecial.map(i => `✨ ${i.name} (${i.value ?? i.quantity ?? "N/A"})`).join("\n")}
 ──────────────────────
     `.trim();
     api.sendMessage(specialMsg, threadID);
@@ -171,7 +180,6 @@ ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity})`).join("\n")}
 
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
-
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min(now);
   const delay = next.getTime() - now.getTime();
@@ -188,7 +196,7 @@ module.exports.run = async function({ api, event, args }) {
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
   if (gcData.enabled && option && option !== "off" && option !== "check") {
-    return api.sendMessage("⚠️ Auto-stock is already active. No need to use /stock manually.", threadID, messageID);
+    return api.sendMessage("⚠️ Auto-stock is already active.", threadID, messageID);
   }
 
   if (option === "on") {
@@ -196,7 +204,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`stock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes aligned to the next restock.", threadID, messageID);
+    return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes.", threadID, messageID);
   }
 
   if (option === "off") {
