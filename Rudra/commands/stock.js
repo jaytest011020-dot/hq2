@@ -26,7 +26,7 @@ const SPECIAL_ITEMS = [
   "Medium Toy"
 ];
 
-// Emoji mapping for seeds, eggs, gear, cosmetics
+// Emoji mapping
 const ITEM_EMOJI = {
   // Seeds
   "Carrot": "🥕", "Strawberry": "🍓", "Blueberry": "🫐", "Orange Tulip": "🌷",
@@ -77,12 +77,12 @@ const ITEM_EMOJI = {
   "Shovel": "⛏️", "Rock Pile": "🪨", "Rake": "🧹", "Compost Bin": "🗑️"
 };
 
-// Helper: assign emoji to item
+// Get emoji helper
 function getEmoji(name) {
   return ITEM_EMOJI[name] || "❔";
 }
 
-// Helper: get next 5-minute aligned restock
+// Get next 5-min aligned restock
 function getNext5Min(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
@@ -96,36 +96,29 @@ function getNext5Min(date = null) {
     next.setMinutes(nextMinutes % 60);
   }
   return next;
-  } 
-// Fetch stock data from API
+}
+
+// Fetch stock from API
 function fetchStocks() {
   const options = {
     method: "GET",
     hostname: "growagarden.gg",
     path: "/api/stock",
-    headers: {
-      accept: "*/*",
-      "content-type": "application/json",
-      referer: "https://growagarden.gg/stocks"
-    }
+    headers: { accept: "*/*", "content-type": "application/json", referer: "https://growagarden.gg/stocks" }
   };
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       const chunks = [];
       res.on("data", chunk => chunks.push(chunk));
       res.on("end", () => {
-        try {
-          resolve(JSON.parse(Buffer.concat(chunks).toString()));
-        } catch (err) {
-          reject(err);
-        }
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+        catch (err) { reject(err); }
       });
     });
     req.on("error", e => reject(e));
     req.end();
   });
-}
-
+} 
 // Format a section (gear, eggs, seeds, cosmetics)
 async function formatSection(title, items) {
   if (!items || items.length === 0) return [`❌ No ${title}`];
@@ -138,7 +131,8 @@ async function formatSection(title, items) {
     chunks.push(lines.slice(i, i + CHUNK_SIZE).join("\n"));
   }
   return chunks;
-} 
+}
+
 // Send stock update to thread
 async function sendStock(threadID, api) {
   const data = await fetchStocks();
@@ -194,9 +188,7 @@ async function startAutoStock(threadID, api) {
     sendStock(threadID, api);
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
-}
-
-// Run command
+                                        } 
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
