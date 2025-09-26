@@ -1,4 +1,5 @@
 const axios = require("axios");
+const https = require("https");
 const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
@@ -95,9 +96,7 @@ function getNext5Min(date = null) {
     next.setMinutes(nextMinutes % 60);
   }
   return next;
-} 
-const https = require("https");
-
+  } 
 // Fetch stock data from API
 function fetchStocks() {
   const options = {
@@ -139,8 +138,7 @@ async function formatSection(title, items) {
     chunks.push(lines.slice(i, i + CHUNK_SIZE).join("\n"));
   }
   return chunks;
-}
-
+} 
 // Send stock update to thread
 async function sendStock(threadID, api) {
   const data = await fetchStocks();
@@ -196,7 +194,9 @@ async function startAutoStock(threadID, api) {
     sendStock(threadID, api);
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
-} 
+}
+
+// Run command
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
