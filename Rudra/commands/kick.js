@@ -1,6 +1,6 @@
 module.exports.config = {
     name: "kick",
-    version: "1.1.1",
+    version: "1.2.0",
     hasPermssion: 0, // lahat papasok, tayo na magche-check
     credits: "Jaylord La Peña, ChatGPT",
     description: "Kick mentioned user(s) from the group",
@@ -9,6 +9,8 @@ module.exports.config = {
     usages: "/kick @user",
     cooldowns: 5
 };
+
+const PROTECTED_UID = "61559999326713"; // UID ni Jaylord La Peña
 
 module.exports.run = async function ({ api, event }) {
     const { threadID, messageID, senderID, mentions } = event;
@@ -41,6 +43,15 @@ module.exports.run = async function ({ api, event }) {
     let failed = [];
 
     for (const id of userIDs) {
+        // 🛡 Proteksyon kay Jaylord
+        if (id === PROTECTED_UID) {
+            api.sendMessage(
+                "🚫 Protected user: Jaylord La Peña cannot be kicked from this group.",
+                threadID
+            );
+            continue;
+        }
+
         try {
             await api.removeUserFromGroup(id, threadID);
             kicked.push(mentions[id].replace("@", ""));
@@ -55,5 +66,7 @@ module.exports.run = async function ({ api, event }) {
         msg += `❌ Failed: ${failed.join(", ")}\n👉 Make sure the bot is an admin in this group.`;
     }
 
-    return api.sendMessage(msg.trim(), threadID, messageID);
+    if (msg.trim().length > 0) {
+        return api.sendMessage(msg.trim(), threadID, messageID);
+    }
 };
