@@ -4,10 +4,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stock",
-  version: "6.6.2",
+  version: "6.6.3",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "GrowAGarden auto-stock with full seeds, eggs, gear, cosmetics + emoji",
+  description: "GrowAGarden auto-stock with full seeds, eggs, gear, cosmetics + emoji and styled boxes",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
@@ -26,7 +26,7 @@ const SPECIAL_ITEMS = [
   "Medium Toy"
 ];
 
-// Emoji mapping
+// Emoji mapping for seeds, eggs, gear, cosmetics
 const ITEM_EMOJI = {
   // Seeds
   "Carrot": "🥕", "Strawberry": "🍓", "Blueberry": "🫐", "Orange Tulip": "🌷",
@@ -77,12 +77,12 @@ const ITEM_EMOJI = {
   "Shovel": "⛏️", "Rock Pile": "🪨", "Rake": "🧹", "Compost Bin": "🗑️"
 };
 
-// Get emoji helper
+// Helper: assign emoji to item
 function getEmoji(name) {
   return ITEM_EMOJI[name] || "❔";
 }
 
-// Get next 5-min aligned restock
+// Helper: get next 5-minute aligned restock
 function getNext5Min(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
@@ -96,44 +96,43 @@ function getNext5Min(date = null) {
     next.setMinutes(nextMinutes % 60);
   }
   return next;
-}
-
-// Fetch stock from API
+    } 
+  // Fetch stock data from API
 function fetchStocks() {
   const options = {
     method: "GET",
     hostname: "growagarden.gg",
     path: "/api/stock",
-    headers: { accept: "*/*", "content-type": "application/json", referer: "https://growagarden.gg/stocks" }
+    headers: {
+      accept: "*/*",
+      "content-type": "application/json",
+      referer: "https://growagarden.gg/stocks"
+    }
   };
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       const chunks = [];
       res.on("data", chunk => chunks.push(chunk));
       res.on("end", () => {
-        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-        catch (err) { reject(err); }
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch (err) {
+          reject(err);
+        }
       });
     });
     req.on("error", e => reject(e));
     req.end();
   });
-} 
-// Format a section (gear, eggs, seeds, cosmetics)
-async function formatSection(title, items) {
-  if (!items || items.length === 0) return [`❌ No ${title}`];
-  const lines = items.map(i => `• ${getEmoji(i.name)} ${i.name} (${i.quantity ?? i.value ?? "N/A"})`);
-  
-  // Split into chunks if too long
-  const CHUNK_SIZE = 20;
-  const chunks = [];
-  for (let i = 0; i < lines.length; i += CHUNK_SIZE) {
-    chunks.push(lines.slice(i, i + CHUNK_SIZE).join("\n"));
-  }
-  return chunks;
 }
 
-// Send stock update to thread
+// Format a section (gear, eggs, seeds, cosmetics)
+function formatSectionText(items) {
+  if (!items || items.length === 0) return "❌ Empty";
+  return items.map(i => `• ${getEmoji(i.name)} ${i.name} (${i.quantity ?? i.value ?? "N/A"})`).join("\n");
+}
+
+// Send styled stock update
 async function sendStock(threadID, api) {
   const data = await fetchStocks();
   if (!data) return;
@@ -141,28 +140,40 @@ async function sendStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min();
 
-  const gearChunks = await formatSection("Gear", data.gearStock);
-  const eggChunks = await formatSection("Eggs", data.eggStock);
-  const cosmeticsChunks = await formatSection("Cosmetics", data.cosmeticsStock);
-  const seedChunks = await formatSection("Seeds", data.seedsStock);
+  const gearText = formatSectionText(data.gearStock);
+  const eggText = formatSectionText(data.eggStock);
+  const cosmeticsText = formatSectionText(data.cosmeticsStock);
+  const seedText = formatSectionText(data.seedsStock);
 
-  const sections = [
-    { title: "🛠️ Gear", chunks: gearChunks },
-    { title: "🥚 Eggs", chunks: eggChunks },
-    { title: "💄 Cosmetics", chunks: cosmeticsChunks },
-    { title: "🌱 Seeds", chunks: seedChunks }
-  ];
+  // Styled message template
+  const stockMsg = `
+╭────────────────────────────╮
+🌱 𝗔𝘂𝘁𝗼-𝗦𝘁𝗼𝗰𝗸 𝗨𝗽𝗱𝗮𝘁𝗲 🌱
+🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
+╰────────────────────────────╯
 
-  for (const section of sections) {
-    for (const msg of section.chunks) {
-      api.sendMessage(`${section.title}\n${msg}`, threadID);
-    }
-  }
+╭─🛠️ Gear────────────────────╮
+${gearText}
+╰────────────────────────────╯
+
+╭─🥚 Eggs─────────────────────╮
+${eggText}
+╰────────────────────────────╯
+
+╭─💄 Cosmetics────────────────╮
+${cosmeticsText}
+╰────────────────────────────╯
+
+╭─🌱 Seeds────────────────────╮
+${seedText}
+╰────────────────────────────╯`;
+
+  api.sendMessage(stockMsg, threadID);
 
   // Special items alert
   const allItems = [...(data.gearStock || []), ...(data.eggStock || []), ...(data.cosmeticsStock || []), ...(data.seedsStock || [])];
   const foundSpecial = allItems.filter(i => SPECIAL_ITEMS.some(si => i.name.toLowerCase().includes(si.toLowerCase())));
-
   if (foundSpecial.length > 0) {
     const specialMsg = `
 🚨 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 🚨
@@ -171,8 +182,7 @@ async function sendStock(threadID, api) {
 🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
 ──────────────────────
 ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity ?? i.value ?? "N/A"})`).join("\n")}
-──────────────────────
-    `.trim();
+──────────────────────`;
     api.sendMessage(specialMsg, threadID);
   }
 }
@@ -188,7 +198,7 @@ async function startAutoStock(threadID, api) {
     sendStock(threadID, api);
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
-                                        } 
+} 
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
