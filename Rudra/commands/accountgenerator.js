@@ -4,7 +4,7 @@
 const { format } = require("util");
 
 module.exports.config = {
-  name: "gencreds",
+  name: "accountgenerator",
   version: "1.2.0",
   hasPermssion: 0,
   credits: "ChatGPT + You",
