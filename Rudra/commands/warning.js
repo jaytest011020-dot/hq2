@@ -85,34 +85,38 @@ module.exports.config = {
   credits: "ChatGPT + NN",
   description: "Auto warning system with per-thread DB + Admin notify",
   commandCategory: "system",
-  usages: "/warning check @mention | /warning list",
+  usages: `
+📌 /warning list
+   - View warning list for the thread (anyone can use)
+
+⚠️ /warning reset all
+   - Reset warnings for all users (ADMIN ONLY)
+
+⚠️ /warning reset @mention
+   - Reset warnings for mentioned user(s) (ADMIN ONLY)
+`,
   cooldowns: 5
 };
 
-// COMMANDS: /warning check and list
-module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID, mentions } = event;
+// Helper to send help text
+const sendHelp = async (api, threadID, messageID) => {
+  return api.sendMessage(module.exports.config.usages, threadID, messageID);
+};
 
-  if (!args.length) {
-    return api.sendMessage("❌ Usage: /warning check @mention | /warning list", threadID, messageID);
-  }
+// COMMANDS: /warning list, reset
+module.exports.run = async function({ api, event, args }) {
+  const { threadID, messageID, mentions, senderID } = event;
+
+  // If no arguments, show help
+  if (!args.length) return sendHelp(api, threadID, messageID);
 
   const sub = args[0].toLowerCase();
 
-  // /warning check
-  if (sub === "check") {
-    const uid = Object.keys(mentions)[0];
-    if (!uid) return api.sendMessage("❌ Please mention a user.", threadID, messageID);
-
-    const warnings = await getData(`warnings/${threadID}/${uid}`) || { count: 0 };
-    const name = await getUserName(uid, api);
-
-    return api.sendMessage(
-      `👤 User: ${name}\n⚠️ Warning Count: ${warnings.count}`,
-      threadID,
-      messageID
-    );
-  }
+  // Check if sender is admin
+  const isAdmin = async () => {
+    const threadInfo = await api.getThreadInfo(threadID);
+    return threadInfo.adminIDs.some(a => a.id === senderID);
+  };
 
   // /warning list
   if (sub === "list") {
@@ -133,6 +137,40 @@ module.exports.run = async function({ api, event, args }) {
 
     return api.sendMessage(msg, threadID, messageID);
   }
+
+  // /warning reset
+  if (sub === "reset") {
+    if (!(await isAdmin())) {
+      return api.sendMessage("❌ Only admins can reset warnings.", threadID, messageID);
+    }
+
+    const nextArg = args[1]?.toLowerCase();
+
+    // Reset all warnings
+    if (nextArg === "all") {
+      const all = await getData(`warnings/${threadID}/_all`) || [];
+      for (const uid of all) {
+        await setData(`warnings/${threadID}/${uid}`, { count: 0, lastUpdated: Date.now() });
+      }
+      return api.sendMessage("✅ All warnings have been reset for this thread.", threadID, messageID);
+    }
+
+    // Reset mentioned user(s)
+    const uids = Object.keys(mentions);
+    if (uids.length > 0) {
+      for (const uid of uids) {
+        await setData(`warnings/${threadID}/${uid}`, { count: 0, lastUpdated: Date.now() });
+      }
+      const names = await Promise.all(uids.map(uid => getUserName(uid, api)));
+      return api.sendMessage(`✅ Reset warnings for: ${names.join(", ")}`, threadID, messageID);
+    }
+
+    // Invalid usage
+    return sendHelp(api, threadID, messageID);
+  }
+
+  // Invalid subcommand
+  return sendHelp(api, threadID, messageID);
 };
 
 // AUTO-DETECTION + AUTO-KICK + 24H RESET
