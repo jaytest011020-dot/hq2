@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "6.0.0",
+  version: "6.1.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
   description: "Auto detect WFL trades and calculate points",
@@ -35,6 +35,8 @@ const PET_NICKNAMES = {
   "corrupted kitsune": ["corrupted kitsune", "ckit", "c kit"],
   "red fox": ["red fox", "rf"], 
   "sea turtle": ["sea turtle", "sea turt", "sea tur"], 
+  "shiba inu": ["shiba inu", "shiba"], 
+  "butterfly": ["butterfly", "bff"], 
 };
 
 // Mutation points
@@ -64,13 +66,30 @@ function findPetName(input, petPrices) {
   let match = null, longest = 0;
   for (let pet in PET_NICKNAMES) {
     for (let nick of PET_NICKNAMES[pet]) {
-      if (lowered.startsWith(nick) && nick.length > longest) {
+      if (lowered.includes(nick) && nick.length > longest) { // changed startsWith -> includes
         match = pet;
         longest = nick.length;
       }
     }
   }
   return match;
+}
+
+// Mutation detection (rainbow nickname supported)
+function detectMutation(line) {
+  for (let mut in MUTATION_POINTS) {
+    if (mut !== "rainbow" && new RegExp(`\\b${mut}\\b`, "i").test(line)) return mut;
+  }
+  if (/\brb\b/i.test(line) || /\brainbow\b/i.test(line)) return "rainbow";
+  return null;
+}
+
+// Size detection
+function detectSize(line) {
+  for (let s in SIZE_POINTS) {
+    if (new RegExp(`\\b${s}\\b`, "i").test(line)) return s;
+  }
+  return null;
 }
 
 // Parse pets mula sa text
@@ -82,7 +101,7 @@ function parsePets(text, petPrices) {
     line = line.trim();
     if (!line) continue;
 
-    // Quantity
+    // Quantity (number na puwede dikit sa pet)
     let quantity = 1;
     const qtyMatch = line.match(/^(\d+)/);
     if (qtyMatch) quantity = parseInt(qtyMatch[1]);
@@ -95,22 +114,10 @@ function parsePets(text, petPrices) {
     else if (maxMatch) kg = parseInt(maxMatch[1]); // only if kg not present
 
     // Mutation
-    let mutation = null;
-    for (let mut in MUTATION_POINTS) {
-      if (new RegExp(`\\b${mut}\\b`, "i").test(line)) {
-        mutation = mut;
-        break;
-      }
-    }
+    const mutation = detectMutation(line);
 
     // Size
-    let size = null;
-    for (let s in SIZE_POINTS) {
-      if (new RegExp(`\\b${s}\\b`, "i").test(line)) {
-        size = s;
-        break;
-      }
-    }
+    const size = detectSize(line);
 
     // Detect multiple pets (token scanning)
     const tokens = line.split(/\s+/);
@@ -123,7 +130,7 @@ function parsePets(text, petPrices) {
         const petName = findPetName(slice, petPrices);
         if (petName) {
           foundPet = petName;
-          index += len - 1; // move index past matched name
+          index += len - 1;
           break;
         }
         len--;
@@ -144,6 +151,7 @@ function parsePets(text, petPrices) {
   return pets;
 }
 
+// ---------------- Calculate Points ---------------- //
 function calculatePoints(pets) {
   let totalPoints = 0; // mutation + kg + size
   let totalValue = 0;  // basePrice + mutation + kg + size
