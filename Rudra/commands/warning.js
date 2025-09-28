@@ -8,7 +8,7 @@ const badwords = [
   "tanga", "bobo", "gago", "puta", "pakyu", "inutil", "ulol",
   "fuck", "shit", "asshole", "bitch", "dumb", "stupid", "motherfucker",
   "laplap", "pota", "inamo", "tangina", "tang ina", "kantut", "kantot",
-  "jakol", "jakul", "jabol", "supot", "blow job", "blowjob", "puke", "puki", "baliw"
+  "jakol", "jakul", "jabol", "supot", "blow job", "blowjob", "puke", "bata", "puki", "baliw"
 ];
 
 const racistWords = [
