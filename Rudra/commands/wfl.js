@@ -33,6 +33,7 @@ const PET_NICKNAMES = {
   pachycephalosaurus: ["pachycephalosaurus", "pachy"], 
   stegosaurus: ["stegosaurus", "stego"], 
   Triceratops: ["triceratops", "trice"], 
+  "corrupted kitsune": ["corrupted kitsune", "ckit", "c kit"], 
 };
 
 // Mutation points
