@@ -34,6 +34,7 @@ const PET_NICKNAMES = {
   stegosaurus: ["stegosaurus", "stego"], 
   "corrupted kitsune": ["corrupted kitsune", "ckit", "c kit"],
   "red fox": ["red fox", "rf"], 
+  "sea turtle": ["sea turtle", "sea turt", "sea tur"], 
 };
 
 // Mutation points
