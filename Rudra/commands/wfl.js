@@ -2,11 +2,11 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "1.0.6",
+  version: "1.0.7",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Win or Lose calculator para sa Grow a Garden Roblox pets",
-  usePrefix: false, // auto-detect sa message
+  usePrefix: false,
   commandCategory: "gag tools",
   usages: "Auto WFL detection sa chat",
   cooldowns: 5,
@@ -42,7 +42,7 @@ const MUTATION_VALUES = {
 // Pet prices (load from DB)
 let PET_PRICES = {};
 
-// Helper: detect mutation
+// Helper: detect mutation (kahit partial word)
 function detectMutation(word) {
   word = word.toLowerCase();
   for (let m in MUTATION_VALUES) {
@@ -125,7 +125,6 @@ function parseTradeMessage(msg) {
 
   for (let line of lines) {
     line = line.trim();
-    // Flexible Me/Him detection
     if (/^\s*me\b/i.test(line)) {
       const petPart = line.replace(/^\s*me\b\s*:?\s*/i, "");
       mePets.push(...parseMultiplePets(petPart));
@@ -179,7 +178,9 @@ module.exports.run = async function({ api, event }) {
   // Parse trade message
   const { mePets, himPets } = parseTradeMessage(body);
 
-  if (mePets.length === 0 && himPets.length === 0) {
+  // Check if **walang valid pets** sa database
+  const noValidPets = mePets.every(p => !p.petName) && himPets.every(p => !p.petName);
+  if (noValidPets) {
     return api.sendMessage("⚠️ Wala pang pets na nade-detect sa database.", threadID);
   }
 
@@ -195,7 +196,7 @@ module.exports.run = async function({ api, event }) {
   if (meCalc.total > himCalc.total) 
     resultMsg += "😢 Lose! Mas mataas ang value ng ibibigay mo sa kanya.";
   else if (meCalc.total < himCalc.total) 
-    resultMsg += "🎉 Win! Mas mataas ang value ng ibibigay niya sa iyo!";
+    resultMsg += "🎉 Win! Mas mataas ang value ng ibinigay niya sa iyo!";
   else 
     resultMsg += "⚖️ Draw! Pantay ang value ng ibinigay.";
 
