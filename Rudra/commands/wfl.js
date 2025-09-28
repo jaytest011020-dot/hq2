@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "5.0.0",
+  version: "6.0.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
   description: "Auto detect WFL trades and calculate points",
@@ -32,17 +32,27 @@ const PET_NICKNAMES = {
   dilophosaurus: ["dilophosaurus", "dilo"], 
   pachycephalosaurus: ["pachycephalosaurus", "pachy"], 
   stegosaurus: ["stegosaurus", "stego"], 
-  Triceratops: ["triceratops", "trice"], 
   "corrupted kitsune": ["corrupted kitsune", "ckit", "c kit"],
   "red fox": ["red fox", "rf"], 
 };
 
 // Mutation points
 const MUTATION_POINTS = {
-  shiny: 1, inverted: 1, frozen: 1, windy: 1,
-  golden: 2, tiny: 1, "iron skin": 2, radiant: 2,
-  rainbow: 3, shocked: 3, giantbean: 3,
-  ascended: 4, mega: 5,
+  shiny: 5, inverted: 5, frozen: 5, windy: 5,
+  golden: 50, tiny: 5, "iron skin": 5, radiant: 5,
+  rainbow: 100, shocked: 50, giantbean: 10,
+  ascended: 100, mega: 200,
+};
+
+// Size points
+const SIZE_POINTS = {
+  small: 0,
+  cute: 0,
+  gs: 50,
+  "good size": 50,
+  huge: 200,
+  titanic: 300,
+  godly: 400,
 };
 
 // ---------------- Helper Functions ---------------- //
@@ -62,6 +72,7 @@ function findPetName(input, petPrices) {
   return match;
 }
 
+// Parse pets mula sa text
 function parsePets(text, petPrices) {
   const pets = [];
   const lines = text.split(/\n/);
@@ -91,6 +102,15 @@ function parsePets(text, petPrices) {
       }
     }
 
+    // Size
+    let size = null;
+    for (let s in SIZE_POINTS) {
+      if (new RegExp(`\\b${s}\\b`, "i").test(line)) {
+        size = s;
+        break;
+      }
+    }
+
     // Detect multiple pets (token scanning)
     const tokens = line.split(/\s+/);
     let index = 0;
@@ -114,6 +134,7 @@ function parsePets(text, petPrices) {
           basePrice: petPrices[foundPet] || 0,
           kg,
           mutation,
+          size,
         });
       }
       index++;
@@ -123,23 +144,26 @@ function parsePets(text, petPrices) {
 }
 
 function calculatePoints(pets) {
-  let totalPoints = 0; // mutation + kg
-  let totalValue = 0;  // basePrice + mutation + kg
+  let totalPoints = 0; // mutation + kg + size
+  let totalValue = 0;  // basePrice + mutation + kg + size
   const breakdown = [];
 
   for (let p of pets) {
     const mutPoints = p.mutation ? MUTATION_POINTS[p.mutation] : 0;
     const kgPoints = p.kg || 0;
-    const pointsOnly = mutPoints + kgPoints;
+    const sizePoints = p.size ? SIZE_POINTS[p.size] : 0;
+
+    const pointsOnly = mutPoints + kgPoints + sizePoints;
     totalPoints += pointsOnly;
 
     const baseValue = p.basePrice * p.quantity;
     totalValue += baseValue + pointsOnly;
 
     breakdown.push(
-      `• ${p.quantity} ${p.mutation ? p.mutation + " " : ""}${p.name} (₱${p.basePrice} each normal price)\n` +
+      `• ${p.quantity} ${p.mutation ? p.mutation + " " : ""}${p.name} (₱${p.basePrice} each)\n` +
       (p.mutation ? `   Mutation: ${p.mutation} = ${mutPoints} pts\n` : "") +
-      (p.kg ? `   KG: ${p.kg} = ${kgPoints} pts\n` : "")
+      (p.kg ? `   KG: ${p.kg} = ${kgPoints} pts\n` : "") +
+      (p.size ? `   Size: ${p.size} = ${sizePoints} pts\n` : "")
     );
   }
 
