@@ -1,11 +1,11 @@
-const { getData, setData } = require("../../database.js");
+const { getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "1.0.0",
+  version: "2.0.0",
   hasPermission: 0,
-  credits: "ChatGPT",
-  description: "Auto detect WFL trades and calculate",
+  credits: "ChatGPT + Jaylord La Peña",
+  description: "Auto detect WFL trades and calculate points",
   commandCategory: "Trading",
   usages: "/wfl on | /wfl off | /wfl status",
   cooldowns: 0,
@@ -17,24 +17,19 @@ async function getWflStatus(threadID) {
   if (typeof data.enabled === "undefined") return true;
   return data.enabled;
 }
-async function setWflStatus(threadID, status) {
-  let data = (await getData(`wflStatus/${threadID}`)) || {};
-  data.enabled = status;
-  await setData(`wflStatus/${threadID}`, data);
-}
 
 // 🔎 Helper functions
 function parsePets(text, petPrices) {
-  let pets = [];
-  let section = text.split(/\n/i);
+  const pets = [];
+  const lines = text.split(/\n/i);
 
-  for (let line of section) {
-    let quantityMatch = line.match(/(\d+)\s+/);
-    let kgMatch = line.match(/(\d+)\s*kg/i);
-    let mutationMatch = line.match(/\b(mega|giga|shiny|dark)\b/i);
+  for (let line of lines) {
+    const quantityMatch = line.match(/(\d+)\s+/);
+    const kgMatch = line.match(/(\d+)\s*kg/i);
+    const mutationMatch = line.match(/\b(mega|giga|shiny|dark)\b/i);
 
     for (let pet in petPrices) {
-      let regex = new RegExp(`\\b${pet}\\b`, "i");
+      const regex = new RegExp(`\\b${pet}\\b`, "i");
       if (regex.test(line)) {
         pets.push({
           name: pet,
@@ -51,26 +46,27 @@ function parsePets(text, petPrices) {
 
 function calculatePoints(pets) {
   let total = 0;
-  let breakdown = [];
+  const breakdown = [];
 
   for (let p of pets) {
-    let petValue = p.basePrice * p.quantity;
-    total += petValue;
+    const petValue = p.basePrice * p.quantity; // para sa percentage calculation
+    const mutationPoints = p.mutation ? 50 : 0;
+    const kgPoints = p.kg ? Math.floor(p.kg / 10) : 0;
+    const pointsOnly = mutationPoints + kgPoints;
 
-    let mutationPoints = p.mutation ? 50 : 0;
-    let kgPoints = p.kg ? Math.floor(p.kg / 10) : 0;
-    total += mutationPoints + kgPoints;
+    total += pointsOnly + petValue; // include basePrice sa calculation pero hindi ipapakita sa breakdown
 
     breakdown.push(
-      `${p.quantity} ${p.mutation ? p.mutation + " " : ""}${p.name} - 💰 ${petValue} base\n` +
-      (p.mutation ? `   ➕ Mutation (${p.mutation}) = ${mutationPoints} pts\n` : "") +
-      (p.kg ? `   ➕ Weight ${p.kg}kg = ${kgPoints} pts\n` : "")
+      `${p.quantity} ${p.mutation ? p.mutation + " " : ""}${p.name} - ${p.basePrice}₱ base\n` +
+      (p.mutation ? `   Mutation (${p.mutation}) = ${mutationPoints} pts\n` : "") +
+      (p.kg ? `   Weight ${p.kg}kg = ${kgPoints} pts\n` : "")
     );
   }
 
-  return { total, breakdown };
+  return { total, breakdown, pointsOnly: total }; // pointsOnly ginagamit lang sa percentage
 }
 
+// --- HANDLE AUTO REPLY --- //
 module.exports.handleEvent = async function ({ api, event }) {
   try {
     const body = (event.body || "").trim();
@@ -87,19 +83,19 @@ module.exports.handleEvent = async function ({ api, event }) {
     // ✅ Trigger kapag may "wfl" sa kahit saan
     if (!/wfl/i.test(body)) return;
 
-    // 🗂 Get pet database
-    let petPrices = (await getData("petPrices")) || {};
+    // 🗂 Load pet database
+    const petPrices = (await getData("petPrices")) || {};
 
     // 🧹 Linisin input
-    let cleaned = body.replace(/wfl/gi, "").trim();
+    const cleaned = body.replace(/wfl/gi, "").trim();
 
-    // ✂️ Hatiin Me vs Him
-    let meText = cleaned.split(/him/i)[0].replace(/me/i, "").trim();
-    let himText = cleaned.split(/him/i)[1]?.trim() || "";
+    // ✂️ Split Me vs Him
+    const meText = cleaned.split(/him/i)[0].replace(/me/i, "").trim();
+    const himText = cleaned.split(/him/i)[1]?.trim() || "";
 
     // 🔎 Parse pets
-    let mePets = parsePets(meText, petPrices);
-    let himPets = parsePets(himText, petPrices);
+    const mePets = parsePets(meText, petPrices);
+    const himPets = parsePets(himText, petPrices);
 
     if (mePets.length === 0 && himPets.length === 0) {
       return api.sendMessage(
@@ -109,21 +105,25 @@ module.exports.handleEvent = async function ({ api, event }) {
       );
     }
 
-    // 📊 Compute
-    let meCalc = calculatePoints(mePets);
-    let himCalc = calculatePoints(himPets);
+    // 📊 Compute points
+    const meCalc = calculatePoints(mePets);
+    const himCalc = calculatePoints(himPets);
 
-    let winner = "⚖️ Tabla lang, pantay value.";
-    if (meCalc.total > himCalc.total) {
-      winner = "✅ WIN — mas mataas value ng Me.";
-    } else if (meCalc.total < himCalc.total) {
-      winner = "❌ LOSE — mas mataas value ng Him.";
-    }
+    const totalPoints = meCalc.total + himCalc.total;
+    const mePercent = totalPoints ? ((meCalc.total / totalPoints) * 100).toFixed(1) : 0;
+    const himPercent = totalPoints ? ((himCalc.total / totalPoints) * 100).toFixed(1) : 0;
 
-    let response =
-      `📊 WFL Calculation\n\n` +
-      `👤 Me (Total ${meCalc.total} pts):\n${meCalc.breakdown.join("")}\n\n` +
-      `👤 Him (Total ${himCalc.total} pts):\n${himCalc.breakdown.join("")}\n\n` +
+    // ✅ Determine winner
+    let winner = "⚖️ Tabla lang, pantay value ng pets.";
+    if (meCalc.total > himCalc.total) winner = "❌ LOSE — Mas mataas value ng pet mo.";
+    else if (meCalc.total < himCalc.total) winner = "✅ WIN — Mas mataas value ng pet ng kalaban.";
+
+    // ✨ Format response
+    const response =
+      `📊 WFL Calculation\n────────────────────────\n` +
+      `👤 Me (Points Only: ${meCalc.total} pts):\n${meCalc.breakdown.join("")}\n` +
+      `🤖 Him (Points Only: ${himCalc.total} pts):\n${himCalc.breakdown.join("")}\n` +
+      `📌 Percentage:\n• Me: ${mePercent}%\n• Him: ${himPercent}%\n\n` +
       `🔎 Resulta: ${winner}`;
 
     return api.sendMessage(response, threadID, event.messageID);
@@ -133,6 +133,7 @@ module.exports.handleEvent = async function ({ api, event }) {
   }
 };
 
+// --- MANUAL COMMAND --- //
 module.exports.run = async function ({ api, event, args }) {
   const threadID = event.threadID;
 
@@ -142,15 +143,15 @@ module.exports.run = async function ({ api, event, args }) {
 
   const choice = args[0].toLowerCase();
   if (choice === "on") {
-    await setWflStatus(threadID, true);
+    await setData(`wflStatus/${threadID}`, { enabled: true });
     return api.sendMessage("✅ WFL auto-replies are now ON.", threadID, event.messageID);
   } else if (choice === "off") {
-    await setWflStatus(threadID, false);
+    await setData(`wflStatus/${threadID}`, { enabled: false });
     return api.sendMessage("⛔ WFL auto-replies are now OFF.", threadID, event.messageID);
   } else if (choice === "status") {
-    const isOn = await getWflStatus(threadID);
+    const isOn = await getData(`wflStatus/${threadID}`);
     return api.sendMessage(
-      `📊 WFL status: ${isOn ? "✅ ON" : "⛔ OFF"}`,
+      `📊 WFL status: ${isOn?.enabled ? "✅ ON" : "⛔ OFF"}`,
       threadID,
       event.messageID
     );
