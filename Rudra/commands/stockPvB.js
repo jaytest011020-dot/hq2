@@ -1,9 +1,9 @@
-const axios = require('axios');
-const https = require('https');
-const { setData, getData } = require('../../database.js');
+const axios = require("axios");
+const https = require("https");
+const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
-  name: "stockPvB",
+  name: "stockpvb",
   version: "1.0.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
@@ -26,14 +26,14 @@ const SPECIAL_ITEMS = [
 
 // Emoji mapping for seeds and gear
 const ITEM_EMOJI = {
+  // Seeds
   "Sunflower": "🌻", "Pumpkin": "🎃", "Dragon Fruit": "🐉",
   "Watermelon": "🍉", "Tomato": "🍅", "Strawberry": "🍓",
   "Carrot": "🥕", "Apple": "🍎", "Mango": "🥭",
-  // Add more seeds as needed
+  // Gear
   "Watering Can": "💧", "Trowel": "🔨", "Trading Ticket": "🎟️",
   "Basic Sprinkler": "🌊", "Advanced Sprinkler": "💦",
   "Master Sprinkler": "🌟💦", "Godly Sprinkler": "🌪️",
-  // Add more gear as needed
 };
 
 // Helper: assign emoji to item
@@ -62,7 +62,7 @@ async function fetchPvBStock() {
   const options = {
     method: "GET",
     hostname: "plantsvsbrainrots.com",
-    path: "/api/stock",  // Adjust the API endpoint accordingly
+    path: "/api/stock",  // Modify the API endpoint accordingly
     headers: {
       accept: "*/*",
       "content-type": "application/json",
@@ -120,6 +120,7 @@ ${seedText}
 ╭─🛠️ Gear──────────╮
 ${gearText}
 ╰──────────────────╯`;
+
   api.sendMessage(stockMsg, threadID);
 
   // Special items alert
