@@ -135,7 +135,7 @@ function calculatePoints(pets) {
     totalValue += baseValue + pointsOnly;
 
     breakdown.push(
-      `• ${p.quantity} ${p.mutation ? p.mutation + " " : ""}${p.name} (₱${p.basePrice} each)\n` +
+      `• ${p.quantity} ${p.mutation ? p.mutation + " " : ""}${p.name} (₱${p.basePrice} each normal price)\n` +
       (p.mutation ? `   Mutation: ${p.mutation} = ${mutPoints} pts\n` : "") +
       (p.kg ? `   KG: ${p.kg} = ${kgPoints} pts\n` : "")
     );
