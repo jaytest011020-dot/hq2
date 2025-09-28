@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "6.3.0",
+  version: "6.4.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
   description: "Auto detect WFL trades and calculate points",
@@ -143,7 +143,13 @@ function parsePets(text, petPrices) {
 
     const mutation = detectMutation(line);
     let size = detectSize(line);
-    if (!size && maxMatch) size = maxKgToSize(parseInt(maxMatch[1]));
+
+    // ✅ Convert KG to size if size not detected
+    if (!size && (kgMatch || maxMatch)) {
+      const kgValue = kgMatch ? parseInt(kgMatch[1]) : parseInt(maxMatch[1]);
+      size = maxKgToSize(kgValue);
+      if (size) kg = 0; // ignore KG points if size is detected
+    }
 
     const tokens = line.split(/\s+/);
     let index = 0;
@@ -249,4 +255,30 @@ module.exports.handleEvent = async function ({ api, event }) {
       `📌 Percentage:\n• Me: ${mePercent}%\n• Him: ${himPercent}%\n\n` +
       `🔎 Resulta: ${result}`;
 
-    return api.sendMessage
+    return api.sendMessage(msg, threadID, event.messageID);
+  } catch (e) {
+    console.error("wfl.js error:", e);
+  }
+};
+
+// ---------------- Manual Command ---------------- //
+module.exports.run = async function ({ api, event, args }) {
+  const threadID = event.threadID;
+  if (!args[0]) {
+    return api.sendMessage("Gamitin: /wfl on | /wfl off | /wfl status", threadID, event.messageID);
+  }
+  const choice = args[0].toLowerCase();
+  if (choice === "on") {
+    await setData(`wflStatus/${threadID}`, { enabled: true });
+    return api.sendMessage("✅ WFL auto-replies are now ON.", threadID, event.messageID);
+  } else if (choice === "off") {
+    await setData(`wflStatus/${threadID}`, { enabled: false });
+    return api.sendMessage("⛔ WFL auto-replies are now OFF.", threadID, event.messageID);
+  } else if (choice === "status") {
+    const data = await getData(`wflStatus/${threadID}`);
+    return api.sendMessage(`📊 WFL status: ${data?.enabled ? "✅ ON" : "⛔ OFF"}`, threadID, event.messageID);
+  } else {
+    return api.sendMessage("Gamitin: /wfl on | /wfl off | /wfl status", threadID, event.messageID);
+  }
+};
+    
