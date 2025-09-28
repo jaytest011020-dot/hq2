@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "1.0.1",
+  version: "1.0.2",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Win or Lose calculator for Grow a Garden Roblox pets",
@@ -39,8 +39,8 @@ const MUTATION_VALUES = {
   mega: 5
 };
 
-// Example pet prices (can update anytime via /wfl add)
-let PET_PRICES = {}; // load from DB
+// Example pet prices (load from DB)
+let PET_PRICES = {};
 
 // Helper: detect mutation
 function detectMutation(word) {
@@ -60,18 +60,21 @@ function parsePetEntry(entry) {
   const petNameWords = [];
 
   for (let i = 0; i < words.length; i++) {
-    const w = words[i].toLowerCase();
+    let w = words[i].toLowerCase();
 
-    // Quantity (unang number)
+    // Detect quantity (unang number)
     if (i === 0 && /^\d+$/.test(w)) {
       qty = parseInt(w);
       continue;
     }
 
-    // KG detection anywhere
-    const kgMatch = w.match(/^(\d+)\s*kg$/i) || w.match(/^(\d+)\s*max$/i) || w.match(/^(\d+)kg$/i);
+    // Detect kg anywhere: 40kg, 40 kg, 40 max
+    let kgMatch = null;
+    if (w.match(/^(\d+)kg$/i)) kgMatch = w.match(/^(\d+)kg$/i);
+    else if (/^\d+$/.test(w) && i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) kgMatch = [w, w];
     if (kgMatch) {
       kg = parseInt(kgMatch[1]);
+      if (i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) i++; // skip next
       continue;
     }
 
@@ -86,12 +89,11 @@ function parsePetEntry(entry) {
     // Skip literal kg/max
     if (w === "kg" || w === "max") continue;
 
-    // Otherwise part ng pet name
+    // Part ng pet name
     petNameWords.push(words[i]);
   }
 
   const petNameRaw = petNameWords.join(" ");
-  // Convert nickname to official pet name
   let petName = null;
   for (let key in PET_NICKNAMES) {
     if (PET_NICKNAMES[key].some(n => n.toLowerCase() === petNameRaw.toLowerCase())) {
@@ -105,19 +107,17 @@ function parsePetEntry(entry) {
 
 // Parse multiple pets in one line
 function parseMultiplePets(part) {
-  const entries = [];
-  const regex = /(\d+\s+[^0-9]+)/g;
+  const pets = [];
+  const regex = /(\d+\s+(?:\w+\s+)*\w+)/g; // match number + rest
   const matches = part.match(regex);
   if (matches) {
-    for (const m of matches) {
-      const pet = parsePetEntry(m.trim());
-      entries.push(pet);
+    for (const e of matches) {
+      pets.push(parsePetEntry(e.trim()));
     }
   } else {
-    // fallback: parse whole line as one pet
-    entries.push(parsePetEntry(part));
+    pets.push(parsePetEntry(part));
   }
-  return entries;
+  return pets;
 }
 
 // Parse full message for Me and Him
