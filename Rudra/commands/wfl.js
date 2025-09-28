@@ -30,6 +30,9 @@ const PET_NICKNAMES = {
   "t-rex": ["t-rex", "trex"], 
   brontosaurus: ["brontosaurus", "bronto"],
   dilophosaurus: ["dilophosaurus", "dilo"], 
+  pachycephalosaurus: ["pachycephalosaurus", "pachy"], 
+  stegosaurus: ["stegosaurus", "stego"], 
+  Triceratops: ["triceratops", "trice"], 
 };
 
 // Mutation points
