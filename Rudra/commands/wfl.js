@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "1.1.0",
+  version: "1.0.6",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Win or Lose calculator para sa Grow a Garden Roblox pets",
@@ -42,69 +42,78 @@ const MUTATION_VALUES = {
 // Pet prices (load from DB)
 let PET_PRICES = {};
 
-// Helper: detect mutation (match kahit 4 letters)
+// Helper: detect mutation
 function detectMutation(word) {
+  word = word.toLowerCase();
   for (let m in MUTATION_VALUES) {
     if (word.includes(m.slice(0, 4))) return { name: m, value: MUTATION_VALUES[m] };
   }
   return { name: null, value: 0 };
 }
 
-// Parse line for multiple pets
-function parseLine(line) {
-  const pets = [];
-  const words = line.trim().split(/\s+/);
-  let i = 0;
+// Parse single pet entry
+function parsePetEntry(entry) {
+  const words = entry.trim().split(/\s+/);
+  let qty = 1;
+  let kg = 0;
+  let mutationName = null;
+  let mutationValue = 0;
+  const petNameWords = [];
 
-  while (i < words.length) {
-    let qty = 1, kg = 0, mutationName = null, mutationValue = 0;
-    const petNameWords = [];
+  for (let i = 0; i < words.length; i++) {
+    let w = words[i].toLowerCase();
 
     // Detect quantity
-    if (/^\d+$/.test(words[i])) {
-      qty = parseInt(words[i]);
-      i++;
+    if (i === 0 && /^\d+$/.test(w)) {
+      qty = parseInt(w);
+      continue;
     }
 
-    // Collect words until next quantity or end
-    while (i < words.length && !/^\d+$/.test(words[i])) {
-      let w = words[i].toLowerCase();
-
-      // Detect kg
-      if (/^\d+kg$/i.test(w)) {
-        kg = parseInt(w.match(/^(\d+)kg$/i)[1]);
-        i++; continue;
-      } else if (/^\d+$/.test(w) && i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) {
-        kg = parseInt(w);
-        i += 2; continue;
-      } else if (w === "kg" || w === "max") { i++; continue; }
-
-      // Detect mutation
-      const mut = detectMutation(w);
-      if (mut.name && !mutationName) {
-        mutationName = mut.name;
-        mutationValue = mut.value;
-        i++; continue;
-      }
-
-      // Part of pet name
-      petNameWords.push(words[i]);
-      i++;
+    // Detect kg: 40kg, 40 kg, 40 max, 50 kg max
+    let kgMatch = null;
+    if (w.match(/^(\d+)kg$/i)) kgMatch = w.match(/^(\d+)kg$/i);
+    else if (/^\d+$/.test(w) && i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) kgMatch = [w, w];
+    if (kgMatch) {
+      kg = parseInt(kgMatch[1]);
+      if (i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) i++;
+      continue;
     }
 
-    // Detect pet name from nicknames
-    const petNameRaw = petNameWords.join(" ");
-    let petName = null;
-    for (let key in PET_NICKNAMES) {
-      if (PET_NICKNAMES[key].some(n => n.toLowerCase() === petNameRaw.toLowerCase())) {
-        petName = key;
-        break;
-      }
+    // Mutation detection
+    const mut = detectMutation(w);
+    if (mut.name && !mutationName) {
+      mutationName = mut.name;
+      mutationValue = mut.value;
+      continue;
     }
 
-    pets.push({ qty, petName, mutation: mutationName, mutationValue, kg });
+    if (w === "kg" || w === "max") continue;
+
+    petNameWords.push(words[i]);
   }
 
+  const petNameRaw = petNameWords.join(" ");
+  let petName = null;
+  for (let key in PET_NICKNAMES) {
+    if (PET_NICKNAMES[key].some(n => n.toLowerCase() === petNameRaw.toLowerCase())) {
+      petName = key;
+      break;
+    }
+  }
+
+  return { qty, petName, mutation: mutationName, mutationValue, kg };
+}
+
+// Parse multiple pets in a line
+function parseMultiplePets(part) {
+  const pets = [];
+  const regex = /(\d+\s+(?:\w+\s+)*\w+)/g;
+  const matches = part.match(regex);
+  if (matches) {
+    for (const e of matches) pets.push(parsePetEntry(e.trim()));
+  } else {
+    pets.push(parsePetEntry(part));
+  }
   return pets;
 }
 
@@ -116,12 +125,13 @@ function parseTradeMessage(msg) {
 
   for (let line of lines) {
     line = line.trim();
+    // Flexible Me/Him detection
     if (/^\s*me\b/i.test(line)) {
       const petPart = line.replace(/^\s*me\b\s*:?\s*/i, "");
-      mePets.push(...parseLine(petPart));
+      mePets.push(...parseMultiplePets(petPart));
     } else if (/^\s*him\b/i.test(line)) {
       const petPart = line.replace(/^\s*him\b\s*:?\s*/i, "");
-      himPets.push(...parseLine(petPart));
+      himPets.push(...parseMultiplePets(petPart));
     }
   }
 
