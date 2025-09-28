@@ -2,16 +2,16 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "6.4.0",
+  version: "6.7.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
-  description: "Auto detect WFL trades and calculate points",
+  description: "Advanced WFL parser: multiple pets, mutation, size, KG, quantity per line",
   commandCategory: "Trading",
   usages: "/wfl on | /wfl off | /wfl status",
   cooldowns: 0,
 };
 
-// ✅ Default ON per thread
+// Default ON per thread
 async function getWflStatus(threadID) {
   const data = (await getData(`wflStatus/${threadID}`)) || {};
   return data.enabled !== false;
@@ -44,155 +44,172 @@ const MUTATION_POINTS = {
   golden: 50, tiny: 5, "iron skin": 5, radiant: 5,
   rainbow: 100, shocked: 50, giantbean: 10,
   ascended: 100, mega: 200,
-  titanic: 300 // ✅ Mutation for titan shortcut
+  titanic: 300
 };
 
 // Size points
 const SIZE_POINTS = {
-  small: 0,
-  cute: 0,
-  gs: 50,
-  "good size": 50,
-  huge: 200,
-  titanic: 300,
-  godly: 400,
+  small: 0, cute: 0, gs: 50, "good size": 50,
+  huge: 200, titanic: 300, godly: 400
 };
 
-// ---------------- Helper Functions ---------------- //
-function findPetName(input, petPrices) {
-  const lowered = input.toLowerCase();
-  if (petPrices[lowered]) return lowered;
-
-  let match = null, longest = 0;
-  for (let pet in PET_NICKNAMES) {
-    for (let nick of PET_NICKNAMES[pet]) {
-      if (lowered.includes(nick) && nick.length > longest) {
-        match = pet;
-        longest = nick.length;
-      }
-    }
-  }
-  return match;
-}
-
-// Mutation detection with shortcut mapping
-function detectMutation(line) {
-  line = line.toLowerCase();
-  const shortcutMap = {
-    rb: "rainbow",
-    rainbow: "rainbow",
-    titan: "titanic" // ✅ titan shortcut
-  };
-
-  for (let key in shortcutMap) {
-    if (new RegExp(`\\b${key}\\b`, "i").test(line)) return shortcutMap[key];
-  }
-
-  for (let mut in MUTATION_POINTS) {
-    if (!["rainbow", "titan"].includes(mut) && new RegExp(`\\b${mut}\\b`, "i").test(line)) return mut;
-  }
-
-  return null;
-}
-
-// Size detection with shortcut
-function detectSize(line) {
-  line = line.toLowerCase();
-  const shortcutMap = {
-    titan: "titanic" // ✅ titan shortcut for size
-  };
-
-  for (let key in shortcutMap) {
-    if (new RegExp(`\\b${key}\\b`, "i").test(line)) return shortcutMap[key];
-  }
-
-  for (let s in SIZE_POINTS) {
-    if (new RegExp(`\\b${s}\\b`, "i").test(line)) return s;
-  }
-
-  return null;
-}
-
-// Convert max kg → size category
+// Convert KG → size
 function maxKgToSize(kg) {
   if (kg >= 30 && kg <= 49.9) return "gs";
   if (kg >= 50 && kg <= 69.9) return "huge";
   if (kg >= 70 && kg <= 99.9) return "titanic";
   if (kg >= 100) return "godly";
-  return null; // <30 → no size
+  return null;
 }
 
-// Parse pets from text
-function parsePets(text, petPrices) {
-  const pets = [];
-  const lines = text.split(/\n/);
-
-  for (let line of lines) {
-    line = line.trim();
-    if (!line) continue;
-
-    let quantity = 1;
-    const qtyMatch = line.match(/^(\d+)/);
-    if (qtyMatch) quantity = parseInt(qtyMatch[1]);
-
-    let kg = 0;
-    const kgMatch = line.match(/(\d+)\s*kg/i);
-    const maxMatch = line.match(/(\d+)\s*max/i);
-    if (kgMatch) kg = parseInt(kgMatch[1]);
-    else if (maxMatch) kg = parseInt(maxMatch[1]);
-
-    const mutation = detectMutation(line);
-    let size = detectSize(line);
-
-    // ✅ Convert KG to size if size not detected
-    if (!size && (kgMatch || maxMatch)) {
-      const kgValue = kgMatch ? parseInt(kgMatch[1]) : parseInt(maxMatch[1]);
-      size = maxKgToSize(kgValue);
-      if (size) kg = 0; // ignore KG points if size is detected
-    }
-
-    const tokens = line.split(/\s+/);
-    let index = 0;
-    while (index < tokens.length) {
-      let foundPet = null;
-      let len = Math.min(3, tokens.length - index);
-      while (len > 0) {
-        const slice = tokens.slice(index, index + len).join(" ");
-        const petName = findPetName(slice, petPrices);
-        if (petName) {
-          foundPet = petName;
-          index += len - 1;
-          break;
-        }
-        len--;
-      }
-      if (foundPet) {
-        pets.push({
-          name: foundPet,
-          quantity,
-          basePrice: petPrices[foundPet] || 0,
-          kg: size ? 0 : kg,
-          mutation,
-          size,
-        });
-      }
-      index++;
+// Find pet by nickname
+function findPetName(input) {
+  input = input.toLowerCase();
+  for (let pet in PET_NICKNAMES) {
+    for (let nick of PET_NICKNAMES[pet]) {
+      if (input.includes(nick)) return pet;
     }
   }
+  return null;
+}
+
+// Detect mutation
+function detectMutation(token) {
+  token = token.toLowerCase();
+  const shortcuts = { rb: "rainbow", rainbow: "rainbow", titan: "titanic" };
+  if (shortcuts[token]) return shortcuts[token];
+  return MUTATION_POINTS[token] ? token : null;
+}
+
+// Detect size
+function detectSize(token) {
+  token = token.toLowerCase();
+  const shortcuts = { titan: "titanic" };
+  if (shortcuts[token]) return shortcuts[token];
+  return SIZE_POINTS[token] ? token : null;
+}
+
+// Parse line into multiple pets with individual attributes
+function parseLineAdvanced(line, petPrices) {
+  const pets = [];
+  const tokens = line.toLowerCase().split(/\s+/);
+
+  let currentPet = null;
+
+  const pushPet = () => {
+    if (currentPet) {
+      pets.push(currentPet);
+      currentPet = null;
+    }
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+
+    // Numeric mutation shorthand like 6df
+    const match = t.match(/^(\d+)([a-z]+)$/i);
+    if (match) {
+      pushPet();
+      const [_, qty, nick] = match;
+      const petName = findPetName(nick);
+      if (petName) {
+        currentPet = {
+          name: petName,
+          quantity: parseInt(qty),
+          basePrice: petPrices[petName] || 0,
+          mutation: "mega",
+          size: null,
+          kg: 0
+        };
+        continue;
+      }
+    }
+
+    // Pure number = quantity for next pet
+    const qtyNum = parseInt(t);
+    if (!isNaN(qtyNum)) {
+      if (!currentPet) currentPet = {};
+      currentPet.quantity = qtyNum;
+      continue;
+    }
+
+    // Mutation detection
+    const mut = detectMutation(t);
+    if (mut) {
+      if (!currentPet) currentPet = {};
+      currentPet.mutation = mut;
+      continue;
+    }
+
+    // Size detection
+    const sz = detectSize(t);
+    if (sz) {
+      if (!currentPet) currentPet = {};
+      currentPet.size = sz;
+      continue;
+    }
+
+    // KG detection
+    const kgMatch = t.match(/^(\d+)kg$/);
+    if (kgMatch) {
+      if (!currentPet) currentPet = {};
+      currentPet.kg = parseInt(kgMatch[1]);
+      continue;
+    }
+
+    // Pet detection
+    const petName = findPetName(t);
+    if (petName) {
+      if (!currentPet) currentPet = {};
+      currentPet.name = petName;
+      if (!currentPet.quantity) currentPet.quantity = 1;
+      if (!currentPet.basePrice) currentPet.basePrice = petPrices[petName] || 0;
+      pets.push(currentPet);
+      currentPet = null;
+    }
+  }
+
+  // Push remaining pet
+  if (currentPet) pets.push(currentPet);
+
+  // Convert KG to size if size not set
+  for (const p of pets) {
+    if (!p.size && p.kg) {
+      const sz = maxKgToSize(p.kg);
+      if (sz) {
+        p.size = sz;
+        p.kg = 0; // ignore KG points if size is detected
+      }
+    }
+    if (!p.quantity) p.quantity = 1;
+    if (!p.mutation) p.mutation = null;
+    if (!p.size) p.size = null;
+    if (!p.kg) p.kg = 0;
+  }
+
   return pets;
 }
 
-// ---------------- Calculate Points ---------------- //
+// Parse multiple lines
+function parsePets(text, petPrices) {
+  const allPets = [];
+  const lines = text.split(/\n/);
+  for (const line of lines) {
+    allPets.push(...parseLineAdvanced(line, petPrices));
+  }
+  return allPets;
+}
+
+// Calculate points
 function calculatePoints(pets) {
-  let totalPoints = 0; 
+  let totalPoints = 0;
   let totalValue = 0;
   const breakdown = [];
 
-  for (let p of pets) {
+  for (const p of pets) {
     const mutPoints = p.mutation ? MUTATION_POINTS[p.mutation] : 0;
     const sizePoints = p.size ? SIZE_POINTS[p.size] : 0;
     const kgPoints = (!p.size && p.kg) ? p.kg : 0;
-
     const pointsOnly = mutPoints + sizePoints + kgPoints;
     totalPoints += pointsOnly;
 
@@ -264,9 +281,7 @@ module.exports.handleEvent = async function ({ api, event }) {
 // ---------------- Manual Command ---------------- //
 module.exports.run = async function ({ api, event, args }) {
   const threadID = event.threadID;
-  if (!args[0]) {
-    return api.sendMessage("Gamitin: /wfl on | /wfl off | /wfl status", threadID, event.messageID);
-  }
+  if (!args[0]) return api.sendMessage("Gamitin: /wfl on | /wfl off | /wfl status", threadID, event.messageID);
   const choice = args[0].toLowerCase();
   if (choice === "on") {
     await setData(`wflStatus/${threadID}`, { enabled: true });
@@ -281,4 +296,3 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage("Gamitin: /wfl on | /wfl off | /wfl status", threadID, event.messageID);
   }
 };
-    
