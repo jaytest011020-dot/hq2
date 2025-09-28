@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "6.1.0",
+  version: "6.2.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
   description: "Auto detect WFL trades and calculate points",
@@ -20,7 +20,7 @@ async function getWflStatus(threadID) {
 // Pet nicknames
 const PET_NICKNAMES = {
   raccoon: ["raccoon", "rc", "racc"],
-  butterfly: ["butterfly", "bf"],
+  butterfly: ["butterfly", "bf", "btf"],
   dragonfly: ["dragonfly", "df"],
   "disco bee": ["disco bee", "db"],
   kitsune: ["kitsune", "kit", "kits", "redkit", "red kit"],
@@ -35,11 +35,10 @@ const PET_NICKNAMES = {
   "corrupted kitsune": ["corrupted kitsune", "ckit", "c kit"],
   "red fox": ["red fox", "rf"], 
   "sea turtle": ["sea turtle", "sea turt", "sea tur"], 
-  "shiba inu": ["shiba inu", "shiba"], 
-  "butterfly": ["butterfly", "bff"], 
+  "shiba inu": ["shiba inu", "shiba"]
 };
 
-// Mutation points
+// Mutation points (rainbow → rb)
 const MUTATION_POINTS = {
   shiny: 5, inverted: 5, frozen: 5, windy: 5,
   golden: 50, tiny: 5, "iron skin": 5, radiant: 5,
@@ -66,7 +65,7 @@ function findPetName(input, petPrices) {
   let match = null, longest = 0;
   for (let pet in PET_NICKNAMES) {
     for (let nick of PET_NICKNAMES[pet]) {
-      if (lowered.includes(nick) && nick.length > longest) { // changed startsWith -> includes
+      if (lowered.includes(nick) && nick.length > longest) {
         match = pet;
         longest = nick.length;
       }
@@ -75,7 +74,7 @@ function findPetName(input, petPrices) {
   return match;
 }
 
-// Mutation detection (rainbow nickname supported)
+// Mutation detection (rainbow → rb)
 function detectMutation(line) {
   for (let mut in MUTATION_POINTS) {
     if (mut !== "rainbow" && new RegExp(`\\b${mut}\\b`, "i").test(line)) return mut;
@@ -92,6 +91,15 @@ function detectSize(line) {
   return null;
 }
 
+// Convert max kg → size category
+function maxKgToSize(kg) {
+  if (kg >= 30 && kg <= 49.9) return "gs";
+  if (kg >= 50 && kg <= 69.9) return "huge";
+  if (kg >= 70 && kg <= 99.9) return "titanic";
+  if (kg >= 100) return "godly";
+  return null; // <30 → no size
+}
+
 // Parse pets mula sa text
 function parsePets(text, petPrices) {
   const pets = [];
@@ -101,7 +109,7 @@ function parsePets(text, petPrices) {
     line = line.trim();
     if (!line) continue;
 
-    // Quantity (number na puwede dikit sa pet)
+    // Quantity (puwede dikit sa pet)
     let quantity = 1;
     const qtyMatch = line.match(/^(\d+)/);
     if (qtyMatch) quantity = parseInt(qtyMatch[1]);
@@ -111,20 +119,21 @@ function parsePets(text, petPrices) {
     const kgMatch = line.match(/(\d+)\s*kg/i);
     const maxMatch = line.match(/(\d+)\s*max/i);
     if (kgMatch) kg = parseInt(kgMatch[1]);
-    else if (maxMatch) kg = parseInt(maxMatch[1]); // only if kg not present
+    else if (maxMatch) kg = parseInt(maxMatch[1]);
 
     // Mutation
     const mutation = detectMutation(line);
 
     // Size
-    const size = detectSize(line);
+    let size = detectSize(line);
+    if (!size && maxMatch) size = maxKgToSize(parseInt(maxMatch[1]));
 
-    // Detect multiple pets (token scanning)
+    // Detect multiple pets
     const tokens = line.split(/\s+/);
     let index = 0;
     while (index < tokens.length) {
       let foundPet = null;
-      let len = Math.min(3, tokens.length - index); // max 3 words for name
+      let len = Math.min(3, tokens.length - index);
       while (len > 0) {
         const slice = tokens.slice(index, index + len).join(" ");
         const petName = findPetName(slice, petPrices);
@@ -140,7 +149,7 @@ function parsePets(text, petPrices) {
           name: foundPet,
           quantity,
           basePrice: petPrices[foundPet] || 0,
-          kg,
+          kg: size ? 0 : kg, // ignore KG if size detected
           mutation,
           size,
         });
@@ -153,16 +162,16 @@ function parsePets(text, petPrices) {
 
 // ---------------- Calculate Points ---------------- //
 function calculatePoints(pets) {
-  let totalPoints = 0; // mutation + kg + size
-  let totalValue = 0;  // basePrice + mutation + kg + size
+  let totalPoints = 0; 
+  let totalValue = 0;
   const breakdown = [];
 
   for (let p of pets) {
     const mutPoints = p.mutation ? MUTATION_POINTS[p.mutation] : 0;
-    const kgPoints = p.kg || 0;
     const sizePoints = p.size ? SIZE_POINTS[p.size] : 0;
+    const kgPoints = (!p.size && p.kg) ? p.kg : 0;
 
-    const pointsOnly = mutPoints + kgPoints + sizePoints;
+    const pointsOnly = mutPoints + sizePoints + kgPoints;
     totalPoints += pointsOnly;
 
     const baseValue = p.basePrice * p.quantity;
@@ -171,7 +180,7 @@ function calculatePoints(pets) {
     breakdown.push(
       `• ${p.quantity} ${p.mutation ? p.mutation + " " : ""}${p.name} (₱${p.basePrice} each)\n` +
       (p.mutation ? `   Mutation: ${p.mutation} = ${mutPoints} pts\n` : "") +
-      (p.kg ? `   KG: ${p.kg} = ${kgPoints} pts\n` : "") +
+      (kgPoints ? `   KG: ${p.kg} = ${kgPoints} pts\n` : "") +
       (p.size ? `   Size: ${p.size} = ${sizePoints} pts\n` : "")
     );
   }
