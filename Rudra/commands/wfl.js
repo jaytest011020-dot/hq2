@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "2.0.0",
+  version: "3.0.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Win or Lose calculator para sa Grow a Garden Roblox pets",
@@ -106,11 +106,11 @@ function parsePetEntry(entry) {
 }
 
 function parseMultiplePets(part) {
+  const entries = part.split(/,|&|and/gi); // hatiin kung may multiple
   const pets = [];
-  const regex = /(\d+\s+(?:\w+\s+)*\w+)/g;
-  const matches = part.match(regex);
-  if (matches) for (const e of matches) pets.push(parsePetEntry(e.trim()));
-  else pets.push(parsePetEntry(part));
+  for (const e of entries) {
+    if (e.trim()) pets.push(parsePetEntry(e.trim()));
+  }
   return pets;
 }
 
@@ -146,6 +146,8 @@ function calculateValue(pets) {
 
     const price = PET_PRICES[p.petName];
     totalPrice += price * (p.qty || 1);
+
+    // Points = mutation + kg lang (hindi kasama price)
     totalPoints += (p.mutationValue || 0) + (p.kg || 0);
 
     let line = `• ${p.qty}x ${p.petName} (₱${price} each → ₱${price * (p.qty || 1)})`;
@@ -154,7 +156,9 @@ function calculateValue(pets) {
     breakdown.push(line);
   }
 
-  return { totalPrice, totalPoints, breakdown, hasValidPet };
+  const totalValue = totalPrice + totalPoints; // ginagamit sa % at win/lose
+
+  return { totalPrice, totalPoints, totalValue, breakdown, hasValidPet };
 }
 
 // --- MAIN --- //
@@ -191,9 +195,9 @@ module.exports.run = async function({ api, event }) {
   if (!meCalc.hasValidPet && !himCalc.hasValidPet)
     return api.sendMessage("⚠️ Wala pang pet sa database na tugma.", threadID);
 
-  const totalAll = meCalc.totalPrice + himCalc.totalPrice;
-  const mePercent = totalAll ? ((meCalc.totalPrice / totalAll) * 100).toFixed(1) : 0;
-  const himPercent = totalAll ? ((himCalc.totalPrice / totalAll) * 100).toFixed(1) : 0;
+  const totalAll = meCalc.totalValue + himCalc.totalValue;
+  const mePercent = totalAll ? ((meCalc.totalValue / totalAll) * 100).toFixed(1) : 0;
+  const himPercent = totalAll ? ((himCalc.totalValue / totalAll) * 100).toFixed(1) : 0;
 
   let resultMsg = `📊 WFL CALCULATION\n──────────────────────\n`;
 
@@ -202,9 +206,9 @@ module.exports.run = async function({ api, event }) {
 
   resultMsg += `📌 Percentage:\n• Me: ${mePercent}%\n• Him: ${himPercent}%\n\n`;
 
-  if (meCalc.totalPrice > himCalc.totalPrice)
+  if (meCalc.totalValue > himCalc.totalValue)
     resultMsg += "😢 Lose! Mas mataas ang value ng ibibigay mo.";
-  else if (meCalc.totalPrice < himCalc.totalPrice)
+  else if (meCalc.totalValue < himCalc.totalValue)
     resultMsg += "🎉 Win! Mas mataas ang value ng ibibigay niya.";
   else
     resultMsg += "⚖️ Draw! Pantay ang value.";
