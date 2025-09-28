@@ -42,7 +42,7 @@ const MUTATION_VALUES = {
 // Pet prices (load from DB)
 let PET_PRICES = {};
 
-// Detect mutation (kahit first 4 letters lang)
+// Detect mutation (kahit partial)
 function detectMutation(word) {
   word = word.toLowerCase();
   for (let m in MUTATION_VALUES) {
@@ -54,38 +54,24 @@ function detectMutation(word) {
 // Parse single pet entry
 function parsePetEntry(entry) {
   const words = entry.trim().split(/\s+/);
-  let qty = 1;
-  let kg = 0;
-  let mutationName = null;
-  let mutationValue = 0;
+  let qty = 1, kg = 0, mutationName = null, mutationValue = 0;
   const petNameWords = [];
 
   for (let i = 0; i < words.length; i++) {
     let w = words[i].toLowerCase();
 
-    // Detect quantity (usually nasa unahan)
-    if (i === 0 && /^\d+$/.test(w)) {
-      qty = parseInt(w);
-      continue;
-    }
+    // Detect quantity (unahan)
+    if (i === 0 && /^\d+$/.test(w)) { qty = parseInt(w); continue; }
 
-    // Detect kg: 40kg, 40 kg, 40 max, 50 kg max
-    if (w.match(/^(\d+)kg$/i)) {
-      kg = parseInt(w.match(/^(\d+)kg$/i)[1]);
-      continue;
-    } else if (/^\d+$/.test(w) && i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) {
-      kg = parseInt(w);
-      i++; // skip next
-      continue;
-    }
+    // Detect kg: 40kg, 40 kg, 50 kg max
+    let kgMatch = null;
+    if (w.match(/^(\d+)kg$/i)) kgMatch = w.match(/^(\d+)kg$/i);
+    else if (/^\d+$/.test(w) && i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) kgMatch = [w, w];
+    if (kgMatch) { kg = parseInt(kgMatch[1]); if (i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) i++; continue; }
 
-    // Mutation detection
+    // Detect mutation kahit saan
     const mut = detectMutation(w);
-    if (mut.name && !mutationName) {
-      mutationName = mut.name;
-      mutationValue = mut.value;
-      continue;
-    }
+    if (mut.name && !mutationName) { mutationName = mut.name; mutationValue = mut.value; continue; }
 
     if (w === "kg" || w === "max") continue;
 
@@ -95,55 +81,46 @@ function parsePetEntry(entry) {
   const petNameRaw = petNameWords.join(" ");
   let petName = null;
   for (let key in PET_NICKNAMES) {
-    if (PET_NICKNAMES[key].some(n => n.toLowerCase() === petNameRaw.toLowerCase())) {
-      petName = key;
-      break;
-    }
+    if (PET_NICKNAMES[key].some(n => n.toLowerCase() === petNameRaw.toLowerCase())) { petName = key; break; }
   }
 
   return { qty, petName, mutation: mutationName, mutationValue, kg };
 }
 
-// Parse multiple pets sa linya
+// Parse multiple pets
 function parseMultiplePets(part) {
   const pets = [];
   const regex = /(\d+\s+(?:\w+\s+)*\w+)/g;
   const matches = part.match(regex);
-  if (matches) {
-    for (const e of matches) pets.push(parsePetEntry(e.trim()));
-  } else {
-    pets.push(parsePetEntry(part));
-  }
+  if (matches) for (const e of matches) pets.push(parsePetEntry(e.trim()));
+  else pets.push(parsePetEntry(part));
   return pets;
 }
 
-// Parse full message for Me and Him
+// Parse trade message (single-line o multi-line)
 function parseTradeMessage(msg) {
-  const lines = msg.split(/\n/);
-  const mePets = [];
-  const himPets = [];
+  const mePets = [], himPets = [];
 
-  for (let line of lines) {
-    line = line.trim();
-    if (/^\s*me\b/i.test(line)) {
-      const petPart = line.replace(/^\s*me\b\s*:?\s*/i, "");
-      mePets.push(...parseMultiplePets(petPart));
-    } else if (/^\s*him\b/i.test(line)) {
-      const petPart = line.replace(/^\s*him\b\s*:?\s*/i, "");
-      himPets.push(...parseMultiplePets(petPart));
-    }
-  }
+  msg = msg.toLowerCase();
+
+  // Detect Me section
+  const meMatch = msg.match(/me\s*:?(.+?)(?=\s*him\b|$)/i);
+  if (meMatch) mePets.push(...parseMultiplePets(meMatch[1].trim()));
+
+  // Detect Him section
+  const himMatch = msg.match(/him\s*:?(.+)$/i);
+  if (himMatch) himPets.push(...parseMultiplePets(himMatch[1].trim()));
 
   return { mePets, himPets };
 }
 
 // Calculate total value
 function calculateValue(pets) {
-  let total = 0;
-  const breakdown = [];
+  let total = 0, breakdown = [];
   for (const p of pets) {
     if (!p.petName || !PET_PRICES[p.petName]) {
-      return { total: null, missingPet: p.petName || "Unknown pet" }; // Stop compute if pet missing
+      breakdown.push(`❌ ${p.petName || "Unknown pet"} wala pa sa database`);
+      continue;
     }
     const price = PET_PRICES[p.petName];
     const value = price + (p.mutationValue || 0) * 50 + (p.kg || 0);
@@ -156,15 +133,15 @@ function calculateValue(pets) {
 // Command module
 module.exports.run = async function({ api, event }) {
   const { threadID, body } = event;
-  const msg = body.toLowerCase();
+  const msg = body;
 
   // Auto detect WFL
-  if (!msg.includes("wfl")) return;
+  if (!msg.toLowerCase().includes("wfl")) return;
 
-  // Load pet prices from DB
+  // Load pet prices
   PET_PRICES = (await getData("petPrices")) || PET_PRICES;
 
-  // Detect /wfl add command
+  // Detect /wfl add
   const addMatch = body.match(/\/wfl add (\w+) (\d+)/i);
   if (addMatch) {
     const petName = addMatch[1].toLowerCase();
@@ -174,35 +151,28 @@ module.exports.run = async function({ api, event }) {
     return api.sendMessage(`✅ ${petName} presyo ay na-set sa ${price}`, threadID);
   }
 
-  // Parse trade message
-  const { mePets, himPets } = parseTradeMessage(body);
+  // Parse trade
+  const { mePets, himPets } = parseTradeMessage(msg);
 
-  if (mePets.length === 0 && himPets.length === 0) {
-    return api.sendMessage("⚠️ Wala pang pets na nade-detect sa database.", threadID);
+  // Check if all pets missing in DB
+  const meValid = mePets.filter(p => p.petName && PET_PRICES[p.petName]);
+  const himValid = himPets.filter(p => p.petName && PET_PRICES[p.petName]);
+
+  if (meValid.length === 0 && himValid.length === 0) {
+    return api.sendMessage("⚠️ Wala kang na-detect na pet sa database.", threadID);
   }
 
-  // Compute Me
-  const meCalc = calculateValue(mePets);
-  if (meCalc.total === null) {
-    return api.sendMessage(`⚠️ Wala pa sa database ang pet na '${meCalc.missingPet}'. Hindi puwede i-compute ang WFL.`, threadID);
-  }
+  const meCalc = calculateValue(meValid);
+  const himCalc = calculateValue(himValid);
 
-  // Compute Him
-  const himCalc = calculateValue(himPets);
-  if (himCalc.total === null) {
-    return api.sendMessage(`⚠️ Wala pa sa database ang pet na '${himCalc.missingPet}'. Hindi puwede i-compute ang WFL.`, threadID);
-  }
-
-  // Build result
   let resultMsg = `📊 WFL RESULT\n──────────────────────\n`;
   resultMsg += `💁‍♂️ Me Kabuuang Value: ${meCalc.total}\n${meCalc.breakdown.join("\n")}\n\n`;
   resultMsg += `🤖 Him Kabuuang Value: ${himCalc.total}\n${himCalc.breakdown.join("\n")}\n\n`;
 
-  // Tagalog Win/Lose logic: Me > Him = Lose, Me < Him = Win
   if (meCalc.total > himCalc.total)
     resultMsg += "😢 Lose! Mas mataas ang value ng ibibigay mo sa kanya.";
   else if (meCalc.total < himCalc.total)
-    resultMsg += "🎉 Win! Mas mataas ang value ng ibinigay niya sa iyo!";
+    resultMsg += "🎉 Win! Mas mataas ang value ng ibibigay niya sa iyo!";
   else
     resultMsg += "⚖️ Draw! Pantay ang value ng ibinigay.";
 
