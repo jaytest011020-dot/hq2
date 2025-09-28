@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "pricelist",
-  version: "1.1.0",
+  version: "1.2.0",
   hasPermission: 0,
   credits: "ChatGPT",
   description: "Show or update pet prices",
@@ -22,7 +22,10 @@ module.exports.run = async function ({ api, event, args }) {
       return api.sendMessage("📂 Wala pang pets sa pricelist.", threadID, event.messageID);
     }
 
-    let list = Object.entries(petPrices)
+    // Sort alphabetically
+    let sortedEntries = Object.entries(petPrices).sort((a, b) => a[0].localeCompare(b[0]));
+
+    let list = sortedEntries
       .map(([name, price]) => `• ${name} — 💰 ${price}`)
       .join("\n");
 
