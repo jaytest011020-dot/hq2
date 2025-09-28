@@ -40,7 +40,6 @@ const MUTATION_POINTS = {
 };
 
 // ---------------- Helper Functions ---------------- //
-// Hanapin ang pet gamit nickname o partial match
 function findPetName(input, petPrices) {
   const lowered = input.toLowerCase();
   if (petPrices[lowered]) return lowered;
@@ -57,7 +56,6 @@ function findPetName(input, petPrices) {
   return match;
 }
 
-// Parse pets mula sa text
 function parsePets(text, petPrices) {
   const pets = [];
   const lines = text.split(/\n/);
@@ -71,16 +69,12 @@ function parsePets(text, petPrices) {
     const qtyMatch = line.match(/^(\d+)/);
     if (qtyMatch) quantity = parseInt(qtyMatch[1]);
 
-    // KG detection (priority sa explicit kg)
+    // KG & Max
     let kg = 0;
     const kgMatch = line.match(/(\d+)\s*kg/i);
-    if (kgMatch) {
-      kg = parseInt(kgMatch[1]);
-    } else {
-      // Check for "<number> max" kung walang kg
-      const maxMatch = line.match(/(\d+)\s*max/i);
-      if (maxMatch) kg = parseInt(maxMatch[1]);
-    }
+    const maxMatch = line.match(/(\d+)\s*max/i);
+    if (kgMatch) kg = parseInt(kgMatch[1]);
+    else if (maxMatch) kg = parseInt(maxMatch[1]); // only if kg not present
 
     // Mutation
     let mutation = null;
@@ -91,35 +85,37 @@ function parsePets(text, petPrices) {
       }
     }
 
-    // Detect pet (token by token, longest match)
+    // Detect multiple pets (token scanning)
     const tokens = line.split(/\s+/);
-    let petName = null;
-    for (let len = tokens.length; len > 0; len--) {
-      for (let i = 0; i <= tokens.length - len; i++) {
-        const slice = tokens.slice(i, i + len).join(" ");
-        const found = findPetName(slice, petPrices);
-        if (found) {
-          petName = found;
+    let index = 0;
+    while (index < tokens.length) {
+      let foundPet = null;
+      let len = Math.min(3, tokens.length - index); // max 3 words for name
+      while (len > 0) {
+        const slice = tokens.slice(index, index + len).join(" ");
+        const petName = findPetName(slice, petPrices);
+        if (petName) {
+          foundPet = petName;
+          index += len - 1; // move index past matched name
           break;
         }
+        len--;
       }
-      if (petName) break;
-    }
-
-    if (petName) {
-      pets.push({
-        name: petName,
-        quantity,
-        basePrice: petPrices[petName] || 0,
-        kg,
-        mutation,
-      });
+      if (foundPet) {
+        pets.push({
+          name: foundPet,
+          quantity,
+          basePrice: petPrices[foundPet] || 0,
+          kg,
+          mutation,
+        });
+      }
+      index++;
     }
   }
   return pets;
 }
 
-// Calculate points and total value
 function calculatePoints(pets) {
   let totalPoints = 0; // mutation + kg
   let totalValue = 0;  // basePrice + mutation + kg
@@ -155,8 +151,7 @@ module.exports.handleEvent = async function ({ api, event }) {
     if (sender === botID) return;
 
     const isOn = await getWflStatus(threadID);
-    if (!isOn) return;
-    if (!/wfl/i.test(body)) return;
+    if (!isOn || !/wfl/i.test(body)) return;
 
     const petPrices = (await getData("petPrices")) || {};
     const cleaned = body.replace(/wfl/gi, "").trim();
@@ -173,7 +168,6 @@ module.exports.handleEvent = async function ({ api, event }) {
     const meCalc = calculatePoints(mePets);
     const himCalc = calculatePoints(himPets);
 
-    // Base price + points para sa percentage
     const totalAll = meCalc.totalValue + himCalc.totalValue;
     const mePercent = totalAll ? ((meCalc.totalValue / totalAll) * 100).toFixed(1) : 0;
     const himPercent = totalAll ? ((himCalc.totalValue / totalAll) * 100).toFixed(1) : 0;
