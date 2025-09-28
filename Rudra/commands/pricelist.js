@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "pricelist",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermission: 0,
   credits: "ChatGPT",
   description: "Show or update pet prices",
@@ -39,8 +39,9 @@ module.exports.run = async function ({ api, event, args }) {
       );
     }
 
-    const petName = args[1].toLowerCase();
-    const price = parseInt(args[2]);
+    // Pet name = lahat ng args maliban sa huling isa
+    const petName = args.slice(1, -1).join(" ").toLowerCase();
+    const price = parseInt(args[args.length - 1]);
 
     if (isNaN(price) || price <= 0) {
       return api.sendMessage("❌ Invalid price.", threadID, event.messageID);
