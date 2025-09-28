@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "4.0.0",
+  version: "5.0.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
   description: "Auto detect WFL trades and calculate points",
@@ -71,10 +71,16 @@ function parsePets(text, petPrices) {
     const qtyMatch = line.match(/^(\d+)/);
     if (qtyMatch) quantity = parseInt(qtyMatch[1]);
 
-    // KG
+    // KG detection (priority sa explicit kg)
     let kg = 0;
     const kgMatch = line.match(/(\d+)\s*kg/i);
-    if (kgMatch) kg = parseInt(kgMatch[1]);
+    if (kgMatch) {
+      kg = parseInt(kgMatch[1]);
+    } else {
+      // Check for "<number> max" kung walang kg
+      const maxMatch = line.match(/(\d+)\s*max/i);
+      if (maxMatch) kg = parseInt(maxMatch[1]);
+    }
 
     // Mutation
     let mutation = null;
@@ -85,7 +91,7 @@ function parsePets(text, petPrices) {
       }
     }
 
-    // Detect pet (token by token)
+    // Detect pet (token by token, longest match)
     const tokens = line.split(/\s+/);
     let petName = null;
     for (let len = tokens.length; len > 0; len--) {
@@ -167,6 +173,7 @@ module.exports.handleEvent = async function ({ api, event }) {
     const meCalc = calculatePoints(mePets);
     const himCalc = calculatePoints(himPets);
 
+    // Base price + points para sa percentage
     const totalAll = meCalc.totalValue + himCalc.totalValue;
     const mePercent = totalAll ? ((meCalc.totalValue / totalAll) * 100).toFixed(1) : 0;
     const himPercent = totalAll ? ((himCalc.totalValue / totalAll) * 100).toFixed(1) : 0;
