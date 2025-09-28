@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "1.0.4",
+  version: "1.0.5",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Win or Lose calculator para sa Grow a Garden Roblox pets",
@@ -39,7 +39,7 @@ const MUTATION_VALUES = {
   mega: 5
 };
 
-// Example pet prices (load from DB)
+// Pet prices (load from DB)
 let PET_PRICES = {};
 
 // Helper: detect mutation
@@ -68,7 +68,7 @@ function parsePetEntry(entry) {
       continue;
     }
 
-    // Detect kg anywhere: 40kg, 40 kg, 40 max
+    // Detect kg: 40kg, 40 kg, 40 max
     let kgMatch = null;
     if (w.match(/^(\d+)kg$/i)) kgMatch = w.match(/^(\d+)kg$/i);
     else if (/^\d+$/.test(w) && i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) kgMatch = [w, w];
@@ -86,10 +86,8 @@ function parsePetEntry(entry) {
       continue;
     }
 
-    // Skip literal kg/max
     if (w === "kg" || w === "max") continue;
 
-    // Part ng pet name
     petNameWords.push(words[i]);
   }
 
@@ -105,7 +103,7 @@ function parsePetEntry(entry) {
   return { qty, petName, mutation: mutationName, mutationValue, kg };
 }
 
-// Parse multiple pets in one line
+// Parse multiple pets
 function parseMultiplePets(part) {
   const pets = [];
   const regex = /(\d+\s+(?:\w+\s+)*\w+)/g;
@@ -128,11 +126,12 @@ function parseTradeMessage(msg) {
 
   for (let line of lines) {
     line = line.trim();
-    if (/^me[:\s]/i.test(line)) {
-      const petPart = line.replace(/^me[:\s]+/i, "");
+    // Flexible Me/Him detection
+    if (/^\s*me\b/i.test(line)) {
+      const petPart = line.replace(/^\s*me\b\s*:?\s*/i, "");
       mePets.push(...parseMultiplePets(petPart));
-    } else if (/^him[:\s]/i.test(line)) {
-      const petPart = line.replace(/^him[:\s]+/i, "");
+    } else if (/^\s*him\b/i.test(line)) {
+      const petPart = line.replace(/^\s*him\b\s*:?\s*/i, "");
       himPets.push(...parseMultiplePets(petPart));
     }
   }
@@ -146,7 +145,7 @@ function calculateValue(pets) {
   const breakdown = [];
   for (const p of pets) {
     if (!p.petName || !PET_PRICES[p.petName]) {
-      breakdown.push(`❌ ${p.petName || "Unknown pet"} wala pa sa data`);
+      breakdown.push(`❌ ${p.petName || "Unknown pet"} wala pa sa database`);
       continue;
     }
     const price = PET_PRICES[p.petName];
@@ -182,7 +181,7 @@ module.exports.run = async function({ api, event }) {
   const { mePets, himPets } = parseTradeMessage(body);
 
   if (mePets.length === 0 && himPets.length === 0) {
-    return api.sendMessage("⚠️ Hindi ma-detect ang Me o Him pets sa iyong mensahe.", threadID);
+    return api.sendMessage("⚠️ Wala pang pets na nade-detect sa database.", threadID);
   }
 
   // Calculate values
@@ -193,7 +192,7 @@ module.exports.run = async function({ api, event }) {
   resultMsg += `💁‍♂️ Me Kabuuang Value: ${meCalc.total}\n${meCalc.breakdown.join("\n")}\n\n`;
   resultMsg += `🤖 Him Kabuuang Value: ${himCalc.total}\n${himCalc.breakdown.join("\n")}\n\n`;
 
-  // Tagalog Win/Lose logic
+  // Tagalog Win/Lose logic: Me > Him = Lose, Me < Him = Win
   if (meCalc.total > himCalc.total) 
     resultMsg += "😢 Lose! Mas mataas ang value ng ibibigay mo sa kanya.";
   else if (meCalc.total < himCalc.total) 
