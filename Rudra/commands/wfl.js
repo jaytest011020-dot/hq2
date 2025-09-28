@@ -27,8 +27,9 @@ const PET_NICKNAMES = {
   "queen bee": ["queen bee", "qb"],
   spinosaurus: ["spinosaurus", "spino"],
   triceratops: ["triceratops", "trice"],
-  "t-rex": ["t-rex"],
+  "t-rex": ["t-rex", "trex"], 
   brontosaurus: ["brontosaurus", "bronto"],
+  dilophosaurus: ["dilophosaurus", "dilo"], 
 };
 
 // Mutation points
