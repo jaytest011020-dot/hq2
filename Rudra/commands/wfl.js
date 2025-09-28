@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "1.1.0",
+  version: "1.2.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Win or Lose calculator para sa Grow a Garden Roblox pets",
@@ -39,7 +39,6 @@ const MUTATION_VALUES = {
   mega: 5
 };
 
-// Pet prices (load from DB)
 let PET_PRICES = {};
 
 // Helper: detect mutation
@@ -156,11 +155,20 @@ function calculateValue(pets) {
       breakdown.push(`❌ ${p.petName || "Unknown pet"} wala pa sa database`);
       continue;
     }
+
     hasValidPet = true;
-    const price = PET_PRICES[p.petName];
-    const value = price + (p.mutationValue || 0) * 50 + (p.kg || 0);
-    total += value * (p.qty || 1);
-    breakdown.push(`• ${p.qty}x ${p.petName} ${p.mutation ? "(" + p.mutation + ")" : ""} = ${value * (p.qty || 1)}`);
+    const basePrice = PET_PRICES[p.petName] * (p.qty || 1);
+    const mutationPoints = (p.mutationValue || 0) * (p.qty || 1);
+    const kgPoints = (p.kg || 0) * (p.qty || 1);
+
+    const petTotal = basePrice + mutationPoints + kgPoints;
+    total += petTotal;
+
+    let lines = `• ${p.qty}x ${p.petName} - Base: ${basePrice}`;
+    if (p.mutation) lines += `\n   ↳ Mutation (${p.mutation}) = ${mutationPoints} pts`;
+    if (p.kg) lines += `\n   ↳ Max Kg (${p.kg}kg) = ${kgPoints} pts`;
+
+    breakdown.push({ text: lines, petTotal });
   }
 
   return { total, breakdown, hasValidPet };
@@ -201,9 +209,23 @@ module.exports.run = async function({ api, event }) {
   }
 
   let resultMsg = `📊 WFL RESULT\n──────────────────────\n`;
-  resultMsg += `💁‍♂️ Me Kabuuang Value: ${meCalc.total}\n${meCalc.breakdown.join("\n")}\n\n`;
-  resultMsg += `🤖 Him Kabuuang Value: ${himCalc.total}\n${himCalc.breakdown.join("\n")}\n\n`;
 
+  // Me Breakdown
+  resultMsg += `💁‍♂️ Me\n`;
+  meCalc.breakdown.forEach(b => {
+    const percent = meCalc.total > 0 ? ((b.petTotal / meCalc.total) * 100).toFixed(1) : 0;
+    resultMsg += `${b.text}\n   → ${percent}% ng total\n\n`;
+  });
+
+  // Him Breakdown
+  resultMsg += `🤖 Him\n`;
+  himCalc.breakdown.forEach(b => {
+    const percent = himCalc.total > 0 ? ((b.petTotal / himCalc.total) * 100).toFixed(1) : 0;
+    resultMsg += `${b.text}\n   → ${percent}% ng total\n\n`;
+  });
+
+  // Final Result
+  resultMsg += `──────────────────────\n`;
   if (meCalc.total > himCalc.total)
     resultMsg += "😢 Lose! Mas mataas ang value ng ibibigay mo sa kanya.";
   else if (meCalc.total < himCalc.total)
