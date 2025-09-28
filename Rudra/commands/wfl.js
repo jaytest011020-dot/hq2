@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "6.2.0",
+  version: "6.3.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
   description: "Auto detect WFL trades and calculate points",
@@ -38,12 +38,13 @@ const PET_NICKNAMES = {
   "shiba inu": ["shiba inu", "shiba"]
 };
 
-// Mutation points (rainbow → rb)
+// Mutation points
 const MUTATION_POINTS = {
   shiny: 5, inverted: 5, frozen: 5, windy: 5,
   golden: 50, tiny: 5, "iron skin": 5, radiant: 5,
   rainbow: 100, shocked: 50, giantbean: 10,
   ascended: 100, mega: 200,
+  titanic: 300 // ✅ Mutation for titan shortcut
 };
 
 // Size points
@@ -74,20 +75,41 @@ function findPetName(input, petPrices) {
   return match;
 }
 
-// Mutation detection (rainbow → rb)
+// Mutation detection with shortcut mapping
 function detectMutation(line) {
-  for (let mut in MUTATION_POINTS) {
-    if (mut !== "rainbow" && new RegExp(`\\b${mut}\\b`, "i").test(line)) return mut;
+  line = line.toLowerCase();
+  const shortcutMap = {
+    rb: "rainbow",
+    rainbow: "rainbow",
+    titan: "titanic" // ✅ titan shortcut
+  };
+
+  for (let key in shortcutMap) {
+    if (new RegExp(`\\b${key}\\b`, "i").test(line)) return shortcutMap[key];
   }
-  if (/\brb\b/i.test(line) || /\brainbow\b/i.test(line)) return "rainbow";
+
+  for (let mut in MUTATION_POINTS) {
+    if (!["rainbow", "titan"].includes(mut) && new RegExp(`\\b${mut}\\b`, "i").test(line)) return mut;
+  }
+
   return null;
 }
 
-// Size detection
+// Size detection with shortcut
 function detectSize(line) {
+  line = line.toLowerCase();
+  const shortcutMap = {
+    titan: "titanic" // ✅ titan shortcut for size
+  };
+
+  for (let key in shortcutMap) {
+    if (new RegExp(`\\b${key}\\b`, "i").test(line)) return shortcutMap[key];
+  }
+
   for (let s in SIZE_POINTS) {
     if (new RegExp(`\\b${s}\\b`, "i").test(line)) return s;
   }
+
   return null;
 }
 
@@ -100,7 +122,7 @@ function maxKgToSize(kg) {
   return null; // <30 → no size
 }
 
-// Parse pets mula sa text
+// Parse pets from text
 function parsePets(text, petPrices) {
   const pets = [];
   const lines = text.split(/\n/);
@@ -109,26 +131,20 @@ function parsePets(text, petPrices) {
     line = line.trim();
     if (!line) continue;
 
-    // Quantity (puwede dikit sa pet)
     let quantity = 1;
     const qtyMatch = line.match(/^(\d+)/);
     if (qtyMatch) quantity = parseInt(qtyMatch[1]);
 
-    // KG & Max
     let kg = 0;
     const kgMatch = line.match(/(\d+)\s*kg/i);
     const maxMatch = line.match(/(\d+)\s*max/i);
     if (kgMatch) kg = parseInt(kgMatch[1]);
     else if (maxMatch) kg = parseInt(maxMatch[1]);
 
-    // Mutation
     const mutation = detectMutation(line);
-
-    // Size
     let size = detectSize(line);
     if (!size && maxMatch) size = maxKgToSize(parseInt(maxMatch[1]));
 
-    // Detect multiple pets
     const tokens = line.split(/\s+/);
     let index = 0;
     while (index < tokens.length) {
@@ -149,7 +165,7 @@ function parsePets(text, petPrices) {
           name: foundPet,
           quantity,
           basePrice: petPrices[foundPet] || 0,
-          kg: size ? 0 : kg, // ignore KG if size detected
+          kg: size ? 0 : kg,
           mutation,
           size,
         });
@@ -233,29 +249,4 @@ module.exports.handleEvent = async function ({ api, event }) {
       `📌 Percentage:\n• Me: ${mePercent}%\n• Him: ${himPercent}%\n\n` +
       `🔎 Resulta: ${result}`;
 
-    return api.sendMessage(msg, threadID, event.messageID);
-  } catch (e) {
-    console.error("wfl.js error:", e);
-  }
-};
-
-// ---------------- Manual Command ---------------- //
-module.exports.run = async function ({ api, event, args }) {
-  const threadID = event.threadID;
-  if (!args[0]) {
-    return api.sendMessage("Gamitin: /wfl on | /wfl off | /wfl status", threadID, event.messageID);
-  }
-  const choice = args[0].toLowerCase();
-  if (choice === "on") {
-    await setData(`wflStatus/${threadID}`, { enabled: true });
-    return api.sendMessage("✅ WFL auto-replies are now ON.", threadID, event.messageID);
-  } else if (choice === "off") {
-    await setData(`wflStatus/${threadID}`, { enabled: false });
-    return api.sendMessage("⛔ WFL auto-replies are now OFF.", threadID, event.messageID);
-  } else if (choice === "status") {
-    const data = await getData(`wflStatus/${threadID}`);
-    return api.sendMessage(`📊 WFL status: ${data?.enabled ? "✅ ON" : "⛔ OFF"}`, threadID, event.messageID);
-  } else {
-    return api.sendMessage("Gamitin: /wfl on | /wfl off | /wfl status", threadID, event.messageID);
-  }
-};
+    return api.sendMessage
