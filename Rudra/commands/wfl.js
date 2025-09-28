@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "1.0.7",
+  version: "1.1.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Win or Lose calculator para sa Grow a Garden Roblox pets",
@@ -14,12 +14,12 @@ module.exports.config = {
 
 // Pet nicknames database
 const PET_NICKNAMES = {
-  raccoon: ["raccoon", "racc", "rc"],
-  "disco bee": ["disco bee", "db"],
-  butterfly: ["butterfly", "bf"],
-  dragonfly: ["dragonfly", "df"],
-  "queen bee": ["queen bee", "qb"],
-  kitsune: ["kitsune", "kit", "redkit"]
+  "raccoon": ["raccoon", "racc", "rc"],
+  "disco bee": ["disco bee", "db", "disco"],
+  "butterfly": ["butterfly", "bf", "bfly"],
+  "dragonfly": ["dragonfly", "df", "dragfly", "dfly"],
+  "queen bee": ["queen bee", "qb", "queen", "qbee"],
+  "kitsune": ["kitsune", "kit", "redkit", "kits"],
 };
 
 // Mutation values
@@ -42,36 +42,64 @@ const MUTATION_VALUES = {
 // Pet prices (load from DB)
 let PET_PRICES = {};
 
-// Detect mutation (kahit partial)
+// Helper: detect mutation
 function detectMutation(word) {
   word = word.toLowerCase();
   for (let m in MUTATION_VALUES) {
-    if (word.includes(m.slice(0, 4))) return { name: m, value: MUTATION_VALUES[m] };
+    if (word.includes(m.split(" ")[0])) {
+      return { name: m, value: MUTATION_VALUES[m] };
+    }
   }
   return { name: null, value: 0 };
+}
+
+// Helper: find pet name from nicknames
+function findPetName(rawName) {
+  const name = rawName.toLowerCase();
+  for (let key in PET_NICKNAMES) {
+    if (PET_NICKNAMES[key].some(n => n.toLowerCase() === name)) {
+      return key;
+    }
+  }
+  return null;
 }
 
 // Parse single pet entry
 function parsePetEntry(entry) {
   const words = entry.trim().split(/\s+/);
-  let qty = 1, kg = 0, mutationName = null, mutationValue = 0;
+  let qty = 1;
+  let kg = 0;
+  let mutationName = null;
+  let mutationValue = 0;
   const petNameWords = [];
 
   for (let i = 0; i < words.length; i++) {
     let w = words[i].toLowerCase();
 
-    // Detect quantity (unahan)
-    if (i === 0 && /^\d+$/.test(w)) { qty = parseInt(w); continue; }
+    // Quantity
+    if (i === 0 && /^\d+$/.test(w)) {
+      qty = parseInt(w);
+      continue;
+    }
 
-    // Detect kg: 40kg, 40 kg, 50 kg max
+    // Detect kg
     let kgMatch = null;
-    if (w.match(/^(\d+)kg$/i)) kgMatch = w.match(/^(\d+)kg$/i);
+    if (/^(\d+)kg$/i.test(w)) kgMatch = w.match(/^(\d+)kg$/i);
     else if (/^\d+$/.test(w) && i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) kgMatch = [w, w];
-    if (kgMatch) { kg = parseInt(kgMatch[1]); if (i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) i++; continue; }
 
-    // Detect mutation kahit saan
+    if (kgMatch) {
+      kg = parseInt(kgMatch[1]);
+      if (i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) i++;
+      continue;
+    }
+
+    // Mutation
     const mut = detectMutation(w);
-    if (mut.name && !mutationName) { mutationName = mut.name; mutationValue = mut.value; continue; }
+    if (mut.name && !mutationName) {
+      mutationName = mut.name;
+      mutationValue = mut.value;
+      continue;
+    }
 
     if (w === "kg" || w === "max") continue;
 
@@ -79,10 +107,7 @@ function parsePetEntry(entry) {
   }
 
   const petNameRaw = petNameWords.join(" ");
-  let petName = null;
-  for (let key in PET_NICKNAMES) {
-    if (PET_NICKNAMES[key].some(n => n.toLowerCase() === petNameRaw.toLowerCase())) { petName = key; break; }
-  }
+  const petName = findPetName(petNameRaw);
 
   return { qty, petName, mutation: mutationName, mutationValue, kg };
 }
@@ -92,57 +117,67 @@ function parseMultiplePets(part) {
   const pets = [];
   const regex = /(\d+\s+(?:\w+\s+)*\w+)/g;
   const matches = part.match(regex);
-  if (matches) for (const e of matches) pets.push(parsePetEntry(e.trim()));
-  else pets.push(parsePetEntry(part));
+  if (matches) {
+    for (const e of matches) pets.push(parsePetEntry(e.trim()));
+  } else {
+    pets.push(parsePetEntry(part));
+  }
   return pets;
 }
 
-// Parse trade message (single-line o multi-line)
+// Parse full trade message
 function parseTradeMessage(msg) {
-  const mePets = [], himPets = [];
+  const lines = msg.split(/\n/);
+  const mePets = [];
+  const himPets = [];
 
-  msg = msg.toLowerCase();
-
-  // Detect Me section
-  const meMatch = msg.match(/me\s*:?(.+?)(?=\s*him\b|$)/i);
-  if (meMatch) mePets.push(...parseMultiplePets(meMatch[1].trim()));
-
-  // Detect Him section
-  const himMatch = msg.match(/him\s*:?(.+)$/i);
-  if (himMatch) himPets.push(...parseMultiplePets(himMatch[1].trim()));
+  for (let line of lines) {
+    line = line.trim();
+    if (/^\s*me\b/i.test(line)) {
+      const petPart = line.replace(/^\s*me\b\s*:?\s*/i, "");
+      mePets.push(...parseMultiplePets(petPart));
+    } else if (/^\s*him\b/i.test(line)) {
+      const petPart = line.replace(/^\s*him\b\s*:?\s*/i, "");
+      himPets.push(...parseMultiplePets(petPart));
+    }
+  }
 
   return { mePets, himPets };
 }
 
-// Calculate total value
+// Calculate value
 function calculateValue(pets) {
-  let total = 0, breakdown = [];
+  let total = 0;
+  const breakdown = [];
+  let hasValidPet = false;
+
   for (const p of pets) {
     if (!p.petName || !PET_PRICES[p.petName]) {
       breakdown.push(`❌ ${p.petName || "Unknown pet"} wala pa sa database`);
       continue;
     }
+    hasValidPet = true;
     const price = PET_PRICES[p.petName];
     const value = price + (p.mutationValue || 0) * 50 + (p.kg || 0);
     total += value * (p.qty || 1);
     breakdown.push(`• ${p.qty}x ${p.petName} ${p.mutation ? "(" + p.mutation + ")" : ""} = ${value * (p.qty || 1)}`);
   }
-  return { total, breakdown };
+
+  return { total, breakdown, hasValidPet };
 }
 
-// Command module
+// Main command
 module.exports.run = async function({ api, event }) {
   const { threadID, body } = event;
-  const msg = body;
+  const msg = body.toLowerCase();
 
-  // Auto detect WFL
-  if (!msg.toLowerCase().includes("wfl")) return;
+  if (!msg.includes("wfl")) return;
 
   // Load pet prices
   PET_PRICES = (await getData("petPrices")) || PET_PRICES;
 
-  // Detect /wfl add
-  const addMatch = body.match(/\/wfl add (\w+) (\d+)/i);
+  // Handle add
+  const addMatch = body.match(/\/wfl add (.+?) (\d+)/i);
   if (addMatch) {
     const petName = addMatch[1].toLowerCase();
     const price = parseInt(addMatch[2]);
@@ -151,19 +186,19 @@ module.exports.run = async function({ api, event }) {
     return api.sendMessage(`✅ ${petName} presyo ay na-set sa ${price}`, threadID);
   }
 
-  // Parse trade
-  const { mePets, himPets } = parseTradeMessage(msg);
+  // Parse pets
+  const { mePets, himPets } = parseTradeMessage(body);
 
-  // Check if all pets missing in DB
-  const meValid = mePets.filter(p => p.petName && PET_PRICES[p.petName]);
-  const himValid = himPets.filter(p => p.petName && PET_PRICES[p.petName]);
-
-  if (meValid.length === 0 && himValid.length === 0) {
-    return api.sendMessage("⚠️ Wala kang na-detect na pet sa database.", threadID);
+  if (mePets.length === 0 && himPets.length === 0) {
+    return api.sendMessage("⚠️ Wala akong na-detect na pet name. Siguro wala pa sa database.", threadID);
   }
 
-  const meCalc = calculateValue(meValid);
-  const himCalc = calculateValue(himValid);
+  const meCalc = calculateValue(mePets);
+  const himCalc = calculateValue(himPets);
+
+  if (!meCalc.hasValidPet && !himCalc.hasValidPet) {
+    return api.sendMessage("⚠️ Wala akong na-detect na pet name na nasa database.", threadID);
+  }
 
   let resultMsg = `📊 WFL RESULT\n──────────────────────\n`;
   resultMsg += `💁‍♂️ Me Kabuuang Value: ${meCalc.total}\n${meCalc.breakdown.join("\n")}\n\n`;
