@@ -7,7 +7,7 @@ module.exports.config = {
   version: "1.0.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Plants vs Brainrots auto-stock with full seeds and gear + emoji and styled boxes",
+  description: "Plants vs Brainrots auto-stock with latest seeds + emoji and styled boxes",
   usePrefix: true,
   commandCategory: "PvB tools",
   usages: "/stockpvb on|off|check",
@@ -17,22 +17,11 @@ module.exports.config = {
 // Auto-stock timers per GC
 const autoStockTimers = {};
 
-// Special items alert (You can modify this list based on game items)
-const SPECIAL_ITEMS = [
-  "Legendary Gear",
-  "Mythical Seed",
-  "Rare Gear"
-];
-
-// Emoji mapping for seeds and gear
+// Emoji mapping for seeds
 const ITEM_EMOJI = {
   "Sunflower": "🌻", "Pumpkin": "🎃", "Dragon Fruit": "🐉",
   "Watermelon": "🍉", "Tomato": "🍅", "Strawberry": "🍓",
   "Carrot": "🥕", "Apple": "🍎", "Mango": "🥭",
-  // Gear
-  "Watering Can": "💧", "Trowel": "🔨", "Trading Ticket": "🎟️",
-  "Basic Sprinkler": "🌊", "Advanced Sprinkler": "💦",
-  "Master Sprinkler": "🌟💦", "Godly Sprinkler": "🌪️",
 };
 
 // Helper: assign emoji to item
@@ -56,38 +45,33 @@ function getNext5Min(date = null) {
   return next;
 }
 
-// Scrape stock data from PvB website
+// Scrape latest stock (seeds only) from PvB website
 async function scrapePvBStock() {
-  const url = "https://plantsvsbrainrots.com/stock";  // Replace with the actual URL
+  const url = "https://vsbrainrots.com/stock";  // Replace with actual link
   try {
     const { data } = await axios.get(url);  // Fetch the page content
     const $ = cheerio.load(data);  // Load the HTML into cheerio
 
     // Scraping logic: Modify according to the website structure
     const seeds = [];
-    const gear = [];
 
-    // Example scraping of seeds and gear (Adjust the selectors based on actual structure)
-    $(".seeds-list .item").each((index, element) => {
-      const name = $(element).find(".item-name").text();
-      const quantity = $(element).find(".item-quantity").text();
-      seeds.push({ name, quantity });
+    // Example scraping of latest seeds (Adjust the selectors based on actual structure)
+    $(".stock__list .stock__item").each((index, element) => {
+      const name = $(element).find(".stock__name").text().trim();
+      const quantity = $(element).find(".stock__quantity").text().trim();
+      if (name && quantity && name.toLowerCase().includes('seed')) {  // Filter for seeds only
+        seeds.push({ name, quantity });
+      }
     });
 
-    $(".gear-list .item").each((index, element) => {
-      const name = $(element).find(".item-name").text();
-      const quantity = $(element).find(".item-quantity").text();
-      gear.push({ name, quantity });
-    });
-
-    return { seeds, gear };
+    return { seeds };
   } catch (error) {
     console.error("Error scraping stock data:", error);
     return null;
   }
 }
 
-// Format a section (seeds, gear)
+// Format a section (seeds)
 function formatSectionText(items) {
   if (!items || items.length === 0) return "❌ Empty";
   return items.map(i => `• ${getEmoji(i.name)} ${i.name} (${i.quantity ?? "N/A"})`).join("\n");
@@ -95,7 +79,7 @@ function formatSectionText(items) {
 
 // Send styled stock update
 async function sendPvBStock(threadID, api) {
-  const data = await scrapePvBStock();  // Scrape the Plants vs Brainrots stock data
+  const data = await scrapePvBStock();  // Scrape the latest seeds data
   if (!data) return;
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
@@ -103,7 +87,6 @@ async function sendPvBStock(threadID, api) {
 
   // Format stock sections
   const seedText = formatSectionText(data.seeds);
-  const gearText = formatSectionText(data.gear);
 
   // Styled message template
   const stockMsg = `
@@ -115,28 +98,9 @@ async function sendPvBStock(threadID, api) {
 
 ╭─🌱 Seeds───────────╮
 ${seedText}
-╰──────────────────╯
-
-╭─🛠️ Gear──────────╮
-${gearText}
 ╰──────────────────╯`;
 
   api.sendMessage(stockMsg, threadID);
-
-  // Special items alert
-  const allItems = [...data.gear, ...data.seeds];
-  const foundSpecial = allItems.filter(i => SPECIAL_ITEMS.some(si => i.name.toLowerCase().includes(si.toLowerCase())));
-  if (foundSpecial.length > 0) {
-    const specialMsg = `
-🚨 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 🚨
-──────────────────────
-🕒 Current Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
-🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
-──────────────────────
-${foundSpecial.map(i => `✨ ${i.name} (${i.quantity ?? "N/A"})`).join("\n")}
-──────────────────────`;
-    api.sendMessage(specialMsg, threadID);
-  }
 }
 
 // Start auto-stock timer
