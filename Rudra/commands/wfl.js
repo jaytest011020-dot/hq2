@@ -2,13 +2,13 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "wfl",
-  version: "1.0.2",
+  version: "1.0.4",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Win or Lose calculator for Grow a Garden Roblox pets",
-  usePrefix: false, // auto-detect in message
+  description: "Win or Lose calculator para sa Grow a Garden Roblox pets",
+  usePrefix: false, // auto-detect sa message
   commandCategory: "gag tools",
-  usages: "Auto WFL detection in chat",
+  usages: "Auto WFL detection sa chat",
   cooldowns: 5,
 };
 
@@ -62,7 +62,7 @@ function parsePetEntry(entry) {
   for (let i = 0; i < words.length; i++) {
     let w = words[i].toLowerCase();
 
-    // Detect quantity (unang number)
+    // Detect quantity
     if (i === 0 && /^\d+$/.test(w)) {
       qty = parseInt(w);
       continue;
@@ -74,7 +74,7 @@ function parsePetEntry(entry) {
     else if (/^\d+$/.test(w) && i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) kgMatch = [w, w];
     if (kgMatch) {
       kg = parseInt(kgMatch[1]);
-      if (i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) i++; // skip next
+      if (i + 1 < words.length && ["kg", "max"].includes(words[i + 1].toLowerCase())) i++;
       continue;
     }
 
@@ -108,7 +108,7 @@ function parsePetEntry(entry) {
 // Parse multiple pets in one line
 function parseMultiplePets(part) {
   const pets = [];
-  const regex = /(\d+\s+(?:\w+\s+)*\w+)/g; // match number + rest
+  const regex = /(\d+\s+(?:\w+\s+)*\w+)/g;
   const matches = part.match(regex);
   if (matches) {
     for (const e of matches) {
@@ -146,7 +146,7 @@ function calculateValue(pets) {
   const breakdown = [];
   for (const p of pets) {
     if (!p.petName || !PET_PRICES[p.petName]) {
-      breakdown.push(`❌ ${p.petName || "Unknown pet"} not in database`);
+      breakdown.push(`❌ ${p.petName || "Unknown pet"} wala pa sa data`);
       continue;
     }
     const price = PET_PRICES[p.petName];
@@ -175,14 +175,14 @@ module.exports.run = async function({ api, event }) {
     const price = parseInt(addMatch[2]);
     PET_PRICES[petName] = price;
     await setData("petPrices", PET_PRICES);
-    return api.sendMessage(`✅ ${petName} price set to ${price}`, threadID);
+    return api.sendMessage(`✅ ${petName} presyo ay na-set sa ${price}`, threadID);
   }
 
   // Parse trade message
   const { mePets, himPets } = parseTradeMessage(body);
 
   if (mePets.length === 0 && himPets.length === 0) {
-    return api.sendMessage("⚠️ Could not detect Me or Him pets in your message.", threadID);
+    return api.sendMessage("⚠️ Hindi ma-detect ang Me o Him pets sa iyong mensahe.", threadID);
   }
 
   // Calculate values
@@ -190,16 +190,16 @@ module.exports.run = async function({ api, event }) {
   const himCalc = calculateValue(himPets);
 
   let resultMsg = `📊 WFL RESULT\n──────────────────────\n`;
-  resultMsg += `💁‍♂️ Me Total: ${meCalc.total}\n${meCalc.breakdown.join("\n")}\n\n`;
-  resultMsg += `🤖 Him Total: ${himCalc.total}\n${himCalc.breakdown.join("\n")}\n\n`;
+  resultMsg += `💁‍♂️ Me Kabuuang Value: ${meCalc.total}\n${meCalc.breakdown.join("\n")}\n\n`;
+  resultMsg += `🤖 Him Kabuuang Value: ${himCalc.total}\n${himCalc.breakdown.join("\n")}\n\n`;
 
-  // Win/Lose logic: Me = ibibigay, Him = matatanggap
+  // Tagalog Win/Lose logic
   if (meCalc.total > himCalc.total) 
-    resultMsg += "😢 Lose! Me is higher value than Him!";
+    resultMsg += "😢 Lose! Mas mataas ang value ng ibibigay mo sa kanya.";
   else if (meCalc.total < himCalc.total) 
-    resultMsg += "🎉 Win! Him is higher value than Me!";
+    resultMsg += "🎉 Win! Mas mataas ang value ng ibibigay niya sa iyo!";
   else 
-    resultMsg += "⚖️ Draw! Equal value!";
+    resultMsg += "⚖️ Draw! Pantay ang value ng ibinigay.";
 
   api.sendMessage(resultMsg, threadID);
 };
