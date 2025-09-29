@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stockpvb",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Plants vs Brainrots auto-stock with emoji and styled boxes",
+  description: "Plants vs Brainrots auto-stock with emoji and styled boxes (aligned every 5 min + 10s)",
   usePrefix: true,
   commandCategory: "pvbr tools",
   usages: "/stockpvb on|off|check",
@@ -17,7 +17,6 @@ const autoStockTimers = {};
 
 // Emoji mapping
 const ITEM_EMOJI = {
-  // Seeds/plants
   "Cactus": "🌵",
   "Strawberry": "🍓",
   "Pumpkin": "🎃",
@@ -74,6 +73,25 @@ function formatStock(items) {
   }).join("\n");
 }
 
+// Helper: get next restock time aligned to mm:10 seconds (every 5 min)
+function getNextRestock(date = null) {
+  const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+
+  let minutes = now.getMinutes();
+  let nextMinutes = Math.floor(minutes / 5) * 5 + 5; // next 5 min mark
+  if (nextMinutes >= 60) {
+    nextMinutes = 0;
+    now.setHours(now.getHours() + 1);
+  }
+
+  const next = new Date(now);
+  next.setMinutes(nextMinutes);
+  next.setSeconds(10); // fixed at 10 seconds
+  next.setMilliseconds(0);
+
+  return next;
+}
+
 // Send styled stock
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
@@ -103,11 +121,18 @@ ${formatStock(gear)}
   api.sendMessage(msg, threadID);
 }
 
-// Auto-stock loop
+// Auto-stock loop (aligned)
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
-  sendStock(threadID, api); // send immediately
-  autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000); // every 5 minutes
+
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const next = getNextRestock(now);
+  const delay = next.getTime() - now.getTime();
+
+  setTimeout(() => {
+    sendStock(threadID, api);
+    autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
+  }, delay);
 }
 
 module.exports.run = async function({ api, event, args }) {
@@ -123,7 +148,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`pvbrstock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates every 5 minutes.", threadID, messageID);
+    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates every 5 minutes (aligned to mm:10).", threadID, messageID);
   }
 
   if (option === "off") {
@@ -133,12 +158,12 @@ module.exports.run = async function({ api, event, args }) {
       clearInterval(autoStockTimers[threadID]);
       delete autoStockTimers[threadID];
     }
-    return api.sendMessage("❌ PVB Auto-stock disabled.", threadID, messageID);
+    return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
   }
 
   if (option === "check") {
     const status = gcData.enabled ? "ON ✅" : "OFF ❌";
-    return api.sendMessage(`📊 PVB Auto-stock status: ${status}`, threadID, messageID);
+    return api.sendMessage(`📊 PVBR Auto-stock status: ${status}`, threadID, messageID);
   }
 
   api.sendMessage("⚠️ Usage: /stockpvb on|off|check", threadID, messageID);
@@ -150,7 +175,7 @@ module.exports.onLoad = async function({ api }) {
   for (const tid in allGCs) {
     if (allGCs[tid].enabled) {
       startAutoStock(tid, api);
-      api.sendMessage("♻️ Bot restarted — PVB Auto-stock resumed.", tid);
+      api.sendMessage("♻️ Bot restarted — PVBR Auto-stock resumed.", tid);
     }
   }
 };
