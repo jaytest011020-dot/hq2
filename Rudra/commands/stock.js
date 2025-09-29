@@ -4,7 +4,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stock",
-  version: "6.6.3",
+  version: "6.6.4",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "GrowAGarden auto-stock with full seeds, eggs, gear, cosmetics + emoji and styled boxes",
@@ -82,22 +82,26 @@ function getEmoji(name) {
   return ITEM_EMOJI[name] || "❔";
 }
 
-// Helper: get next 5-minute aligned restock
+// Helper: get next 5-minute aligned restock at :10s
 function getNext5Min(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
-  let nextMinutes = Math.floor(minutes / 5) * 5 + 1;
-  if (nextMinutes <= minutes) nextMinutes += 5;
+  let nextMinutes = Math.floor(minutes / 5) * 5 + 5;
   const next = new Date(now);
-  next.setMinutes(nextMinutes);
-  next.setSeconds(0, 0);
+
   if (nextMinutes >= 60) {
     next.setHours(now.getHours() + 1);
-    next.setMinutes(nextMinutes % 60);
+    next.setMinutes(0);
+  } else {
+    next.setMinutes(nextMinutes);
   }
+
+  next.setSeconds(10); // always at :10s
+  next.setMilliseconds(0);
   return next;
-    } 
-  // Fetch stock data from API
+}
+
+// Fetch stock data from API
 function fetchStocks() {
   const options = {
     method: "GET",
@@ -196,9 +200,11 @@ async function startAutoStock(threadID, api) {
 
   setTimeout(() => {
     sendStock(threadID, api);
+    // repeat every 5 minutes
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
-} 
+}
+
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
@@ -213,7 +219,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`stock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes.", threadID, messageID);
+    return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes at :10s.", threadID, messageID);
   }
 
   if (option === "off") {
