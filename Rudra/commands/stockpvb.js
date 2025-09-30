@@ -52,9 +52,9 @@ const ITEM_EMOJI = {
 const CATEGORY_EMOJI = {
   // Plants
   "Rare": "🌿",
-  "✨ Mythic ✨": "✨",
-  "💪 Godly": "💪",
-  "🎩 Secret": "🎩",
+  "Mythic ": "✨",
+  "Godly": "💪",
+  "Secret": "🎩",
   // Gear
   "Common": "🟢",
   "Epic": "🔵",
@@ -80,7 +80,7 @@ function formatPlants(items) {
 
   let output = "";
   // Custom order for plants
-  ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"].forEach(type => {
+  ["Rare", "Mythic", "Godly", "Secret"].forEach(type => {
     if (grouped[type]) {
       const emoji = CATEGORY_EMOJI[type] || "";
       output += `[${emoji} ${type}]\n${grouped[type].join("\n")}\n\n`;
