@@ -3,18 +3,18 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "1.5.0",
+  version: "1.6.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Plants vs Brainrots auto-stock with emoji and styled boxes (dynamic allowed minutes)",
+  description: "Plants vs Brainrots auto-stock with emoji (global timer, per-GC stock at allowed minutes)",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
   cooldowns: 10,
 };
 
-const autoStockTimers = {};
 const ALLOWED_MINUTES = [1, 6, 11, 16, 21]; // allowed minutes for restock
+let globalTimer = null;
 
 // Emoji mapping with category type
 const ITEM_EMOJI = {
@@ -147,25 +147,22 @@ ${formatGear(gear)}
   api.sendMessage(msg, threadID);
 }
 
-async function startAutoStock(threadID, api) {
-  if (autoStockTimers[threadID]) return;
-
-  const loop = async () => {
-    await sendStock(threadID, api);
-    const next = getNextRestock();
-    const delay = next.getTime() - new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" })).getTime();
-    autoStockTimers[threadID] = setTimeout(loop, delay);
-  };
-
-  loop();
-}
-
-function stopAutoStock(threadID) {
-  if (autoStockTimers[threadID]) {
-    clearTimeout(autoStockTimers[threadID]);
-    delete autoStockTimers[threadID];
+async function loopAutoStock(api) {
+  const allGCs = (await getData("pvbrstock")) || {};
+  for (const tid in allGCs) {
+    if (allGCs[tid].enabled) {
+      await sendStock(tid, api);
+    }
   }
+
+  const next = getNextRestock();
+  const delay = next.getTime() - new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" })).getTime();
+  globalTimer = setTimeout(() => loopAutoStock(api), delay);
 }
+
+module.exports.startGlobalAutoStock = async function(api) {
+  if (!globalTimer) loopAutoStock(api);
+};
 
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
@@ -179,14 +176,14 @@ module.exports.run = async function({ api, event, args }) {
   if (option === "on") {
     gcData.enabled = true;
     await setData(`pvbstock/${threadID}`, gcData);
-    startAutoStock(threadID, api);
-    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates at allowed minutes.", threadID, messageID);
+    api.sendMessage("✅ PVBR Auto-stock enabled. Updates at allowed minutes.", threadID, messageID);
+    module.exports.startGlobalAutoStock(api);
+    return;
   }
 
   if (option === "off") {
     gcData.enabled = false;
     await setData(`pvbstock/${threadID}`, gcData);
-    stopAutoStock(threadID);
     return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
   }
 
@@ -199,10 +196,10 @@ module.exports.run = async function({ api, event, args }) {
 };
 
 module.exports.onLoad = async function({ api }) {
+  module.exports.startGlobalAutoStock(api);
   const allGCs = (await getData("pvbrstock")) || {};
   for (const tid in allGCs) {
     if (allGCs[tid].enabled) {
-      startAutoStock(tid, api);
       api.sendMessage("♻️ Bot restarted — PVBR Auto-stock resumed.", tid);
     }
   }
