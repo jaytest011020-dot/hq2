@@ -4,7 +4,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stock",
-  version: "6.6.4",
+  version: "6.6.5",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "GrowAGarden auto-stock with full seeds, eggs, gear, cosmetics + emoji and styled boxes",
@@ -82,7 +82,7 @@ function getEmoji(name) {
   return ITEM_EMOJI[name] || "❔";
 }
 
-// Helper: get next 5-minute aligned restock at :10s
+// Helper: get next 5-minute aligned restock at :20s
 function getNext5Min(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
@@ -96,7 +96,7 @@ function getNext5Min(date = null) {
     next.setMinutes(nextMinutes);
   }
 
-  next.setSeconds(10); // always at :10s
+  next.setSeconds(20); // :20s
   next.setMilliseconds(0);
   return next;
 }
@@ -194,17 +194,19 @@ ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity ?? i.value ?? "N/A"})`).joi
 // Start auto-stock timer
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
+
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min(now);
   const delay = next.getTime() - now.getTime();
 
   setTimeout(() => {
     sendStock(threadID, api);
-    // repeat every 5 minutes
+    // repeat every 5 minutes at :20s
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
 }
 
+// Command handler
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
@@ -219,7 +221,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`stock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes at :10s.", threadID, messageID);
+    return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes at :20s.", threadID, messageID);
   }
 
   if (option === "off") {
