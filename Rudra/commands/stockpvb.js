@@ -18,20 +18,22 @@ const autoStockTimers = {};
 // Emoji mapping with category type
 const ITEM_EMOJI = {
   // Plants
-  "Cactus": { emoji: "🌵", type: "Common" },
-  "Strawberry": { emoji: "🍓", type: "Common" },
-  "Pumpkin": { emoji: "🎃", type: "Common" },
-  "Sunflower": { emoji: "🌻", type: "Common" },
-  "Dragon Fruit": { emoji: "🐉🍉", type: "Common" },
-  "Eggplant": { emoji: "🍆", type: "Common" },
+  "Cactus": { emoji: "🌵", type: "Rare" },
+  "Strawberry": { emoji: "🍓", type: "Rare" },
+  "Pumpkin": { emoji: "🎃", type: "Rare" },
+  "Sunflower": { emoji: "🌻", type: "Rare" },
+  "Dragon Fruit": { emoji: "🐉🍉", type: "Rare" },
+  "Eggplant": { emoji: "🍆", type: "Rare" },
 
   "Watermelone": { emoji: "🍉✨", type: "Mythic" },
+  "Water Melone": { emoji: "🍉✨", type: "Mythic" },
   "Grape": { emoji: "🍇✨", type: "Mythic" },
 
   "Cocotank": { emoji: "🥥🛡️", type: "Godly" },
-  "Carnivorous plant": { emoji: "🪴🦷", type: "Godly" },
+  "Carnivorous Plant": { emoji: "🪴🦷", type: "Godly" },
 
-  "Mr-carrot": { emoji: "🥕🎩", type: "Secret" },
+  "Mr-Carrot": { emoji: "🥕🎩", type: "Secret" },
+  "Mr Carrot": { emoji: "🥕🎩", type: "Secret" },
   "Tomatrio": { emoji: "🍅👨‍👦‍👦", type: "Secret" },
   "Shroombino": { emoji: "🍄🎭", type: "Secret" },
 
@@ -56,13 +58,13 @@ function formatPlants(items) {
 
   const grouped = {};
   items.forEach(i => {
-    const type = ITEM_EMOJI[i.name]?.type || "Common";
+    const type = ITEM_EMOJI[i.name]?.type || "Rare";
     if (!grouped[type]) grouped[type] = [];
     grouped[type].push(`• ${getEmoji(i.name)} ${i.name} (${i.stock ?? "N/A"})`);
   });
 
   let output = "";
-  const order = ["Common", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"];
+  const order = ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"];
   order.forEach(type => {
     const key = Object.keys(grouped).find(k => k.includes(type.replace(/✨|🎩|💪/g, "")));
     if (key && grouped[key]) {
