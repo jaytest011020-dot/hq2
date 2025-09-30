@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "2.4.0",
+  version: "2.4.1",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown, current time + next restock",
@@ -16,7 +16,7 @@ module.exports.config = {
 // Allowed restock minutes
 const ALLOWED_MINUTES = [1, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56];
 
-// Track scheduled GCs
+// Track scheduled timers per GC
 const autoStockTimers = {};
 
 // Emoji mapping
@@ -99,7 +99,7 @@ function getNextRestock(date = null) {
 
   next.setMinutes(nextMinute);
   next.setSeconds(20);  // Set the second to 20 for the 20-second delay
-  next.setMilliseconds(0);  // Ensure no milliseconds are added
+  next.setMilliseconds(0);
   return next;
 }
 
@@ -129,35 +129,32 @@ ${formatItems(plants, ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"])}
 ${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
 ╰─────────────────╯`;
 
-  // Adding the 20-second delay before sending the message
-  setTimeout(async () => {
-    await api.sendMessage(msg, threadID);
-  }, 20000);  // 20 seconds delay after fetching
+  await api.sendMessage(msg, threadID);
 }
 
 // Recursive scheduling at the aligned time + 20 seconds delay
 function scheduleNextStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNextRestock(now);
-  const delay = next.getTime() - now.getTime(); // This will align with the next available time + 20 seconds
+  const delay = next.getTime() - now.getTime();
 
-  setTimeout(async () => {
-    await sendStock(threadID, api);  // Send the stock message after the delay
-    scheduleNextStock(threadID, api);  // Recursively schedule the next fetch/send cycle
+  autoStockTimers[threadID] = setTimeout(async () => {
+    await sendStock(threadID, api);
+    scheduleNextStock(threadID, api);  // schedule ulit
   }, delay);
 }
 
 // Start auto-stock for a GC
 function startAutoStock(threadID, api) {
-  if (autoStockTimers[threadID]) return;
-  autoStockTimers[threadID] = true; // mark as scheduled
-  scheduleNextStock(threadID, api);  // Start scheduling the next fetch/send cycle
+  if (autoStockTimers[threadID]) return; // already running
+  scheduleNextStock(threadID, api);
 }
 
 // Stop auto-stock for a GC
 function stopAutoStock(threadID) {
   if (autoStockTimers[threadID]) {
-    delete autoStockTimers[threadID]; // remove scheduled timer
+    clearTimeout(autoStockTimers[threadID]); // cancel yung timer
+    delete autoStockTimers[threadID];
   }
 }
 
