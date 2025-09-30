@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "1.2.0",
+  version: "1.3.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Plants vs Brainrots auto-stock with emoji and styled boxes (aligned every 5 min + 10s)",
@@ -25,26 +25,41 @@ const ITEM_EMOJI = {
   "Dragon Fruit": { emoji: "🐉🍉", type: "Rare" },
   "Eggplant": { emoji: "🍆", type: "Rare" },
 
-  "Watermelone": { emoji: "🍉✨", type: "Mythic" },
-  "Water Melone": { emoji: "🍉✨", type: "Mythic" },
-  "Grape": { emoji: "🍇✨", type: "Mythic" },
+  "Watermelon": { emoji: "🍉✨", type: "✨ Mythic ✨" },
+  "Water Melon": { emoji: "🍉✨", type: "✨ Mythic ✨" },
+  "Grape": { emoji: "🍇✨", type: "✨ Mythic ✨" },
 
-  "Cocotank": { emoji: "🥥🛡️", type: "Godly" },
-  "Carnivorous Plant": { emoji: "🪴🦷", type: "Godly" },
+  "Cocotank": { emoji: "🥥🛡️", type: "💪 Godly" },
+  "Carnivorous Plant": { emoji: "🪴🦷", type: "💪 Godly" },
 
-  "Mr-Carrot": { emoji: "🥕🎩", type: "Secret" },
-  "Mr Carrot": { emoji: "🥕🎩", type: "Secret" },
-  "Tomatrio": { emoji: "🍅👨‍👦‍👦", type: "Secret" },
-  "Shroombino": { emoji: "🍄🎭", type: "Secret" },
+  "Mr-Carrot": { emoji: "🥕🎩", type: "🎩 Secret" },
+  "Mr Carrot": { emoji: "🥕🎩", type: "🎩 Secret" },
+  "Tomatrio": { emoji: "🍅👨‍👦‍👦", type: "🎩 Secret" },
+  "Shroombino": { emoji: "🍄🎭", type: "🎩 Secret" },
 
   // Gear
-  "Water Bucket": { emoji: "🪣💧", type: "💧 Water" },
-  "Frost Grenade": { emoji: "🧊💣", type: "❄️ Ice" },
-  "Banana Gun": { emoji: "🍌🔫", type: "🔫 Weapons" },
-  "Frost Blower": { emoji: "❄️🌬️", type: "❄️ Ice" },
-  "Lucky Potion": { emoji: "🍀🧪", type: "🧪 Potions" },
-  "Speed Potion": { emoji: "⚡🧪", type: "🧪 Potions" },
-  "Carrot Launcher": { emoji: "🥕🚀", type: "🔫 Weapons" },
+  "Bat": { emoji: "🦇", type: "Common" },
+  "Water Bucket": { emoji: "🪣💧", type: "Epic" },
+  "Frost Grenade": { emoji: "🧊💣", type: "Epic" },
+  "Banana Gun": { emoji: "🍌🔫", type: "Epic" },
+  "Frost Blower": { emoji: "❄️🌬️", type: "Legendary" },
+  "Lucky Potion": { emoji: "🍀🧪", type: "Legendary" },
+  "Speed Potion": { emoji: "⚡🧪", type: "Legendary" },
+  "Carrot Launcher": { emoji: "🥕🚀", type: "Godly" },
+};
+
+// Category emoji mapping
+const CATEGORY_EMOJI = {
+  // Plants
+  "Rare": "🌿",
+  "✨ Mythic ✨": "✨",
+  "💪 Godly": "💪",
+  "🎩 Secret": "🎩",
+  // Gear
+  "Common": "🟢",
+  "Epic": "🔵",
+  "Legendary": "🟣",
+  "Godly": "🟡",
 };
 
 // Helper to get emoji
@@ -64,12 +79,11 @@ function formatPlants(items) {
   });
 
   let output = "";
-  const order = ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"];
-  order.forEach(type => {
-    const key = Object.keys(grouped).find(k => k.includes(type.replace(/✨|🎩|💪/g, "")));
-    if (key && grouped[key]) {
-      const header = type.includes("✨") || type.includes("💪") || type.includes("🎩") ? `[${type}]` : `[${type}]`;
-      output += `${header}\n${grouped[key].join("\n")}\n\n`;
+  // Custom order for plants
+  ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"].forEach(type => {
+    if (grouped[type]) {
+      const emoji = CATEGORY_EMOJI[type] || "";
+      output += `[${emoji} ${type}]\n${grouped[type].join("\n")}\n\n`;
     }
   });
 
@@ -82,14 +96,18 @@ function formatGear(items) {
 
   const grouped = {};
   items.forEach(i => {
-    const type = ITEM_EMOJI[i.name]?.type || "Other";
+    const type = ITEM_EMOJI[i.name]?.type || "Common";
     if (!grouped[type]) grouped[type] = [];
     grouped[type].push(`• ${getEmoji(i.name)} ${i.name} (${i.stock ?? "N/A"})`);
   });
 
   let output = "";
-  Object.keys(grouped).forEach(type => {
-    output += `[${type}]\n${grouped[type].join("\n")}\n\n`;
+  // Custom order for gear
+  ["Common", "Epic", "Legendary", "Godly"].forEach(type => {
+    if (grouped[type]) {
+      const emoji = CATEGORY_EMOJI[type] || "";
+      output += `[${emoji} ${type}]\n${grouped[type].join("\n")}\n\n`;
+    }
   });
 
   return output.trim();
