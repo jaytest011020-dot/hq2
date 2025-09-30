@@ -103,16 +103,6 @@ function getNextRestock(date = null) {
   return next;
 }
 
-// Format seconds -> Xm Ys
-function formatCountdown(seconds) {
-  if (seconds >= 60) {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes}m ${secs}s`;
-  }
-  return `${seconds}s`;
-}
-
 // Send stock message to a GC with countdown
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
@@ -122,15 +112,13 @@ async function sendStock(threadID, api) {
   const plants = stock.filter(i => i.category === "SEEDS");
   const gear = stock.filter(i => i.category === "GEAR");
 
-  const next = getNextRestock(now);
+  const next = getNextRestock();
 
-  const makeMsg = (remaining) => `
+  const msg = `
 ╭─────────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
-🕒 ${new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }))
-      .toLocaleTimeString("en-PH", { hour12: false })}
-🔄 Next Restock: ${getNextRestock().toLocaleTimeString("en-PH", { hour12: false })}
-⏳ Countdown: ${formatCountdown(remaining)}
+🕒 ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
 ╰─────────────────╯
 
 ╭─🌿 Plants────────╮
@@ -141,34 +129,35 @@ ${formatItems(plants, ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"])}
 ${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
 ╰─────────────────╯`;
 
-  const now2 = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  let remaining = Math.max(0, Math.floor((next.getTime() - now2.getTime()) / 1000));
-  const sentMsg = await api.sendMessage(makeMsg(remaining), threadID);
+  const sentMsg = await api.sendMessage(msg, threadID);
 
-  // Live countdown
+  // Countdown
   const countdownInterval = setInterval(() => {
-    const now3 = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    const next3 = getNextRestock(now3);
-    remaining = Math.max(0, Math.floor((next3.getTime() - now3.getTime()) / 1000));
-
-    api.editMessage(makeMsg(remaining), threadID, sentMsg.messageID);
-
+    const now2 = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const remaining = Math.max(0, Math.floor((next.getTime() - now2.getTime()) / 1000));
+    api.editMessage(`${msg}\n⏳ Countdown: ${remaining}s`, threadID, sentMsg.messageID);
     if (remaining <= 0) clearInterval(countdownInterval);
   }, 1000);
 }
 
-// Start auto-stock for a GC
+// Start auto-stock for a GC (aligned to allowed minutes)
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
 
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const next = getNextRestock(now);
-  const delay = next.getTime() - now.getTime();
+  async function scheduleNext() {
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const next = getNextRestock(now);
+    const delay = next.getTime() - now.getTime();
 
-  setTimeout(async () => {
-    await sendStock(threadID, api);
-    autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000); // every 5 min
-  }, delay);
+    console.log(`[PVBR] Next stock for GC ${threadID} at ${next.toLocaleTimeString("en-PH", { hour12: false })}`);
+
+    autoStockTimers[threadID] = setTimeout(async () => {
+      await sendStock(threadID, api);
+      scheduleNext(); // schedule ulit for the next aligned minute
+    }, delay);
+  }
+
+  scheduleNext();
 }
 
 // Command handler
@@ -192,7 +181,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = false;
     await setData(`pvbstock/${threadID}`, gcData);
     if (autoStockTimers[threadID]) {
-      clearInterval(autoStockTimers[threadID]);
+      clearTimeout(autoStockTimers[threadID]);
       delete autoStockTimers[threadID];
     }
     return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
