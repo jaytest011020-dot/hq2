@@ -2,14 +2,14 @@ const axios = require("axios");
 const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
-  name: "stockpvb",
+  name: "pvbstock",
   version: "1.1.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Plants vs Brainrots auto-stock with emoji and styled boxes (aligned every 5 min + 10s)",
   usePrefix: true,
   commandCategory: "pvbr tools",
-  usages: "/stockpvb on|off|check",
+  usages: "/pvbstock on|off|check",
   cooldowns: 10,
 };
 
@@ -138,7 +138,7 @@ async function startAutoStock(threadID, api) {
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
-  let gcData = (await getData(`pvbrstock/${threadID}`)) || { enabled: false };
+  let gcData = (await getData(`stockpvb/${threadID}`)) || { enabled: false };
 
   if (gcData.enabled && option && option !== "off" && option !== "check") {
     return api.sendMessage("⚠️ Auto-stock is already active.", threadID, messageID);
@@ -146,14 +146,14 @@ module.exports.run = async function({ api, event, args }) {
 
   if (option === "on") {
     gcData.enabled = true;
-    await setData(`pvbrstock/${threadID}`, gcData);
+    await setData(`pvbstock/${threadID}`, gcData);
     startAutoStock(threadID, api);
     return api.sendMessage("✅ PVBR Auto-stock enabled. Updates every 5 minutes (aligned to mm:10).", threadID, messageID);
   }
 
   if (option === "off") {
     gcData.enabled = false;
-    await setData(`pvbrstock/${threadID}`, gcData);
+    await setData(`pvbstock/${threadID}`, gcData);
     if (autoStockTimers[threadID]) {
       clearInterval(autoStockTimers[threadID]);
       delete autoStockTimers[threadID];
@@ -163,15 +163,15 @@ module.exports.run = async function({ api, event, args }) {
 
   if (option === "check") {
     const status = gcData.enabled ? "ON ✅" : "OFF ❌";
-    return api.sendMessage(`📊 PVBR Auto-stock status: ${status}`, threadID, messageID);
+    return api.sendMessage(`📊 PVB Auto-stock status: ${status}`, threadID, messageID);
   }
 
-  api.sendMessage("⚠️ Usage: /stockpvb on|off|check", threadID, messageID);
+  api.sendMessage("⚠️ Usage: /pvbstock on|off|check", threadID, messageID);
 };
 
 // Auto-resume on bot restart
 module.exports.onLoad = async function({ api }) {
-  const allGCs = (await getData("pvbrstock")) || {};
+  const allGCs = (await getData("pvbstock")) || {};
   for (const tid in allGCs) {
     if (allGCs[tid].enabled) {
       startAutoStock(tid, api);
