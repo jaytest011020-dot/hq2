@@ -52,9 +52,9 @@ const ITEM_EMOJI = {
 const CATEGORY_EMOJI = {
   // Plants
   "Rare": "🌿",
-  "✨ Mythic ✨": "✨",
-  "💪 Godly": "💪",
-  "🎩 Secret": "🎩",
+  "Mythic": "✨",
+  "Godly": "💪",
+  "Secret": "🎩",
   // Gear
   "Common": "🟢",
   "Epic": "🔵",
@@ -79,7 +79,6 @@ function formatPlants(items) {
   });
 
   let output = "";
-  // Plants order
   ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"].forEach(type => {
     if (grouped[type]) {
       const emoji = CATEGORY_EMOJI[type] || "";
@@ -102,7 +101,6 @@ function formatGear(items) {
   });
 
   let output = "";
-  // Gear order
   ["Common", "Epic", "Legendary", "Godly"].forEach(type => {
     if (grouped[type]) {
       const emoji = CATEGORY_EMOJI[type] || "";
@@ -204,7 +202,7 @@ module.exports.run = async function({ api, event, args }) {
     if (autoStockTimers[threadID]) {
       clearInterval(autoStockTimers[threadID]);
       delete autoStockTimers[threadID];
-}
+    }
     return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
   }
 
