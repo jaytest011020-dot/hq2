@@ -182,4 +182,29 @@ module.exports.run = async function({ api, event, args }) {
 
   if (option === "off") {
     gcData.enabled = false;
-    await
+    await setData(`pvbstock/${threadID}`, gcData);
+    if (autoStockTimers[threadID]) {
+      clearInterval(autoStockTimers[threadID]);
+      delete autoStockTimers[threadID];
+    }
+    return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
+  }
+
+  if (option === "check") {
+    const status = gcData.enabled ? "ON ✅" : "OFF ❌";
+    return api.sendMessage(`📊 PVBR Auto-stock status: ${status}`, threadID, messageID);
+  }
+
+  api.sendMessage("⚠️ Usage: /pvbstock on|off|check", threadID, messageID);
+};
+
+// Resume all enabled GCs on bot restart
+module.exports.onLoad = async function({ api }) {
+  const allGCs = (await getData("pvbstock")) || {};
+  for (const tid in allGCs) {
+    if (allGCs[tid].enabled) {
+      startAutoStock(tid, api);
+      api.sendMessage("♻️ Bot restarted — PVBR Auto-stock resumed.", tid);
+    }
+  }
+};
