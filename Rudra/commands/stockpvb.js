@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "2.3.0",
+  version: "2.4.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown, no spam",
+  description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown, current time + next restock",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -16,7 +16,7 @@ module.exports.config = {
 // Allowed restock minutes
 const ALLOWED_MINUTES = [1, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56];
 
-// Timer per GC
+// Track scheduled GCs
 const autoStockTimers = {};
 
 // Emoji mapping
@@ -103,7 +103,7 @@ function getNextRestock(date = null) {
   return next;
 }
 
-// Send stock message to a GC at exact allowed minute
+// Send stock message
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
@@ -111,10 +111,14 @@ async function sendStock(threadID, api) {
   const plants = stock.filter(i => i.category === "SEEDS");
   const gear = stock.filter(i => i.category === "GEAR");
 
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const nextRestock = getNextRestock(now);
+
   const msg = `
 ╭─────────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
-🕒 ${new Date().toLocaleTimeString("en-PH", { hour12: false })}
+🕒 Current Time: ${now.toLocaleTimeString("en-PH", { hour12: true })}
+🕒 Next Restock: ${nextRestock.toLocaleTimeString("en-PH", { hour12: true })}
 ╰─────────────────╯
 
 ╭─🌿 Plants────────╮
@@ -131,7 +135,7 @@ ${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
 // Recursive scheduling at exact allowed minute
 function scheduleNextStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const next = getNextRestock();
+  const next = getNextRestock(now);
   const delay = next.getTime() - now.getTime();
 
   setTimeout(async () => {
