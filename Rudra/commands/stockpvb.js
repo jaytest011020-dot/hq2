@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "2.1.0",
+  version: "2.2.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, no countdown",
+  description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -108,9 +108,6 @@ async function sendStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNextRestock();
 
-  // Send preparing message
-  await api.sendMessage(`⏳ Preparing PVBR stock...\nNext Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}`, threadID);
-
   // Wait until next allowed minute
   const delay = next.getTime() - now.getTime();
   setTimeout(async () => {
@@ -142,7 +139,7 @@ ${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
 
-  // Immediately schedule first stock at next allowed minute
+  // Schedule first stock at next allowed minute
   await sendStock(threadID, api);
 
   // Repeat every minute to check for next allowed minute
