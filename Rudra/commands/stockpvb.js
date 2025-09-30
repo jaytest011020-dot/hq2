@@ -14,7 +14,7 @@ module.exports.config = {
 };
 
 // Allowed restock minutes
-const ALLOWED_MINUTES = [1, 6, 11, 16, 21];
+const ALLOWED_MINUTES = [1, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56];
 
 // Timer per GC
 const autoStockTimers = {};
