@@ -14,7 +14,7 @@ module.exports.config = {
 };
 
 // Allowed restock minutes
-const ALLOWED_MINUTES = [1, 6, 11, 16, 21];
+const ALLOWED_MINUTES = [1,6,11,16,21,26,31,36,41,46,51,56];
 
 // Timer per GC
 const autoStockTimers = {};
@@ -103,61 +103,64 @@ function getNextRestock(date = null) {
   return next;
 }
 
-// Send stock message to a GC with countdown
+// Send stock message to a GC with live countdown
 async function sendStock(threadID, api) {
-  const stock = await fetchPVBRStock();
-  if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
-
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const plants = stock.filter(i => i.category === "SEEDS");
-  const gear = stock.filter(i => i.category === "GEAR");
-
   const next = getNextRestock();
+  const sentMsg = await api.sendMessage(`⏳ Preparing PVBR stock...\nNext Restock: ${next.toLocaleTimeString("en-PH",{hour12:false})}`, threadID);
 
-  const msg = `
+  // Live countdown
+  const countdownInterval = setInterval(async () => {
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const remaining = Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
+
+    await api.editMessage(`⏳ PVBR stock countdown: ${remaining}s\nNext Restock: ${next.toLocaleTimeString("en-PH",{hour12:false})}`, threadID, sentMsg.messageID);
+
+    if (remaining <= 0) {
+      clearInterval(countdownInterval);
+
+      // Only fetch and send stock at aligned time
+      const stock = await fetchPVBRStock();
+      if (!stock || stock.length === 0) return api.editMessage("⚠️ Failed to fetch PVBR stock.", threadID, sentMsg.messageID);
+
+      const plants = stock.filter(i => i.category === "SEEDS");
+      const gear = stock.filter(i => i.category === "GEAR");
+
+      const finalMsg = `
 ╭─────────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
-🕒 ${now.toLocaleTimeString("en-PH", { hour12: false })}
-🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
+🕒 ${now.toLocaleTimeString("en-PH",{hour12:false})}
+🔄 Next Restock: ${getNextRestock().toLocaleTimeString("en-PH",{hour12:false})}
 ╰─────────────────╯
 
 ╭─🌿 Plants────────╮
-${formatItems(plants, ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"])}
+${formatItems(plants, ["Rare","✨ Mythic ✨","💪 Godly","🎩 Secret"])}
 ╰─────────────────╯
 
 ╭─🛠️ Gear──────────╮
-${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
+${formatItems(gear, ["Common","Epic","Legendary","Godly"])}
 ╰─────────────────╯`;
 
-  const sentMsg = await api.sendMessage(msg, threadID);
-
-  // Countdown
-  const countdownInterval = setInterval(() => {
-    const now2 = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    const remaining = Math.max(0, Math.floor((next.getTime() - now2.getTime()) / 1000));
-    api.editMessage(`${msg}\n⏳ Countdown: ${remaining}s`, threadID, sentMsg.messageID);
-    if (remaining <= 0) clearInterval(countdownInterval);
+      await api.editMessage(finalMsg, threadID, sentMsg.messageID);
+    }
   }, 1000);
 }
 
-// Start auto-stock for a GC (aligned to allowed minutes)
+// Start auto-stock per GC
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
 
-  async function scheduleNext() {
+  const scheduleLoop = async () => {
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
     const next = getNextRestock(now);
     const delay = next.getTime() - now.getTime();
 
-    console.log(`[PVBR] Next stock for GC ${threadID} at ${next.toLocaleTimeString("en-PH", { hour12: false })}`);
-
-    autoStockTimers[threadID] = setTimeout(async () => {
+    setTimeout(async () => {
       await sendStock(threadID, api);
-      scheduleNext(); // schedule ulit for the next aligned minute
+      scheduleLoop(); // repeat for next allowed minute
     }, delay);
-  }
+  };
 
-  scheduleNext();
+  scheduleLoop();
 }
 
 // Command handler
@@ -179,29 +182,4 @@ module.exports.run = async function({ api, event, args }) {
 
   if (option === "off") {
     gcData.enabled = false;
-    await setData(`pvbstock/${threadID}`, gcData);
-    if (autoStockTimers[threadID]) {
-      clearTimeout(autoStockTimers[threadID]);
-      delete autoStockTimers[threadID];
-    }
-    return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
-  }
-
-  if (option === "check") {
-    const status = gcData.enabled ? "ON ✅" : "OFF ❌";
-    return api.sendMessage(`📊 PVBR Auto-stock status: ${status}`, threadID, messageID);
-  }
-
-  api.sendMessage("⚠️ Usage: /pvbstock on|off|check", threadID, messageID);
-};
-
-// Resume all enabled GCs on bot restart
-module.exports.onLoad = async function({ api }) {
-  const allGCs = (await getData("pvbstock")) || {};
-  for (const tid in allGCs) {
-    if (allGCs[tid].enabled) {
-      startAutoStock(tid, api);
-      api.sendMessage("♻️ Bot restarted — PVBR Auto-stock resumed.", tid);
-    }
-  }
-};
+    await
