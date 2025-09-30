@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "2.2.0",
+  version: "2.3.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown",
+  description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown, no spam",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -105,19 +105,13 @@ function getNextRestock(date = null) {
 
 // Send stock message to a GC at exact allowed minute
 async function sendStock(threadID, api) {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const next = getNextRestock();
+  const stock = await fetchPVBRStock();
+  if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
 
-  // Wait until next allowed minute
-  const delay = next.getTime() - now.getTime();
-  setTimeout(async () => {
-    const stock = await fetchPVBRStock();
-    if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
+  const plants = stock.filter(i => i.category === "SEEDS");
+  const gear = stock.filter(i => i.category === "GEAR");
 
-    const plants = stock.filter(i => i.category === "SEEDS");
-    const gear = stock.filter(i => i.category === "GEAR");
-
-    const msg = `
+  const msg = `
 ╭─────────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
 🕒 ${new Date().toLocaleTimeString("en-PH", { hour12: false })}
@@ -131,19 +125,26 @@ ${formatItems(plants, ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"])}
 ${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
 ╰─────────────────╯`;
 
-    await api.sendMessage(msg, threadID);
+  await api.sendMessage(msg, threadID);
+}
+
+// Recursive scheduling at exact allowed minute
+function scheduleNextStock(threadID, api) {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const next = getNextRestock();
+  const delay = next.getTime() - now.getTime();
+
+  setTimeout(async () => {
+    await sendStock(threadID, api);
+    scheduleNextStock(threadID, api); // schedule next after sending
   }, delay);
 }
 
 // Start auto-stock for a GC
-async function startAutoStock(threadID, api) {
+function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
-
-  // Schedule first stock at next allowed minute
-  await sendStock(threadID, api);
-
-  // Repeat every minute to check for next allowed minute
-  autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 60 * 1000);
+  autoStockTimers[threadID] = true; // mark as scheduled
+  scheduleNextStock(threadID, api);
 }
 
 // Command handler
@@ -166,10 +167,7 @@ module.exports.run = async function({ api, event, args }) {
   if (option === "off") {
     gcData.enabled = false;
     await setData(`pvbstock/${threadID}`, gcData);
-    if (autoStockTimers[threadID]) {
-      clearInterval(autoStockTimers[threadID]);
-      delete autoStockTimers[threadID];
-    }
+    if (autoStockTimers[threadID]) delete autoStockTimers[threadID];
     return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
   }
 
