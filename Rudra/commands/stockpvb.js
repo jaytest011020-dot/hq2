@@ -116,7 +116,7 @@ function getNextRestock(date = null) {
   }
 
   next.setMinutes(nextMinute);
-  next.setSeconds(20);
+  next.setSeconds(0);
   next.setMilliseconds(0);
   return next;
 }
@@ -180,7 +180,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`pvbstock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates at allowed minutes (:20s).", threadID, messageID);
+    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates at allowed minutes.", threadID, messageID);
   }
 
   if (option === "off") {
