@@ -151,6 +151,13 @@ function startAutoStock(threadID, api) {
   scheduleNextStock(threadID, api);
 }
 
+// Stop auto-stock for a GC
+function stopAutoStock(threadID) {
+  if (autoStockTimers[threadID]) {
+    delete autoStockTimers[threadID]; // remove scheduled timer
+  }
+}
+
 // Command handler
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
@@ -171,7 +178,7 @@ module.exports.run = async function({ api, event, args }) {
   if (option === "off") {
     gcData.enabled = false;
     await setData(`pvbstock/${threadID}`, gcData);
-    if (autoStockTimers[threadID]) delete autoStockTimers[threadID];
+    stopAutoStock(threadID); // stop auto-stock for the GC
     return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
   }
 
