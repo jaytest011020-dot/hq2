@@ -25,7 +25,7 @@ const ITEM_EMOJI = {
   "Dragon Fruit": { emoji: "🐉🍉", type: "Common" },
   "Eggplant": { emoji: "🍆", type: "Common" },
 
-  "WatermelonE": { emoji: "🍉✨", type: "Mythic" },
+  "Watermelone": { emoji: "🍉✨", type: "Mythic" },
   "Grape": { emoji: "🍇✨", type: "Mythic" },
 
   "Cocotank": { emoji: "🥥🛡️", type: "Godly" },
