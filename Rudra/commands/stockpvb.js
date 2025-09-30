@@ -6,7 +6,7 @@ module.exports.config = {
   version: "2.1.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, countdown included",
+  description: "PVBR auto-stock per GC, aligned minutes, no countdown",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -14,7 +14,7 @@ module.exports.config = {
 };
 
 // Allowed restock minutes
-const ALLOWED_MINUTES = [1,6,11,16,21,26,31,36,41,46,51,56];
+const ALLOWED_MINUTES = [1, 6, 11, 16, 21];
 
 // Timer per GC
 const autoStockTimers = {};
@@ -103,64 +103,50 @@ function getNextRestock(date = null) {
   return next;
 }
 
-// Send stock message to a GC with live countdown
+// Send stock message to a GC at exact allowed minute
 async function sendStock(threadID, api) {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNextRestock();
-  const sentMsg = await api.sendMessage(`⏳ Preparing PVBR stock...\nNext Restock: ${next.toLocaleTimeString("en-PH",{hour12:false})}`, threadID);
 
-  // Live countdown
-  const countdownInterval = setInterval(async () => {
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    const remaining = Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
+  // Send preparing message
+  await api.sendMessage(`⏳ Preparing PVBR stock...\nNext Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}`, threadID);
 
-    await api.editMessage(`⏳ PVBR stock countdown: ${remaining}s\nNext Restock: ${next.toLocaleTimeString("en-PH",{hour12:false})}`, threadID, sentMsg.messageID);
+  // Wait until next allowed minute
+  const delay = next.getTime() - now.getTime();
+  setTimeout(async () => {
+    const stock = await fetchPVBRStock();
+    if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
 
-    if (remaining <= 0) {
-      clearInterval(countdownInterval);
+    const plants = stock.filter(i => i.category === "SEEDS");
+    const gear = stock.filter(i => i.category === "GEAR");
 
-      // Only fetch and send stock at aligned time
-      const stock = await fetchPVBRStock();
-      if (!stock || stock.length === 0) return api.editMessage("⚠️ Failed to fetch PVBR stock.", threadID, sentMsg.messageID);
-
-      const plants = stock.filter(i => i.category === "SEEDS");
-      const gear = stock.filter(i => i.category === "GEAR");
-
-      const finalMsg = `
+    const msg = `
 ╭─────────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
-🕒 ${now.toLocaleTimeString("en-PH",{hour12:false})}
-🔄 Next Restock: ${getNextRestock().toLocaleTimeString("en-PH",{hour12:false})}
+🕒 ${new Date().toLocaleTimeString("en-PH", { hour12: false })}
 ╰─────────────────╯
 
 ╭─🌿 Plants────────╮
-${formatItems(plants, ["Rare","✨ Mythic ✨","💪 Godly","🎩 Secret"])}
+${formatItems(plants, ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"])}
 ╰─────────────────╯
 
 ╭─🛠️ Gear──────────╮
-${formatItems(gear, ["Common","Epic","Legendary","Godly"])}
+${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
 ╰─────────────────╯`;
 
-      await api.editMessage(finalMsg, threadID, sentMsg.messageID);
-    }
-  }, 1000);
+    await api.sendMessage(msg, threadID);
+  }, delay);
 }
 
-// Start auto-stock per GC
+// Start auto-stock for a GC
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
 
-  const scheduleLoop = async () => {
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    const next = getNextRestock(now);
-    const delay = next.getTime() - now.getTime();
+  // Immediately schedule first stock at next allowed minute
+  await sendStock(threadID, api);
 
-    setTimeout(async () => {
-      await sendStock(threadID, api);
-      scheduleLoop(); // repeat for next allowed minute
-    }, delay);
-  };
-
-  scheduleLoop();
+  // Repeat every minute to check for next allowed minute
+  autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 60 * 1000);
 }
 
 // Command handler
