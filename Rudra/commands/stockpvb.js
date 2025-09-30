@@ -85,7 +85,7 @@ async function fetchPVBRStock() {
   }
 }
 
-// Calculate next allowed restock
+// Calculate next aligned restock time with a 20-second delay
 function getNextRestock(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const currentMinute = now.getMinutes();
@@ -98,12 +98,12 @@ function getNextRestock(date = null) {
   }
 
   next.setMinutes(nextMinute);
-  next.setSeconds(0);
-  next.setMilliseconds(0);
+  next.setSeconds(20);  // Set the second to 20 for the 20-second delay
+  next.setMilliseconds(0);  // Ensure no milliseconds are added
   return next;
 }
 
-// Send stock message
+// Send stock message with the aligned time + 20 second delay
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
@@ -129,18 +129,21 @@ ${formatItems(plants, ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"])}
 ${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
 ╰─────────────────╯`;
 
-  await api.sendMessage(msg, threadID);
+  // Adding the 20-second delay before sending the message
+  setTimeout(async () => {
+    await api.sendMessage(msg, threadID);
+  }, 20000);  // 20 seconds delay after fetching
 }
 
-// Recursive scheduling at exact allowed minute
+// Recursive scheduling at the aligned time + 20 seconds delay
 function scheduleNextStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNextRestock(now);
-  const delay = next.getTime() - now.getTime();
+  const delay = next.getTime() - now.getTime(); // This will align with the next available time + 20 seconds
 
   setTimeout(async () => {
-    await sendStock(threadID, api);
-    scheduleNextStock(threadID, api); // schedule next after sending
+    await sendStock(threadID, api);  // Send the stock message after the delay
+    scheduleNextStock(threadID, api);  // Recursively schedule the next fetch/send cycle
   }, delay);
 }
 
@@ -148,7 +151,7 @@ function scheduleNextStock(threadID, api) {
 function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
   autoStockTimers[threadID] = true; // mark as scheduled
-  scheduleNextStock(threadID, api);
+  scheduleNextStock(threadID, api);  // Start scheduling the next fetch/send cycle
 }
 
 // Stop auto-stock for a GC
@@ -172,7 +175,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`pvbstock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates at allowed minutes.", threadID, messageID);
+    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates at aligned minutes + 20 seconds.", threadID, messageID);
   }
 
   if (option === "off") {
