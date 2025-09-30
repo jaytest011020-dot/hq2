@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "1.3.0",
+  version: "1.4.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Plants vs Brainrots auto-stock with emoji and styled boxes (aligned every 5 min + 10s)",
+  description: "Plants vs Brainrots auto-stock with emoji and styled boxes (aligned every 5 min + :20s)",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvb on|off|check",
@@ -52,9 +52,9 @@ const ITEM_EMOJI = {
 const CATEGORY_EMOJI = {
   // Plants
   "Rare": "🌿",
-  "Mythic ": "✨",
-  "Godly": "💪",
-  "Secret": "🎩",
+  "✨ Mythic ✨": "✨",
+  "💪 Godly": "💪",
+  "🎩 Secret": "🎩",
   // Gear
   "Common": "🟢",
   "Epic": "🔵",
@@ -79,8 +79,8 @@ function formatPlants(items) {
   });
 
   let output = "";
-  // Custom order for plants
-  ["Rare", "Mythic", "Godly", "Secret"].forEach(type => {
+  // Plants order
+  ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"].forEach(type => {
     if (grouped[type]) {
       const emoji = CATEGORY_EMOJI[type] || "";
       output += `[${emoji} ${type}]\n${grouped[type].join("\n")}\n\n`;
@@ -102,7 +102,7 @@ function formatGear(items) {
   });
 
   let output = "";
-  // Custom order for gear
+  // Gear order
   ["Common", "Epic", "Legendary", "Godly"].forEach(type => {
     if (grouped[type]) {
       const emoji = CATEGORY_EMOJI[type] || "";
@@ -113,7 +113,7 @@ function formatGear(items) {
   return output.trim();
 }
 
-// Fetch stock from pvbr API
+// Fetch stock from PVBR API
 async function fetchPVBRStock() {
   try {
     const res = await axios.get("https://plantsvsbrainrotsstocktracker.com/api/stock?since=0");
@@ -124,31 +124,26 @@ async function fetchPVBRStock() {
   }
 }
 
-// Helper: get next restock time aligned to mm:10 seconds (every 5 min)
+// Helper: get next restock aligned to :20 seconds
 function getNextRestock(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-
   let minutes = now.getMinutes();
   let nextMinutes = Math.floor(minutes / 5) * 5 + 5;
   if (nextMinutes >= 60) {
     nextMinutes = 0;
     now.setHours(now.getHours() + 1);
   }
-
   const next = new Date(now);
   next.setMinutes(nextMinutes);
-  next.setSeconds(10);
+  next.setSeconds(20); // :20 seconds
   next.setMilliseconds(0);
-
   return next;
 }
 
-// Send styled stock
+// Send stock
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
-  if (!stock || stock.length === 0) {
-    return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
-  }
+  if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const plants = stock.filter(i => i.category === "SEEDS");
@@ -172,7 +167,7 @@ ${formatGear(gear)}
   api.sendMessage(msg, threadID);
 }
 
-// Auto-stock loop (aligned)
+// Auto-stock loop
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
 
@@ -186,6 +181,7 @@ async function startAutoStock(threadID, api) {
   }, delay);
 }
 
+// Commands
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
@@ -199,7 +195,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`pvbstock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates every 5 minutes (aligned to mm:10).", threadID, messageID);
+    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates every 5 minutes (:20s).", threadID, messageID);
   }
 
   if (option === "off") {
@@ -208,13 +204,13 @@ module.exports.run = async function({ api, event, args }) {
     if (autoStockTimers[threadID]) {
       clearInterval(autoStockTimers[threadID]);
       delete autoStockTimers[threadID];
-    }
-    return api.sendMessage("❌ PVB Auto-stock disabled.", threadID, messageID);
+}
+    return api.sendMessage("❌ PVBR Auto-stock disabled.", threadID, messageID);
   }
 
   if (option === "check") {
     const status = gcData.enabled ? "ON ✅" : "OFF ❌";
-    return api.sendMessage(`📊 PVB Auto-stock status: ${status}`, threadID, messageID);
+    return api.sendMessage(`📊 PVBR Auto-stock status: ${status}`, threadID, messageID);
   }
 
   api.sendMessage("⚠️ Usage: /pvbstock on|off|check", threadID, messageID);
@@ -226,7 +222,7 @@ module.exports.onLoad = async function({ api }) {
   for (const tid in allGCs) {
     if (allGCs[tid].enabled) {
       startAutoStock(tid, api);
-      api.sendMessage("♻️ Bot restarted — PVB Auto-stock resumed.", tid);
+      api.sendMessage("♻️ Bot restarted — PVBR Auto-stock resumed.", tid);
     }
   }
 };
