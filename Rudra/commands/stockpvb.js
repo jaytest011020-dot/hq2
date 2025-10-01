@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "2.7.0",
+  version: "2.9.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown, current time + next restock",
+  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, current time + next restock",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -31,13 +31,16 @@ const ITEM_EMOJI = {
   "Grape": "🍇✨",
   "Cocotank": "🥥🛡️",
   "Carnivorous Plant": "🪴🦷",
-  "Mr-Carrot": "🥕🎩",
+  "CarnivorousPlant": "🪴🦷",
+  "Carnivorous-Plant": "🪴🦷",
   "Mr Carrot": "🥕🎩",
+  "MrCarrot": "🥕🎩",
+  "Mr-Carrot": "🥕🎩",
   "Tomatrio": "🍅👨‍👦‍👦",
   "Shroombino": "🍄🎭",
   "Bat": "⚾",
   "Water Bucket": "🪣💧",
-  "Frost Grenade": "🧊💣",
+  "Frost grenade": "🧊💣",
   "Banana Gun": "🍌🔫",
   "Frost Blower": "❄️🌬️",
   "Lucky Potion": "🍀🧪",
@@ -57,30 +60,59 @@ const CATEGORY_EMOJI = {
   "unknown": "❔",
 };
 
+// Manual rarity mapping
+const MANUAL_RARITY = {
+  // Seeds
+  "Cactus": "rare",
+  "Strawberry": "rare",
+  "Pumpkin": "epic",
+  "Sunflower": "epic",
+  "Dragon Fruit": "legendary",
+  "Eggplant": "legendary",
+  "Watermelon": "mythic",
+  "Grape": "mythic",
+  "Cocotank": "godly",
+  "Carnivorous Plant": "godly",
+  "Mr Carrot": "secret",
+  "Tomatrio": "secret",
+  "Shroombino": "secret",
+
+  // Gear
+  "Bat": "common",
+  "Water Bucket": "epic",
+  "Frost grenade": "epic",
+  "Banana Gun": "epic",
+  "Frost Blower": "legendary",
+  "Lucky Potion": "legendary",
+  "Speed Potion": "legendary",
+  "Carrot Launcher": "godly",
+};
+
 // Helpers
 function getEmoji(name) {
   const cleanName = name.replace(/ Seed$/i, "");
   return ITEM_EMOJI[cleanName] || "❔";
 }
 
-// Capitalize first letter
+function getRarity(name) {
+  const cleanName = name.replace(/ Seed$/i, "");
+  return MANUAL_RARITY[cleanName] || "unknown";
+}
+
 function capitalizeFirst(str) {
   if (!str) return "Unknown";
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Format items by category, showing stock beside name
+// Format items by category (auto-detect seeds or gear), stock beside name
 function formatItems(items) {
   if (!items || items.length === 0) return "❌ Empty";
 
   const grouped = {};
   items.forEach(i => {
-    const type = i.rarity ? i.rarity.toLowerCase() : "unknown";
+    const type = getRarity(i.name);
     if (!grouped[type]) grouped[type] = [];
-
-    grouped[type].push(
-      `• ${getEmoji(i.name)} ${i.name} (${i.currentStock ?? "N/A"})`
-    );
+    grouped[type].push(`• ${getEmoji(i.name)} ${i.name.replace(/ Seed$/i, "")} (${i.currentStock ?? "N/A"})`);
   });
 
   const CATEGORY_ORDER = ["common", "rare", "epic", "legendary", "godly", "mythic", "secret", "unknown"];
@@ -105,7 +137,7 @@ async function fetchPVBRStock() {
   }
 }
 
-// Calculate next aligned restock time with a 20-second delay
+// Calculate next aligned restock time
 function getNextRestock(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const currentMinute = now.getMinutes();
@@ -123,13 +155,13 @@ function getNextRestock(date = null) {
   return next;
 }
 
-// Send stock message with boxes for Seeds and Gear
+// Send stock message (auto-detect Seeds & Gear)
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
 
-  const seeds = stock.filter(i => i.category?.toLowerCase() === "seed");
-  const gear = stock.filter(i => i.category?.toLowerCase() === "gear");
+  const seeds = stock.filter(i => i.name.toLowerCase().endsWith("seed"));
+  const gear = stock.filter(i => !i.name.toLowerCase().endsWith("seed"));
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const nextRestock = getNextRestock(now);
@@ -164,13 +196,11 @@ function scheduleNextStock(threadID, api) {
   }, delay);
 }
 
-// Start auto-stock
 function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
   scheduleNextStock(threadID, api);
 }
 
-// Stop auto-stock
 function stopAutoStock(threadID) {
   if (autoStockTimers[threadID]) {
     clearTimeout(autoStockTimers[threadID]);
