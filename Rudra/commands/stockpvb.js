@@ -45,14 +45,14 @@ const ITEM_EMOJI = {
   "Carrot Launcher": "🥕🚀",
 };
 
-// Category emoji (for message boxes)
+// Category emoji
 const CATEGORY_EMOJI = {
   "common": "🟢",
   "rare": "🌿",
   "epic": "🔵",
   "legendary": "🟣",
-  "godly": "🟡",
   "mythic": "✨",
+  "godly": "🟡",
   "secret": "🎩",
   "unknown": "❔",
 };
@@ -69,7 +69,7 @@ function capitalizeFirst(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Format items by category
+// Format items by category, showing stock beside name
 function formatItems(items) {
   if (!items || items.length === 0) return "❌ Empty";
 
@@ -79,7 +79,7 @@ function formatItems(items) {
     if (!grouped[type]) grouped[type] = [];
 
     grouped[type].push(
-      `• ${getEmoji(i.name)} ${i.name}\n   🏷 Price: ${i.currentPrice ?? "N/A"}\n   📦 Stock: ${i.currentStock ?? "N/A"}\n`
+      `• ${getEmoji(i.name)} ${i.name} (${i.currentStock ?? "N/A"})`
     );
   });
 
