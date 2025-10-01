@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "2.6.0",
+  version: "2.7.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown, current time + next restock",
@@ -35,7 +35,7 @@ const ITEM_EMOJI = {
   "Mr Carrot": "🥕🎩",
   "Tomatrio": "🍅👨‍👦‍👦",
   "Shroombino": "🍄🎭",
-  "Bat": "🦇",
+  "Bat": "⚾",
   "Water Bucket": "🪣💧",
   "Frost Grenade": "🧊💣",
   "Banana Gun": "🍌🔫",
@@ -59,7 +59,8 @@ const CATEGORY_EMOJI = {
 
 // Helpers
 function getEmoji(name) {
-  return ITEM_EMOJI[name] || "❔";
+  const cleanName = name.replace(/ Seed$/i, "");
+  return ITEM_EMOJI[cleanName] || "❔";
 }
 
 // Capitalize first letter
@@ -127,8 +128,8 @@ async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
 
-  const seeds = stock.filter(i => i.category.toLowerCase() === "seed");
-  const gear = stock.filter(i => i.category.toLowerCase() === "gear");
+  const seeds = stock.filter(i => i.category?.toLowerCase() === "seed");
+  const gear = stock.filter(i => i.category?.toLowerCase() === "gear");
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const nextRestock = getNextRestock(now);
