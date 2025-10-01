@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "2.5.0",
+  version: "2.6.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "PVBR auto-stock per GC, aligned minutes, no prep message, no countdown, current time + next restock",
@@ -21,65 +21,75 @@ const autoStockTimers = {};
 
 // Emoji mapping
 const ITEM_EMOJI = {
-  "Cactus": { emoji: "🌵", type: "Rare" },
-  "Strawberry": { emoji: "🍓", type: "Rare" },
-  "Pumpkin": { emoji: "🎃", type: "Rare" },
-  "Sunflower": { emoji: "🌻", type: "Rare" },
-  "Dragon Fruit": { emoji: "🐉🍉", type: "Rare" },
-  "Eggplant": { emoji: "🍆", type: "Rare" },
-  "Watermelon": { emoji: "🍉✨", type: "✨ Mythic ✨" },
-  "Grape": { emoji: "🍇✨", type: "✨ Mythic ✨" },
-  "Cocotank": { emoji: "🥥🛡️", type: "💪 Godly" },
-  "Carnivorous Plant": { emoji: "🪴🦷", type: "💪 Godly" },
-  "CarnivorousPlant": { emoji: "🪴🦷", type: "💪 Godly" },
-  "Carnivorous": { emoji: "🪴🦷", type: "💪 Godly" },
-  "Mr-Carrot": { emoji: "🥕🎩", type: "🎩 Secret" },
-  "Mr Carrot": { emoji: "🥕🎩", type: "🎩 Secret" },
-  "MrCarrot": { emoji: "🥕🎩", type: "🎩 Secret" },
-  "Tomatrio": { emoji: "🍅👨‍👦‍👦", type: "🎩 Secret" },
-  "Shroombino": { emoji: "🍄🎭", type: "🎩 Secret" },
-  "Bat": { emoji: "🦇", type: "Common" },
-  "Water Bucket": { emoji: "🪣💧", type: "Epic" },
-  "Frost Grenade": { emoji: "🧊💣", type: "Epic" },
-  "Banana Gun": { emoji: "🍌🔫", type: "Epic" },
-  "Frost Blower": { emoji: "❄️🌬️", type: "Legendary" },
-  "Lucky Potion": { emoji: "🍀🧪", type: "Legendary" },
-  "Speed Potion": { emoji: "⚡🧪", type: "Legendary" },
-  "Carrot Launcher": { emoji: "🥕🚀", type: "Godly" },
+  "Cactus": "🌵",
+  "Strawberry": "🍓",
+  "Pumpkin": "🎃",
+  "Sunflower": "🌻",
+  "Dragon Fruit": "🐉🍉",
+  "Eggplant": "🍆",
+  "Watermelon": "🍉✨",
+  "Grape": "🍇✨",
+  "Cocotank": "🥥🛡️",
+  "Carnivorous Plant": "🪴🦷",
+  "Mr-Carrot": "🥕🎩",
+  "Mr Carrot": "🥕🎩",
+  "Tomatrio": "🍅👨‍👦‍👦",
+  "Shroombino": "🍄🎭",
+  "Bat": "🦇",
+  "Water Bucket": "🪣💧",
+  "Frost Grenade": "🧊💣",
+  "Banana Gun": "🍌🔫",
+  "Frost Blower": "❄️🌬️",
+  "Lucky Potion": "🍀🧪",
+  "Speed Potion": "⚡🧪",
+  "Carrot Launcher": "🥕🚀",
 };
 
+// Category emoji (for message boxes)
 const CATEGORY_EMOJI = {
-  "Rare": "🌿",
-  "✨ Mythic ✨": "✨",
-  "💪 Godly": "💪",
-  "🎩 Secret": "🎩",
-  "Common": "🟢",
-  "Epic": "🔵",
-  "Legendary": "🟣",
-  "Godly": "🟡",
+  "common": "🟢",
+  "rare": "🌿",
+  "epic": "🔵",
+  "legendary": "🟣",
+  "godly": "🟡",
+  "mythic": "✨",
+  "secret": "🎩",
+  "unknown": "❔",
 };
 
 // Helpers
-function getEmoji(name) { return ITEM_EMOJI[name]?.emoji || "❔"; }
+function getEmoji(name) {
+  return ITEM_EMOJI[name] || "❔";
+}
 
-function formatItems(items, categories) {
+// Capitalize first letter
+function capitalizeFirst(str) {
+  if (!str) return "Unknown";
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Format items by category
+function formatItems(items) {
   if (!items || items.length === 0) return "❌ Empty";
+
   const grouped = {};
   items.forEach(i => {
-    const type = ITEM_EMOJI[i.name]?.type || "Rare";
+    const type = i.rarity ? i.rarity.toLowerCase() : "unknown";
     if (!grouped[type]) grouped[type] = [];
+
     grouped[type].push(
-      `• ${getEmoji(i.name)} ${i.name}\n` +
-      `   🏷 Price: ${i.currentPrice ?? "N/A"}\n` +
-      `   📦 Stock: ${i.currentStock ?? "N/A"}\n`
+      `• ${getEmoji(i.name)} ${i.name}\n   🏷 Price: ${i.currentPrice ?? "N/A"}\n   📦 Stock: ${i.currentStock ?? "N/A"}\n`
     );
   });
+
+  const CATEGORY_ORDER = ["common", "rare", "epic", "legendary", "godly", "mythic", "secret", "unknown"];
   let output = "";
-  categories.forEach(type => {
-    if (grouped[type]) {
-      output += `[${CATEGORY_EMOJI[type] || ""} ${type}]\n${grouped[type].join("\n")}\n\n`;
+  CATEGORY_ORDER.forEach(cat => {
+    if (grouped[cat]) {
+      output += `[${CATEGORY_EMOJI[cat] || "❔"} ${capitalizeFirst(cat)}]\n${grouped[cat].join("\n")}\n\n`;
     }
   });
+
   return output.trim();
 }
 
@@ -87,7 +97,7 @@ function formatItems(items, categories) {
 async function fetchPVBRStock() {
   try {
     const res = await axios.get("https://plantsvsbrainrotsstocktracker.com/api/stock?since=0");
-    return res.data?.data || [];
+    return res.data?.items || [];
   } catch (e) {
     console.error("Error fetching PVBR stock:", e);
     return [];
@@ -107,18 +117,18 @@ function getNextRestock(date = null) {
   }
 
   next.setMinutes(nextMinute);
-  next.setSeconds(20);  // 20-second delay
+  next.setSeconds(20);
   next.setMilliseconds(0);
   return next;
 }
 
-// Send stock message
+// Send stock message with boxes for Seeds and Gear
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
 
-  const plants = stock.filter(i => i.category === "SEEDS");
-  const gear = stock.filter(i => i.category === "GEAR");
+  const seeds = stock.filter(i => i.category.toLowerCase() === "seed");
+  const gear = stock.filter(i => i.category.toLowerCase() === "gear");
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const nextRestock = getNextRestock(now);
@@ -130,12 +140,12 @@ async function sendStock(threadID, api) {
 🕒 Next Restock: ${nextRestock.toLocaleTimeString("en-PH", { hour12: true })}
 ╰─────────────────╯
 
-╭─🌿 Plants────────╮
-${formatItems(plants, ["Rare", "✨ Mythic ✨", "💪 Godly", "🎩 Secret"])}
+╭─🌿 Seeds────────╮
+${formatItems(seeds)}
 ╰─────────────────╯
 
-╭─🛠️ Gear──────────╮
-${formatItems(gear, ["Common", "Epic", "Legendary", "Godly"])}
+╭─🛠️ Gear─────────╮
+${formatItems(gear)}
 ╰─────────────────╯`;
 
   await api.sendMessage(msg, threadID);
@@ -155,7 +165,7 @@ function scheduleNextStock(threadID, api) {
 
 // Start auto-stock
 function startAutoStock(threadID, api) {
-  if (autoStockTimers[threadID]) return; 
+  if (autoStockTimers[threadID]) return;
   scheduleNextStock(threadID, api);
 }
 
