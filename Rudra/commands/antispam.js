@@ -1,8 +1,18 @@
 const { setData, getData } = require("../../database.js");
 
+// Helpers
+async function getUserName(uid, api) {
+  try {
+    const info = await api.getUserInfo(uid);
+    if (info && info[uid]?.name) return info[uid].name;
+    return "User";
+  } catch { return "User"; }
+}
+
+// Config
 module.exports.config = {
   name: "spamkick",
-  version: "1.0.0",
+  version: "1.1.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto kick users who spam messages",
@@ -22,6 +32,7 @@ module.exports.config = {
 
 let spamCache = {}; // memory cache per thread
 
+// COMMAND HANDLER
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
 
@@ -34,7 +45,7 @@ module.exports.run = async function({ api, event, args }) {
   if (sub === "on") {
     const limit = parseInt(args[1]) || 10;
     await setData(`spamkick/${threadID}`, { enabled: true, limit });
-    return api.sendMessage(`✅ Spam auto-kick enabled (limit: ${limit} msgs).`, threadID, messageID);
+    return api.sendMessage(`✅ Spam auto-kick enabled (limit: ${limit} msgs within 5s).`, threadID, messageID);
   }
 
   if (sub === "off") {
@@ -45,7 +56,7 @@ module.exports.run = async function({ api, event, args }) {
   if (sub === "status") {
     const data = await getData(`spamkick/${threadID}`) || { enabled: false, limit: 10 };
     return api.sendMessage(
-      `📊 Spam Auto-Kick Status:\n\nEnabled: ${data.enabled ? "✅ Yes" : "❌ No"}\nLimit: ${data.limit || 10} msgs`,
+      `📊 Spam Auto-Kick Status:\n\nEnabled: ${data.enabled ? "✅ Yes" : "❌ No"}\nLimit: ${data.limit || 10} msgs / 5s`,
       threadID,
       messageID
     );
@@ -54,7 +65,7 @@ module.exports.run = async function({ api, event, args }) {
   return api.sendMessage(module.exports.config.usages, threadID, messageID);
 };
 
-// Listener para sa bawat message (dito nade-detect ang spam)
+// EVENT LISTENER
 module.exports.handleEvent = async function({ api, event }) {
   const { threadID, senderID } = event;
   if (!threadID || !senderID) return;
@@ -62,9 +73,8 @@ module.exports.handleEvent = async function({ api, event }) {
   const config = await getData(`spamkick/${threadID}`);
   if (!config || !config.enabled) return;
 
-  // initialize cache per thread
+  // init cache per thread
   if (!spamCache[threadID]) spamCache[threadID] = {};
-
   if (!spamCache[threadID][senderID]) {
     spamCache[threadID][senderID] = { count: 0, lastMsg: Date.now() };
   }
@@ -72,7 +82,7 @@ module.exports.handleEvent = async function({ api, event }) {
   const userData = spamCache[threadID][senderID];
   const now = Date.now();
 
-  // reset count kung lumipas na ng 5s
+  // reset count if > 5s since last message
   if (now - userData.lastMsg > 5000) {
     userData.count = 0;
   }
@@ -81,11 +91,15 @@ module.exports.handleEvent = async function({ api, event }) {
   userData.lastMsg = now;
 
   if (userData.count >= config.limit) {
+    const name = await getUserName(senderID, api);
     try {
       await api.removeUserFromGroup(senderID, threadID);
-      api.sendMessage(`⚠️ User ${senderID} has been kicked for spamming.`, threadID);
+      api.sendMessage(
+        { body: `⚠️ User ${name} has been kicked for spamming.`, mentions: [{ tag: name, id: senderID }] },
+        threadID
+      );
     } catch (e) {
-      api.sendMessage(`❌ Failed to kick spammer (need admin privileges).`, threadID);
+      api.sendMessage(`❌ Failed to kick ${name}. Bot may not have admin privileges.`, threadID);
     }
     userData.count = 0; // reset after kick
   }
