@@ -1,31 +1,26 @@
 const { setData, getData } = require("../../database.js");
 
-// Configurable number of admins to display
+// Config
 const MAX_DISPLAY_ADMINS = 5;
+const WARN_LIMIT = 3; // 3 warnings → auto kick
 
-// List of violations
+// Bad words & racist words
 const badwords = [
-  "tanga", "bobo", "gago", "puta", "pakyu", "inutil", "ulol",
-  "fuck", "shit", "asshole", "bitch", "dumb", "stupid", "motherfucker",
-  "laplap", "pota", "inamo", "tangina", "tang ina", "kantut", "kantot",
-  "jakol", "jakul", "jabol", "supot", "blow job", "blowjob", "puke", "bata", "puki", "baliw"
+  "tanga","bobo","gago","puta","pakyu","inutil","ulol",
+  "fuck","shit","asshole","bitch","dumb","stupid","motherfucker",
+  "laplap","pota","inamo","tangina","tang ina","kantut","kantot",
+  "jakol","jakul","jabol","supot","blow job","blowjob","puke","bata","puki","baliw"
 ];
 
 const racistWords = [
-  "negro", "nigger", "chimp", "nigga", "baluga",
-  "chink", "indio", "bakla", "niga", "bungal", "beki", "negra"
+  "negro","nigger","chimp","nigga","baluga",
+  "chink","indio","bakla","niga","bungal","beki","negra"
 ];
 
+// Allowed links
 const allowedLinks = [
-  "facebook.com",
-  "fb.com",
-  "facebook.com/groups",
-  "fb.com/groups",
-  "m.me/j",
-  "tiktok.com",
-  "youtube.com",
-  "youtu.be",
-  "roblox.com"
+  "facebook.com","fb.com","facebook.com/groups","fb.com/groups",
+  "m.me/j","tiktok.com","youtube.com","youtu.be","roblox.com"
 ];
 
 // Warning messages
@@ -50,23 +45,19 @@ const messages = {
   ]
 };
 
-// Helper: pick random message
+// Helpers
 function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Helper: fetch username
 async function getUserName(uid, api) {
   try {
     const info = await api.getUserInfo(uid);
     if (info && info[uid]?.name) return info[uid].name;
     return "User";
-  } catch {
-    return "User";
-  }
+  } catch { return "User"; }
 }
 
-// Format warning
 function formatWarning(name, type, note, count) {
   return `╭━[⚠️ WARNING ISSUED]━╮
 ┃ 👤 User: ${name}
@@ -80,14 +71,14 @@ function formatWarning(name, type, note, count) {
 // Module config
 module.exports.config = {
   name: "warning",
-  version: "3.1.0",
+  version: "4.0.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Auto warning system with per-thread DB + Admin notify + Auto-kick (3 warnings)",
+  description: "Auto warning system with per-thread DB + Admin notify + Auto-kick",
   commandCategory: "system",
   usages: `
 📌 /warning list
-   - View warning list for the thread (anyone can use)
+   - View warning list for the thread
 
 ⚠️ /warning reset all
    - Reset warnings for all users (ADMIN ONLY)
@@ -98,19 +89,17 @@ module.exports.config = {
   cooldowns: 5
 };
 
-// Helper to send help text
+// Send help
 const sendHelp = async (api, threadID, messageID) => {
   return api.sendMessage(module.exports.config.usages, threadID, messageID);
 };
 
-// COMMANDS: /warning list, reset
+// COMMANDS
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID, mentions, senderID } = event;
-
   if (!args.length) return sendHelp(api, threadID, messageID);
 
   const sub = args[0].toLowerCase();
-
   const isAdmin = async () => {
     const threadInfo = await api.getThreadInfo(threadID);
     return threadInfo.adminIDs.some(a => a.id === senderID);
@@ -118,7 +107,7 @@ module.exports.run = async function({ api, event, args }) {
 
   if (sub === "list") {
     const all = await getData(`warnings/${threadID}/_all`) || [];
-    if (!all.length) return api.sendMessage("Wala pang na-warning sa thread.", threadID, messageID);
+    if (!all.length) return api.sendMessage("No warnings yet in this thread.", threadID, messageID);
 
     let msg = "📋 Warning List:\n\n";
     for (const uid of all) {
@@ -128,7 +117,6 @@ module.exports.run = async function({ api, event, args }) {
         msg += `• ${name}: ${warnings.count} warning${warnings.count > 1 ? "s" : ""}\n`;
       }
     }
-
     return api.sendMessage(msg, threadID, messageID);
   }
 
@@ -136,16 +124,15 @@ module.exports.run = async function({ api, event, args }) {
     if (!(await isAdmin())) return api.sendMessage("❌ Only admins can reset warnings.", threadID, messageID);
 
     const nextArg = args[1]?.toLowerCase();
-
     if (nextArg === "all") {
       const all = await getData(`warnings/${threadID}/_all`) || [];
       for (const uid of all) {
         await setData(`warnings/${threadID}/${uid}`, { count: 0, lastUpdated: Date.now() });
       }
-      return api.sendMessage("✅ All warnings have been reset for this thread.", threadID, messageID);
+      return api.sendMessage("✅ All warnings have been reset.", threadID, messageID);
     }
 
-    const uids = Object.keys(mentions || {});
+    const uids = Object.keys(mentions);
     if (uids.length > 0) {
       for (const uid of uids) {
         await setData(`warnings/${threadID}/${uid}`, { count: 0, lastUpdated: Date.now() });
@@ -160,7 +147,7 @@ module.exports.run = async function({ api, event, args }) {
   return sendHelp(api, threadID, messageID);
 };
 
-// AUTO-DETECTION + MULTI-VIOLATION + AUTO-KICK + 24H RESET
+// HANDLE EVENT (auto-detect + warn + kick)
 module.exports.handleEvent = async function({ api, event }) {
   const { threadID, messageID, senderID, body } = event;
   if (!body) return;
@@ -169,17 +156,11 @@ module.exports.handleEvent = async function({ api, event }) {
   const words = text.replace(/[^\w\s]/g, "").split(/\s+/);
   const violations = [];
 
-  if (badwords.some(word => words.includes(word))) {
-    violations.push({ type: "Bad Language", note: pickRandom(messages.badword) });
-  }
-
-  if (racistWords.some(word => words.includes(word))) {
-    violations.push({ type: "Racist/Discriminatory Term", note: pickRandom(messages.racist) });
-  }
-
+  if (badwords.some(w => words.includes(w))) violations.push({ type: "Bad Language", note: pickRandom(messages.badword) });
+  if (racistWords.some(w => words.includes(w))) violations.push({ type: "Racist/Discriminatory Term", note: pickRandom(messages.racist) });
   if (/https?:\/\/|www\./.test(text)) {
-    const isAllowed = allowedLinks.some(link => text.includes(link));
-    if (!isAllowed) violations.push({ type: "Unauthorized Link", note: pickRandom(messages.link) });
+    const allowed = allowedLinks.some(link => text.includes(link));
+    if (!allowed) violations.push({ type: "Unauthorized Link", note: pickRandom(messages.link) });
   }
 
   if (!violations.length) return;
@@ -214,11 +195,11 @@ module.exports.handleEvent = async function({ api, event }) {
   const adminLine = displayAdmins.map(m => m.tag).join(" | ") + (extraCount > 0 ? ` ... (+${extraCount} more)` : "");
 
   let warningNote = violations.map(v => formatWarning(name, v.type, v.note, warnings.count)).join("\n\n");
-  if (warnings.count >= 3) warningNote += "\n\n⚠️ You have reached 3 warnings. Auto Kick will be applied!";
+  if (warnings.count >= WARN_LIMIT) warningNote += `\n\n⚠️ You have reached ${WARN_LIMIT} warnings. Auto Kick applied!`;
 
   await api.sendMessage(
     {
-      body: warningNote + (adminMentions.length > 0 ? `\n\n📢 Notifying admins: ${adminLine}` : ""),
+      body: warningNote + (adminMentions.length ? `\n\n📢 Notifying admins: ${adminLine}` : ""),
       mentions: [{ tag: name, id: senderID }, ...displayAdmins]
     },
     threadID,
@@ -226,18 +207,19 @@ module.exports.handleEvent = async function({ api, event }) {
     messageID
   );
 
-  if (warnings.count >= 3) {
+  // ✅ Kick if reached warning limit
+  if (warnings.count >= WARN_LIMIT) {
     try {
-      await api.removeUserFromGroup(threadID, senderID); // tama ang order
+      await api.removeUserFromGroup(senderID, threadID);
       await api.sendMessage(
-        { body: `⚠️ User ${name} has been removed from the group due to 3 warnings.`, mentions: [{ tag: name, id: senderID }] },
+        { body: `⚠️ User ${name} has been removed due to ${WARN_LIMIT} warnings.`, mentions: [{ tag: name, id: senderID }] },
         threadID
       );
       await setData(`warnings/${threadID}/${senderID}`, { count: 0, lastUpdated: Date.now() });
     } catch (err) {
       console.error("Failed to kick user:", err);
       await api.sendMessage(
-        { body: `❌ Failed to remove ${name} from the group. Bot may not have permissions.`, mentions: [] },
+        { body: `❌ Failed to remove ${name}. Bot may not have permissions.`, mentions: [] },
         threadID
       );
     }
