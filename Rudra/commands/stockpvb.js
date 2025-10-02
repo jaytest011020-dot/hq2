@@ -80,7 +80,7 @@ const MANUAL_RARITY = {
   // Gear
   "Bat": "common",
   "Water Bucket": "epic",
-  "Frost grenade": "epic",
+  "Frost Grenade": "epic",
   "Banana Gun": "epic",
   "Frost Blower": "legendary",
   "Lucky Potion": "legendary",
