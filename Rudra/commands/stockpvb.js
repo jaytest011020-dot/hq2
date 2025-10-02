@@ -115,7 +115,7 @@ function formatItems(items) {
     grouped[type].push(`• ${getEmoji(i.name)} ${i.name.replace(/ Seed$/i, "")} (${i.currentStock ?? "N/A"})`);
   });
 
-  const CATEGORY_ORDER = ["common", "rare", "epic", "legendary", "godly", "mythic", "secret", "unknown"];
+  const CATEGORY_ORDER = ["common", "rare", "epic", "legendary", "mythic", "godly", "secret", "unknown"];
   let output = "";
   CATEGORY_ORDER.forEach(cat => {
     if (grouped[cat]) {
