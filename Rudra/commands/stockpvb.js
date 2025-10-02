@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.0.0",
+  version: "3.1.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert",
+  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert & prediction log",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -88,6 +88,9 @@ const MANUAL_RARITY = {
   "Carrot Launcher": "godly",
 };
 
+// Godly & Secret seeds list for prediction
+const RARE_SEEDS = ["Cocotank", "Carnivorous Plant", "Mr Carrot", "Tomatrio", "Shroombino"];
+
 // Helpers
 function getEmoji(name) {
   const cleanName = name.replace(/ Seed$/i, "");
@@ -124,6 +127,25 @@ function formatItems(items) {
   });
 
   return output.trim();
+}
+
+// Predict next spawn (simple time-based chance)
+function predictNext(lastTime) {
+  const now = new Date();
+  let nextDate = new Date(lastTime.getTime());
+  nextDate.setMinutes(nextDate.getMinutes() + 5);
+  const diff = (nextDate - now) / 1000;
+  let chance = 0;
+  if (diff <= 0) chance = 80 + Math.floor(Math.random() * 20);
+  else chance = Math.max(10, 50 - diff * 2);
+  return { time: nextDate, chance };
+}
+
+// Update rare seed log
+async function updateRareSeedLog(seedName) {
+  const stockLog = (await getData("pvbpredict/log")) || {};
+  stockLog[seedName] = new Date().toISOString();
+  await setData("pvbpredict/log", stockLog);
 }
 
 // Fetch stock from PVBR API
@@ -193,6 +215,11 @@ ${formatItems(gear)}
     const rareList = rareSeeds.map(s => `${getEmoji(s.name)} ${s.name.replace(/ Seed$/i, "")} (${s.currentStock})`).join("\n");
     const alertMsg = `@everyone 🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast here:\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server`;
     api.sendMessage(alertMsg, threadID);
+
+    // Update prediction log automatically
+    for (let s of rareSeeds) {
+      await updateRareSeedLog(s.name.replace(/ Seed$/i, ""));
+    }
   }
 }
 
@@ -262,3 +289,6 @@ module.exports.onLoad = async function({ api }) {
     }
   }
 };
+
+// Export prediction log update for /pvbpredict
+module.exports.updateRareSeedLog = updateRareSeedLog;
