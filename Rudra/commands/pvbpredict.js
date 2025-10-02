@@ -2,7 +2,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbpredict",
-  version: "1.0.0",
+  version: "1.0.1",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Predict next Godly & Secret seeds in PVBR",
@@ -15,7 +15,7 @@ module.exports.config = {
 // Godly & Secret seeds tracking
 const RARE_SEEDS = ["Cocotank", "Carnivorous Plant", "Mr Carrot", "Tomatrio", "Shroombino"];
 
-// Helper to capitalize
+// Helper to capitalize first letter
 function capitalizeFirst(str) {
   if (!str) return "Unknown";
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -25,11 +25,16 @@ function capitalizeFirst(str) {
 function predictNext(lastTime) {
   const now = new Date();
   let nextDate = new Date(lastTime.getTime());
-  nextDate.setMinutes(nextDate.getMinutes() + 5); // assume approx every 5 min restock
-  const diff = (nextDate - now) / 1000; // seconds
+  nextDate.setMinutes(nextDate.getMinutes() + 5); // approximate 5 min restock
+  const diff = (nextDate - now) / 1000; // in seconds
   let chance = 0;
-  if (diff <= 0) chance = 80 + Math.floor(Math.random() * 20); // high chance
-  else chance = Math.max(10, 50 - diff * 2); // lower chance if far away
+
+  if (diff <= 0) {
+    chance = 80 + Math.floor(Math.random() * 20); // high chance if overdue
+  } else {
+    chance = Math.max(10, 50 - diff * 2); // lower chance if far away
+  }
+
   return { time: nextDate, chance };
 }
 
@@ -38,15 +43,15 @@ module.exports.run = async function({ api, event }) {
   const { threadID } = event;
   const stockLog = (await getData("pvbpredict/log")) || {};
 
-  let msg = `🔮 PVBR Godly & Secret Seed Prediction 🔮\n\n`;
+  let msg = `🔮 𝗣𝗩𝗕𝗥 𝗚𝗼𝗱𝗹𝘆 & 𝗦𝗲𝗰𝗿𝗲𝘁 𝗦𝗲𝗲𝗱 𝗣𝗿𝗲𝗱𝗶𝗰𝘁𝗶𝗼𝗻 🔮\n\n`;
 
   for (let seed of RARE_SEEDS) {
-    const lastTime = stockLog[seed] ? new Date(stockLog[seed]) : new Date(new Date().getTime() - 60000); // fallback last 1 min ago
+    const lastTime = stockLog[seed] ? new Date(stockLog[seed]) : new Date(Date.now() - 60000); // fallback 1 min ago
     const prediction = predictNext(lastTime);
-    msg += `${capitalizeFirst(seed)} next: ${prediction.time.toLocaleTimeString("en-PH", { hour12: true })} (Chance: ${prediction.chance}%)\n`;
+    msg += `• ${capitalizeFirst(seed)}\n   Next: ${prediction.time.toLocaleTimeString("en-PH", { hour12: true })}\n   Chance: ${prediction.chance}%\n\n`;
   }
 
-  msg += `\n⚡ Tip: Join the private server to catch them faster:\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server`;
+  msg += `⚡ Tip: Join the private server to catch them faster:\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server`;
 
   api.sendMessage(msg, threadID);
 };
