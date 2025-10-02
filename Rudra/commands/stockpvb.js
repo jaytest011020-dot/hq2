@@ -191,7 +191,7 @@ ${formatItems(gear)}
 
   if (rareSeeds.length > 0) {
     const rareList = rareSeeds.map(s => `${getEmoji(s.name)} ${s.name.replace(/ Seed$/i, "")} (${s.currentStock})`).join("\n");
-    const alertMsg = `@everyone 🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast here:\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n\nMake sure naka-join muna kayo sa private server bago sumali!`;
+    const alertMsg = `@everyone 🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast here:\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server`;
     api.sendMessage(alertMsg, threadID);
   }
 }
