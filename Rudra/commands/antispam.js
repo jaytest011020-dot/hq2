@@ -1,91 +1,92 @@
 const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
-  name: "antispam",
-  version: "1.1.0",
-  credits: "Jaylord La Peña + ChatGPT",
-  description: "Enable/disable anti-spam system with auto warning and kick",
-  usages: "/antispam on | /antispam off",
+  name: "spamkick",
+  version: "1.0.0",
+  hasPermission: 1,
+  credits: "ChatGPT + NN",
+  description: "Auto kick users who spam messages",
   commandCategory: "moderation",
-  cooldowns: 3,
+  usages: `
+📌 /spamkick on <limit>
+   - Enable spam auto-kick (set limit, e.g. 10 messages)
+
+📌 /spamkick off
+   - Disable spam auto-kick
+
+📌 /spamkick status
+   - Check current spam auto-kick settings
+`,
+  cooldowns: 5
 };
 
-let spamTracker = {}; // {threadID: {uid: {count, lastMsg, firstTime, warned}}}
+let spamCache = {}; // memory cache per thread
 
-module.exports.run = async function ({ api, event, args }) {
+module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
-  const command = args[0] ? args[0].toLowerCase() : "";
 
-  if (command !== "on" && command !== "off") {
-    return api.sendMessage("❌ Usage: /antispam on | /antispam off", threadID, messageID);
+  if (!args.length) {
+    return api.sendMessage(module.exports.config.usages, threadID, messageID);
   }
 
-  let status = command === "on";
-  await setData(`antispam/status/${threadID}`, { enabled: status });
+  const sub = args[0].toLowerCase();
 
-  return api.sendMessage(
-    `🛡️ Anti-Spam is now ${status ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
-    threadID,
-    messageID
-  );
-};
-
-// 🛡️ Spam Detection Handler
-module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, senderID, body } = event;
-  if (!body) return;
-
-  // 🔹 Check if anti-spam enabled
-  const status = (await getData(`antispam/status/${threadID}`)) || { enabled: false };
-  if (!status.enabled) return;
-
-  // 🔹 Init tracker
-  if (!spamTracker[threadID]) spamTracker[threadID] = {};
-  if (!spamTracker[threadID][senderID]) {
-    spamTracker[threadID][senderID] = { count: 0, lastMsg: "", firstTime: Date.now(), warned: false };
+  if (sub === "on") {
+    const limit = parseInt(args[1]) || 10;
+    await setData(`spamkick/${threadID}`, { enabled: true, limit });
+    return api.sendMessage(`✅ Spam auto-kick enabled (limit: ${limit} msgs).`, threadID, messageID);
   }
 
-  let userData = spamTracker[threadID][senderID];
-  const now = Date.now();
-
-  // Reset kung lumagpas na sa 10s window
-  if (now - userData.firstTime > 10000) {
-    userData.count = 0;
-    userData.firstTime = now;
-    userData.lastMsg = body;
-    userData.warned = false;
+  if (sub === "off") {
+    await setData(`spamkick/${threadID}`, { enabled: false });
+    return api.sendMessage("❌ Spam auto-kick disabled.", threadID, messageID);
   }
 
-  // 🔹 If same message repeated
-  if (userData.lastMsg === body) {
-    userData.count++;
-  } else {
-    userData.count = 1;
-    userData.lastMsg = body;
-    userData.firstTime = now;
-  }
-
-  // ⚠️ First offense = warning
-  if (userData.count >= 5 && !userData.warned) {
-    userData.warned = true;
-    userData.count = 0; // reset after warning
+  if (sub === "status") {
+    const data = await getData(`spamkick/${threadID}`) || { enabled: false, limit: 10 };
     return api.sendMessage(
-      `⚠️ Warning to user ${senderID}: Stop spamming! (Next spam = kick)`,
-      threadID
+      `📊 Spam Auto-Kick Status:\n\nEnabled: ${data.enabled ? "✅ Yes" : "❌ No"}\nLimit: ${data.limit || 10} msgs`,
+      threadID,
+      messageID
     );
   }
 
-  // 🚨 Second offense = kick
-  if (userData.count >= 5 && userData.warned) {
+  return api.sendMessage(module.exports.config.usages, threadID, messageID);
+};
+
+// Listener para sa bawat message (dito nade-detect ang spam)
+module.exports.handleEvent = async function({ api, event }) {
+  const { threadID, senderID } = event;
+  if (!threadID || !senderID) return;
+
+  const config = await getData(`spamkick/${threadID}`);
+  if (!config || !config.enabled) return;
+
+  // initialize cache per thread
+  if (!spamCache[threadID]) spamCache[threadID] = {};
+
+  if (!spamCache[threadID][senderID]) {
+    spamCache[threadID][senderID] = { count: 0, lastMsg: Date.now() };
+  }
+
+  const userData = spamCache[threadID][senderID];
+  const now = Date.now();
+
+  // reset count kung lumipas na ng 5s
+  if (now - userData.lastMsg > 5000) {
+    userData.count = 0;
+  }
+
+  userData.count++;
+  userData.lastMsg = now;
+
+  if (userData.count >= config.limit) {
     try {
       await api.removeUserFromGroup(senderID, threadID);
-      delete spamTracker[threadID][senderID];
-      return api.sendMessage(
-        `🚨 User ${senderID} has been kicked for spamming.`,
-        threadID
-      );
-    } catch (err) {
-      return api.sendMessage("❌ Failed to kick spammer. Maybe I'm not admin.", threadID);
+      api.sendMessage(`⚠️ User ${senderID} has been kicked for spamming.`, threadID);
+    } catch (e) {
+      api.sendMessage(`❌ Failed to kick spammer (need admin privileges).`, threadID);
     }
+    userData.count = 0; // reset after kick
   }
 };
