@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "2.9.0",
+  version: "3.0.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, current time + next restock",
+  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, alerts for Secret stock",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -104,7 +104,7 @@ function capitalizeFirst(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Format items by category (auto-detect seeds or gear), stock beside name
+// Format items by category
 function formatItems(items) {
   if (!items || items.length === 0) return "❌ Empty";
 
@@ -166,7 +166,7 @@ async function sendStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const nextRestock = getNextRestock(now);
 
-  const msg = `
+  let msg = `
 ╭─────────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
 🕒 Current Time: ${now.toLocaleTimeString("en-PH", { hour12: true })}
@@ -180,6 +180,18 @@ ${formatItems(seeds)}
 ╭─🛠️ Gear─────────╮
 ${formatItems(gear)}
 ╰─────────────────╯`;
+
+  // Check for secret stock
+  const hasSecret = stock.some(i => getRarity(i.name) === "secret");
+
+  if (hasSecret) {
+    const robloxLink = "https://www.roblox.com/games/your-private-server-link"; // 🔗 replace this
+    msg += `
+
+@everyone 🎩 SECRET STOCK DETECTED! 🎩  
+🚪 Para maka-join agad sa game, click here:  
+${robloxLink}`;
+  }
 
   await api.sendMessage(msg, threadID);
 }
