@@ -12,14 +12,14 @@ async function getUserName(uid, api) {
 // Config
 module.exports.config = {
   name: "spamkick",
-  version: "1.1.0",
+  version: "1.3.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Auto kick users who spam messages",
+  description: "Auto kick users who spam identical messages within dynamic timeframe",
   commandCategory: "moderation",
   usages: `
 📌 /spamkick on <limit>
-   - Enable spam auto-kick (set limit, e.g. 10 messages)
+   - Enable spam auto-kick (limit identical messages, e.g. 5 messages within 10s)
 
 📌 /spamkick off
    - Disable spam auto-kick
@@ -36,16 +36,14 @@ let spamCache = {}; // memory cache per thread
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  if (!args.length) {
-    return api.sendMessage(module.exports.config.usages, threadID, messageID);
-  }
+  if (!args.length) return api.sendMessage(module.exports.config.usages, threadID, messageID);
 
   const sub = args[0].toLowerCase();
 
   if (sub === "on") {
-    const limit = parseInt(args[1]) || 10;
+    const limit = parseInt(args[1]) || 5;
     await setData(`spamkick/${threadID}`, { enabled: true, limit });
-    return api.sendMessage(`✅ Spam auto-kick enabled (limit: ${limit} msgs within 5s).`, threadID, messageID);
+    return api.sendMessage(`✅ Spam auto-kick enabled (limit: ${limit} identical messages in ${limit * 2}s).`, threadID, messageID);
   }
 
   if (sub === "off") {
@@ -54,9 +52,9 @@ module.exports.run = async function({ api, event, args }) {
   }
 
   if (sub === "status") {
-    const data = await getData(`spamkick/${threadID}`) || { enabled: false, limit: 10 };
+    const data = await getData(`spamkick/${threadID}`) || { enabled: false, limit: 5 };
     return api.sendMessage(
-      `📊 Spam Auto-Kick Status:\n\nEnabled: ${data.enabled ? "✅ Yes" : "❌ No"}\nLimit: ${data.limit || 10} msgs / 5s`,
+      `📊 Spam Auto-Kick Status:\n\nEnabled: ${data.enabled ? "✅ Yes" : "❌ No"}\nLimit: ${data.limit || 5} identical messages in ${data.limit*2}s`,
       threadID,
       messageID
     );
@@ -67,40 +65,41 @@ module.exports.run = async function({ api, event, args }) {
 
 // EVENT LISTENER
 module.exports.handleEvent = async function({ api, event }) {
-  const { threadID, senderID } = event;
-  if (!threadID || !senderID) return;
+  const { threadID, senderID, body } = event;
+  if (!threadID || !senderID || !body) return;
 
   const config = await getData(`spamkick/${threadID}`);
   if (!config || !config.enabled) return;
 
-  // init cache per thread
   if (!spamCache[threadID]) spamCache[threadID] = {};
-  if (!spamCache[threadID][senderID]) {
-    spamCache[threadID][senderID] = { count: 0, lastMsg: Date.now() };
-  }
+  if (!spamCache[threadID][senderID]) spamCache[threadID][senderID] = {};
 
   const userData = spamCache[threadID][senderID];
-  const now = Date.now();
 
-  // reset count if > 5s since last message
-  if (now - userData.lastMsg > 5000) {
-    userData.count = 0;
+  if (!userData[body]) userData[body] = { count: 0, firstTime: Date.now() };
+
+  const now = Date.now();
+  const timeFrame = config.limit * 2000; // limit*2 seconds
+
+  // reset count if first message outside timeframe
+  if (now - userData[body].firstTime > timeFrame) {
+    userData[body].count = 0;
+    userData[body].firstTime = now;
   }
 
-  userData.count++;
-  userData.lastMsg = now;
+  userData[body].count++;
 
-  if (userData.count >= config.limit) {
+  if (userData[body].count >= config.limit) {
     const name = await getUserName(senderID, api);
     try {
       await api.removeUserFromGroup(senderID, threadID);
       api.sendMessage(
-        { body: `⚠️ User ${name} has been kicked for spamming.`, mentions: [{ tag: name, id: senderID }] },
+        { body: `⚠️ User ${name} has been kicked for spamming identical messages.`, mentions: [{ tag: name, id: senderID }] },
         threadID
       );
     } catch (e) {
       api.sendMessage(`❌ Failed to kick ${name}. Bot may not have admin privileges.`, threadID);
     }
-    userData.count = 0; // reset after kick
+    spamCache[threadID][senderID][body] = { count: 0, firstTime: now }; // reset after kick
   }
 };
