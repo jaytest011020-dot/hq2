@@ -40,7 +40,7 @@ const ITEM_EMOJI = {
   "Shroombino": "🍄🎭",
   "Bat": "⚾",
   "Water Bucket": "🪣💧",
-  "Frost grenade": "🧊💣",
+  "Frost Grenade": "🧊💣",
   "Banana Gun": "🍌🔫",
   "Frost Blower": "❄️🌬️",
   "Lucky Potion": "🍀🧪",
