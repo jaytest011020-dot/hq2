@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.1.0",
+  version: "3.0.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, alerts for Secret & Godly stock",
+  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -104,7 +104,7 @@ function capitalizeFirst(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Format items by category
+// Format items by category (auto-detect seeds or gear), stock beside name
 function formatItems(items) {
   if (!items || items.length === 0) return "❌ Empty";
 
@@ -155,7 +155,7 @@ function getNextRestock(date = null) {
   return next;
 }
 
-// Send stock message (auto-detect Seeds & Gear + secret & godly alerts)
+// Send stock message (auto-detect Seeds & Gear)
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
@@ -166,7 +166,7 @@ async function sendStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const nextRestock = getNextRestock(now);
 
-  let msg = `
+  const msg = `
 ╭─────────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
 🕒 Current Time: ${now.toLocaleTimeString("en-PH", { hour12: true })}
@@ -181,22 +181,19 @@ ${formatItems(seeds)}
 ${formatItems(gear)}
 ╰─────────────────╯`;
 
-  // Check for secret or godly stock
-  const hasSecret = stock.some(i => getRarity(i.name) === "secret");
-  const hasGodly = stock.some(i => getRarity(i.name) === "godly");
-
-  if (hasSecret || hasGodly) {
-    const robloxLink = "https://www.roblox.com/games/your-private-server-link"; // 🔗 replace this
-    let alertMsg = "\n\n@everyone ";
-
-    if (hasSecret) alertMsg += "🎩 SECRET STOCK DETECTED! 🎩\n";
-    if (hasGodly) alertMsg += "🟡 GODLY STOCK DETECTED! 🟡\n";
-
-    alertMsg += `🚪 Para maka-join agad sa game, click here:\n${robloxLink}`;
-    msg += alertMsg;
-  }
-
   await api.sendMessage(msg, threadID);
+
+  // 🔔 Extra alert for Godly or Secret seeds
+  const rareSeeds = seeds.filter(s => {
+    const rarity = getRarity(s.name);
+    return rarity === "godly" || rarity === "secret";
+  });
+
+  if (rareSeeds.length > 0) {
+    const rareList = rareSeeds.map(s => `${getEmoji(s.name)} ${s.name.replace(/ Seed$/i, "")} (${s.currentStock})`).join("\n");
+    const alertMsg = `@everyone 🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast here:\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n\nMake sure naka-join muna kayo sa private server bago sumali!`;
+    api.sendMessage(alertMsg, threadID);
+  }
 }
 
 // Recursive scheduling
