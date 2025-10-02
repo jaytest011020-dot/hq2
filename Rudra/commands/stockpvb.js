@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.0.0",
+  version: "3.1.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, alerts for Secret stock",
+  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, alerts for Secret & Godly stock",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -155,7 +155,7 @@ function getNextRestock(date = null) {
   return next;
 }
 
-// Send stock message (auto-detect Seeds & Gear)
+// Send stock message (auto-detect Seeds & Gear + secret & godly alerts)
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
@@ -181,16 +181,19 @@ ${formatItems(seeds)}
 ${formatItems(gear)}
 ╰─────────────────╯`;
 
-  // Check for secret stock
+  // Check for secret or godly stock
   const hasSecret = stock.some(i => getRarity(i.name) === "secret");
+  const hasGodly = stock.some(i => getRarity(i.name) === "godly");
 
-  if (hasSecret) {
+  if (hasSecret || hasGodly) {
     const robloxLink = "https://www.roblox.com/games/your-private-server-link"; // 🔗 replace this
-    msg += `
+    let alertMsg = "\n\n@everyone ";
 
-@everyone 🎩 SECRET STOCK DETECTED! 🎩  
-🚪 Para maka-join agad sa game, click here:  
-${robloxLink}`;
+    if (hasSecret) alertMsg += "🎩 SECRET STOCK DETECTED! 🎩\n";
+    if (hasGodly) alertMsg += "🟡 GODLY STOCK DETECTED! 🟡\n";
+
+    alertMsg += `🚪 Para maka-join agad sa game, click here:\n${robloxLink}`;
+    msg += alertMsg;
   }
 
   await api.sendMessage(msg, threadID);
