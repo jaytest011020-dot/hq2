@@ -6,13 +6,15 @@ async function getUserName(uid, api) {
     const info = await api.getUserInfo(uid);
     if (info && info[uid]?.name) return info[uid].name;
     return "User";
-  } catch { return "User"; }
+  } catch {
+    return "User";
+  }
 }
 
 // Config
 module.exports.config = {
   name: "spamkick",
-  version: "1.3.0",
+  version: "1.4.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
   description: "Auto kick users who spam identical messages within dynamic timeframe",
@@ -30,16 +32,15 @@ module.exports.config = {
   cooldowns: 5
 };
 
-let spamCache = {}; // memory cache per thread
+// Memory cache per thread
+let spamCache = {};
 
 // COMMAND HANDLER
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
-
   if (!args.length) return api.sendMessage(module.exports.config.usages, threadID, messageID);
 
   const sub = args[0].toLowerCase();
-
   if (sub === "on") {
     const limit = parseInt(args[1]) || 5;
     await setData(`spamkick/${threadID}`, { enabled: true, limit });
@@ -54,7 +55,7 @@ module.exports.run = async function({ api, event, args }) {
   if (sub === "status") {
     const data = await getData(`spamkick/${threadID}`) || { enabled: false, limit: 5 };
     return api.sendMessage(
-      `📊 Spam Auto-Kick Status:\n\nEnabled: ${data.enabled ? "✅ Yes" : "❌ No"}\nLimit: ${data.limit || 5} identical messages in ${data.limit*2}s`,
+      `📊 Spam Auto-Kick Status:\nEnabled: ${data.enabled ? "✅ Yes" : "❌ No"}\nLimit: ${data.limit || 5} identical messages in ${data.limit*2}s`,
       threadID,
       messageID
     );
@@ -71,6 +72,7 @@ module.exports.handleEvent = async function({ api, event }) {
   const config = await getData(`spamkick/${threadID}`);
   if (!config || !config.enabled) return;
 
+  // Initialize caches
   if (!spamCache[threadID]) spamCache[threadID] = {};
   if (!spamCache[threadID][senderID]) spamCache[threadID][senderID] = {};
 
@@ -81,14 +83,15 @@ module.exports.handleEvent = async function({ api, event }) {
   const now = Date.now();
   const timeFrame = config.limit * 2000; // limit*2 seconds
 
-  // reset count if first message outside timeframe
+  // Reset count if first message is outside the timeframe
   if (now - userData[body].firstTime > timeFrame) {
-    userData[body].count = 0;
+    userData[body].count = 1;
     userData[body].firstTime = now;
+  } else {
+    userData[body].count++;
   }
 
-  userData[body].count++;
-
+  // Kick if exceeded limit
   if (userData[body].count >= config.limit) {
     const name = await getUserName(senderID, api);
     try {
@@ -100,6 +103,8 @@ module.exports.handleEvent = async function({ api, event }) {
     } catch (e) {
       api.sendMessage(`❌ Failed to kick ${name}. Bot may not have admin privileges.`, threadID);
     }
-    spamCache[threadID][senderID][body] = { count: 0, firstTime: now }; // reset after kick
+
+    // Reset after kick
+    userData[body] = { count: 0, firstTime: Date.now() };
   }
 };
