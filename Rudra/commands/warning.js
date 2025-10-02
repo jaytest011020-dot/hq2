@@ -73,17 +73,17 @@ function formatWarning(name, type, note, count) {
 ┃ 🚫 Violation: ${type}
 ┃ 📝 Note: ${note}
 ┃
-┃ ⚠️ Your current warning count: ${count}
+┃ ⚠️ Current warning count: ${count}
 ╰━━━━━━━━━━━━━━━━━━╯`;
 }
 
 // Module config
 module.exports.config = {
   name: "warning",
-  version: "3.0.1",
+  version: "3.1.0",
   hasPermission: 1,
   credits: "ChatGPT + NN",
-  description: "Auto warning system with per-thread DB + Admin notify + Auto-kick",
+  description: "Auto warning system with per-thread DB + Admin notify + Auto-kick (3 warnings)",
   commandCategory: "system",
   usages: `
 📌 /warning list
@@ -145,7 +145,7 @@ module.exports.run = async function({ api, event, args }) {
       return api.sendMessage("✅ All warnings have been reset for this thread.", threadID, messageID);
     }
 
-    const uids = Object.keys(mentions);
+    const uids = Object.keys(mentions || {});
     if (uids.length > 0) {
       for (const uid of uids) {
         await setData(`warnings/${threadID}/${uid}`, { count: 0, lastUpdated: Date.now() });
@@ -214,7 +214,7 @@ module.exports.handleEvent = async function({ api, event }) {
   const adminLine = displayAdmins.map(m => m.tag).join(" | ") + (extraCount > 0 ? ` ... (+${extraCount} more)` : "");
 
   let warningNote = violations.map(v => formatWarning(name, v.type, v.note, warnings.count)).join("\n\n");
-  if (warnings.count >= 5) warningNote += "\n\n⚠️ You have reached 5 warnings. Auto Kick will be applied!";
+  if (warnings.count >= 3) warningNote += "\n\n⚠️ You have reached 3 warnings. Auto Kick will be applied!";
 
   await api.sendMessage(
     {
@@ -226,11 +226,11 @@ module.exports.handleEvent = async function({ api, event }) {
     messageID
   );
 
-  if (warnings.count >= 5) {
+  if (warnings.count >= 3) {
     try {
-      await api.removeUserFromGroup(threadID, senderID);
+      await api.removeUserFromGroup(threadID, senderID); // tama ang order
       await api.sendMessage(
-        { body: `⚠️ User ${name} has been removed from the group due to 5 warnings.`, mentions: [{ tag: name, id: senderID }] },
+        { body: `⚠️ User ${name} has been removed from the group due to 3 warnings.`, mentions: [{ tag: name, id: senderID }] },
         threadID
       );
       await setData(`warnings/${threadID}/${senderID}`, { count: 0, lastUpdated: Date.now() });
