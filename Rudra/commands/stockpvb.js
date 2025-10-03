@@ -4,7 +4,7 @@ const { setData, getData } = require("../../database.js");
 module.exports.config = {
   name: "pvbstock",
   version: "3.1.2",
-  hasPermssion: 0,
+  hasPermssion: 3,
   credits: "Jaylord La Peña + ChatGPT",
   description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert",
   usePrefix: true,
