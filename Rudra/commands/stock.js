@@ -4,7 +4,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "stock",
-  version: "6.6.4",
+  version: "6.6.3",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "GrowAGarden auto-stock with full seeds, eggs, gear, cosmetics + emoji and styled boxes",
@@ -96,9 +96,8 @@ function getNext5Min(date = null) {
     next.setMinutes(nextMinutes % 60);
   }
   return next;
-}
-
-// Fetch stock data from API
+    } 
+  // Fetch stock data from API
 function fetchStocks() {
   const options = {
     method: "GET",
@@ -134,10 +133,7 @@ function formatSectionText(items) {
 }
 
 // Send styled stock update
-async function sendStock(threadID, api, force = false) {
-  const gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
-  if (!gcData.enabled && !force) return; // respect enabled flag
-
+async function sendStock(threadID, api) {
   const data = await fetchStocks();
   if (!data) return;
 
@@ -202,17 +198,11 @@ async function startAutoStock(threadID, api) {
     sendStock(threadID, api);
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
-}
-
+} 
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
-
-  // ✅ Pag walang argument → show stock agad kahit naka-off
-  if (!option) {
-    return sendStock(threadID, api, true);
-  }
 
   if (gcData.enabled && option && option !== "off" && option !== "check") {
     return api.sendMessage("⚠️ Auto-stock is already active.", threadID, messageID);
@@ -223,7 +213,6 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`stock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    await sendStock(threadID, api, true); // 🔑 show stock agad
     return api.sendMessage("✅ Auto-stock enabled. Updates every 5 minutes.", threadID, messageID);
   }
 
