@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.1.1",
+  version: "3.1.2",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert",
@@ -188,7 +188,7 @@ ${formatItems(gear)}
 
   if (rareSeeds.length > 0) {
     const rareList = rareSeeds.map(s => `${getEmoji(s.name)} ${s.name.replace(/ Seed$/i, "")} (${s.currentStock})`).join("\n");
-    const alertMsg = `🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast here:\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server`;
+    const alertMsg = `🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast! Please choose a server that is NOT FULL:\n\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n\nhttps://www.roblox.com/share?code=d1afbbba2d5ed946b83caeb423a09e37&type=Server\n\nhttps://www.roblox.com/share?code=a7e01c0a62c66e4c8a572cd79e77070e&type=Server\n\nhttps://www.roblox.com/share?code=f9b0d9025486cb4494514ad5ee9cce54&type=Server`;
     await api.sendMessage(alertMsg, threadID);
   }
 }
