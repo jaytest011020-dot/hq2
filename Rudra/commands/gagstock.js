@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "gagstock",
-  version: "6.7.0",
+  version: "6.8.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "GrowAGarden auto-stock (seeds, eggs, gear only) restricted to Jaylord & admins",
+  description: "GrowAGarden auto-stock (seeds, eggs, gear only) restricted to GC admins & Jaylord",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
@@ -15,8 +15,7 @@ module.exports.config = {
 
 const autoStockTimers = {};
 
-const OWNER_ID = "100094012127960"; // replace with your real FBUID if needed
-const ADMINS = [OWNER_ID, "100015501076743"]; // add admin UIDs here
+const OWNER_ID = "100094012127960"; // Replace this with your actual Facebook UID
 
 const SPECIAL_ITEMS = [
   "Grandmaster Sprinkler",
@@ -27,6 +26,7 @@ const SPECIAL_ITEMS = [
 ];
 
 const ITEM_EMOJI = {
+  // Seeds
   "Carrot": "🥕", "Strawberry": "🍓", "Blueberry": "🫐", "Orange Tulip": "🌷",
   "Tomato": "🍅", "Corn": "🌽", "Daffodil": "🌼", "Watermelon": "🍉",
   "Pumpkin": "🎃", "Apple": "🍎", "Bamboo": "🎍", "Coconut": "🥥",
@@ -35,8 +35,12 @@ const ITEM_EMOJI = {
   "Sugar Apple": "🍏", "Burning Bud": "🔥🌱", "Giant Pinecone": "🌲",
   "Elder Strawberry": "🍓✨", "Romanesco": "🥦", "Potato": "🥔",
   "Brussels Sprouts": "🥬", "Cocomango": "🥭🥥", "Broccoli": "🥦",
+
+  // Eggs
   "Common Egg": "🥚", "Uncommon Egg": "🥚✨", "Rare Egg": "🥚💎",
   "Legendary Egg": "🥚🌟", "Mythical Egg": "🥚🔥", "Bug Egg": "🐛🥚",
+
+  // Gear
   "Watering Can": "💧", "Trowel": "🔨", "Trading Ticket": "🎟️",
   "Recall Wrench": "🔧", "Basic Sprinkler": "🌊", "Advanced Sprinkler": "💦",
   "Medium Treat": "🍪", "Medium Toy": "🧸", "Night Staff": "🌙",
@@ -163,8 +167,11 @@ module.exports.run = async function({ api, event, args }) {
   const option = args[0]?.toLowerCase();
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
-  if (!ADMINS.includes(senderID)) {
-    return api.sendMessage("❌ Only Jaylord and admins can use this command.", threadID, messageID);
+  // ✅ Allow only Jaylord or GC admins
+  const info = await api.getThreadInfo(threadID);
+  const adminIDs = info.adminIDs.map(a => a.id);
+  if (!adminIDs.includes(senderID) && senderID !== OWNER_ID) {
+    return api.sendMessage("❌ Only group admins or Jaylord can use this command.", threadID, messageID);
   }
 
   if (option === "on") {
