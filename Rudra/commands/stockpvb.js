@@ -3,8 +3,8 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.1.2",
-  hasPermssion: 3,
+  version: "3.1.3",
+  hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert",
   usePrefix: true,
@@ -12,6 +12,9 @@ module.exports.config = {
   usages: "/pvbstock on|off|check",
   cooldowns: 10,
 };
+
+// Your UID (only you can use)
+const OWNER_UID = "61559999326713";
 
 // Allowed restock minutes
 const ALLOWED_MINUTES = [1, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56];
@@ -219,7 +222,13 @@ function stopAutoStock(threadID) {
 
 // Command handler
 module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID } = event;
+  const { threadID, messageID, senderID } = event;
+
+  // 🔒 Owner-only check
+  if (String(senderID) !== OWNER_UID) {
+    return api.sendMessage("🚫 Only the bot owner (Jaylord) can use this command.", threadID, messageID);
+  }
+
   const option = args[0]?.toLowerCase();
   let gcData = (await getData(`pvbstock/${threadID}`)) || { enabled: false };
 
