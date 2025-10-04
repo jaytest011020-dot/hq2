@@ -2,9 +2,9 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "spamkick",
-  version: "1.0.0",
-  hasPermission: 1,
-  credits: "ChatGPT + NN",
+  version: "1.1.0",
+  hasPermssion: 1,
+  credits: "Jaylord La Peña + ChatGPT",
   description: "Auto kick users who spam messages",
   commandCategory: "moderation",
   usages: `
@@ -22,8 +22,31 @@ module.exports.config = {
 
 let spamCache = {}; // memory cache per thread
 
+// 🔒 Function to check if user is allowed
+async function isAllowedUser(api, event) {
+  const { threadID, senderID } = event;
+  const adminUID = "61559999326713"; // Only you
+
+  if (senderID === adminUID) return true;
+
+  try {
+    const threadInfo = await api.getThreadInfo(threadID);
+    const adminIDs = threadInfo.adminIDs.map(a => a.id);
+    return adminIDs.includes(senderID);
+  } catch {
+    return false;
+  }
+}
+
+// 🧩 Main Command
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
+
+  // Check permission
+  const allowed = await isAllowedUser(api, event);
+  if (!allowed) {
+    return api.sendMessage("❌ Only the GC admin or Jaylord La Peña can use this command.", threadID, messageID);
+  }
 
   if (!args.length) {
     return api.sendMessage(module.exports.config.usages, threadID, messageID);
@@ -54,7 +77,7 @@ module.exports.run = async function({ api, event, args }) {
   return api.sendMessage(module.exports.config.usages, threadID, messageID);
 };
 
-// Listener para sa bawat message (dito nade-detect ang spam)
+// 🧠 Event Listener (Spam Detection)
 module.exports.handleEvent = async function({ api, event }) {
   const { threadID, senderID } = event;
   if (!threadID || !senderID) return;
