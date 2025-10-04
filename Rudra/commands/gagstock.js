@@ -1,23 +1,23 @@
-const axios = require("axios");
 const https = require("https");
 const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "gagstock",
-  version: "6.6.3",
+  version: "6.7.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "GrowAGarden auto-stock with full seeds, eggs, gear, cosmetics + emoji and styled boxes",
+  description: "GrowAGarden auto-stock (seeds, eggs, gear only) restricted to Jaylord & admins",
   usePrefix: true,
   commandCategory: "gag tools",
   usages: "/stock on|off|check",
   cooldowns: 10,
 };
 
-// Auto-stock timers per GC
 const autoStockTimers = {};
 
-// Special items alert
+const OWNER_ID = "100094012127960"; // replace with your real FBUID if needed
+const ADMINS = [OWNER_ID, "100015501076743"]; // add admin UIDs here
+
 const SPECIAL_ITEMS = [
   "Grandmaster Sprinkler",
   "Master Sprinkler",
@@ -26,9 +26,7 @@ const SPECIAL_ITEMS = [
   "Medium Toy"
 ];
 
-// Emoji mapping for seeds, eggs, gear, cosmetics
 const ITEM_EMOJI = {
-  // Seeds
   "Carrot": "🥕", "Strawberry": "🍓", "Blueberry": "🫐", "Orange Tulip": "🌷",
   "Tomato": "🍅", "Corn": "🌽", "Daffodil": "🌼", "Watermelon": "🍉",
   "Pumpkin": "🎃", "Apple": "🍎", "Bamboo": "🎍", "Coconut": "🥥",
@@ -37,52 +35,22 @@ const ITEM_EMOJI = {
   "Sugar Apple": "🍏", "Burning Bud": "🔥🌱", "Giant Pinecone": "🌲",
   "Elder Strawberry": "🍓✨", "Romanesco": "🥦", "Potato": "🥔",
   "Brussels Sprouts": "🥬", "Cocomango": "🥭🥥", "Broccoli": "🥦",
-  // Eggs
   "Common Egg": "🥚", "Uncommon Egg": "🥚✨", "Rare Egg": "🥚💎",
   "Legendary Egg": "🥚🌟", "Mythical Egg": "🥚🔥", "Bug Egg": "🐛🥚",
-  // Gear
   "Watering Can": "💧", "Trowel": "🔨", "Trading Ticket": "🎟️",
   "Recall Wrench": "🔧", "Basic Sprinkler": "🌊", "Advanced Sprinkler": "💦",
-  "Firework": "🎆", "Medium Treat": "🍪", "Medium Toy": "🧸",
-  "Night Staff": "🌙", "Star Caller": "⭐", "Garden Guide": "📖",
-  "Godly Sprinkler": "🌪️", "Chocolate Sprinkler": "🍫", "Magnifying Glass": "🔍",
-  "Nectar Staff": "🍯", "Pollen Radar": "📡", "Master Sprinkler": "🌟💦",
-  "Cleaning Spray": "🧴", "Favorite Tool": "🛠️", "Harvest Tool": "🌾",
-  "Friendship Pot": "🤝", "Honey Sprinkler": "🍯💦", "Pet Mutation Shard Tranquil": "🌀",
-  "Pet Mutation Shard Corrupted": "☠️", "Silver Fertilizer": "⚪",
-  "Level Up Lollipop": "🍭", "Grandmaster Sprinkler": "🌊🔥",
-  "Rainbow Lollipop": "🌈🍭", "Lightning Rod": "⚡", "Tanning Mirror": "🪞",
-  "Reclaimer": "♻️", "Small Toy": "🧸", "Pet Mutation Shard Giantbean": "🌱🟢",
-  "Small Treat": "🍪", "MutationSprayVerdant": "🌿", "Spray mutation disco": "💃",
-  "MutationSprayWet": "💧", "MutationSprayWindstuck": "🍃", "Mutation Spray Choc": "🍫",
-  "Mutation Spray Pollinated": "🐝", "Mutation Spray Shocked": "⚡",
-  "Mutationspraycloudtouched": "☁️", "Mutationsprayburnt": "🔥",
-  "Mutationspraychilled": "❄️", "MutationSprayAmber": "🟠",
-  "TranquilMutationSpray": "🌀", "CorruptMutationSpray": "☠️",
-  "Mutation Spray HoneyGlazed": "🍯", "Mutation Spray Fried": "🍟",
-  "CookedMutationSpray": "🍳", "Mutation Spray Bloom": "🌸",
-  "Mutation Spray Glimmering": "✨", "Mutation Spray Luminous": "💡",
-  // Cosmetics
-  "Statue Crate": "🗿", "Classic Gnome Crate": "👨‍🌾", "Fun Crate": "🎪",
-  "Common Gnome Crate": "🧙", "Sign Crate": "📜", "Red tractor": "🚜",
-  "Green tractor": "🚜", "Brown Well": "🪣", "Blue Well": "🪣", "Red Well": "🪣",
-  "Frog Fountain": "🐸", "Ring Walkway": "⭕", "Viney Ring Walkway": "🌿⭕",
-  "Round Metal Arbour": "🛖", "Large Wood Arbour": "🏡", "Log Bench": "🪑",
-  "White Bench": "🪑", "Brown Bench": "🪑", "Wood Fence": "🪵", "Small Stone Pad": "🪨",
-  "Medium Stone Table": "🪨", "Stone Lantern": "🏮", "Axe Stump": "🪓", "Bookshelf": "📚",
-  "Mini TV": "📺", "Hay Bale": "🌾", "Water Trough": "💧", "Shovel Grave": "⛏️",
-  "Torch": "🔥", "Small Path Tile": "🟫", "Medium Path Tile": "🟫",
-  "Large Path Tile": "🟫", "Orange Umbrella": "🟠☂️", "Yellow Umbrella": "🟡☂️",
-  "Red Pottery": "🟥", "White Pottery": "⬜", "Brick Stack": "🧱",
-  "Shovel": "⛏️", "Rock Pile": "🪨", "Rake": "🧹", "Compost Bin": "🗑️"
+  "Medium Treat": "🍪", "Medium Toy": "🧸", "Night Staff": "🌙",
+  "Star Caller": "⭐", "Garden Guide": "📖", "Godly Sprinkler": "🌪️",
+  "Chocolate Sprinkler": "🍫", "Magnifying Glass": "🔍",
+  "Master Sprinkler": "🌟💦", "Grandmaster Sprinkler": "🌊🔥",
+  "Honey Sprinkler": "🍯💦", "Favorite Tool": "🛠️",
+  "Silver Fertilizer": "⚪", "Level Up Lollipop": "🍭"
 };
 
-// Helper: assign emoji to item
 function getEmoji(name) {
   return ITEM_EMOJI[name] || "❔";
 }
 
-// Helper: get next 5-minute aligned restock
 function getNext5Min(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   let minutes = now.getMinutes();
@@ -96,8 +64,8 @@ function getNext5Min(date = null) {
     next.setMinutes(nextMinutes % 60);
   }
   return next;
-    } 
-  // Fetch stock data from API
+}
+
 function fetchStocks() {
   const options = {
     method: "GET",
@@ -126,13 +94,11 @@ function fetchStocks() {
   });
 }
 
-// Format a section (gear, eggs, seeds, cosmetics)
 function formatSectionText(items) {
   if (!items || items.length === 0) return "❌ Empty";
   return items.map(i => `• ${getEmoji(i.name)} ${i.name} (${i.quantity ?? i.value ?? "N/A"})`).join("\n");
 }
 
-// Send styled stock update
 async function sendStock(threadID, api) {
   const data = await fetchStocks();
   if (!data) return;
@@ -142,10 +108,8 @@ async function sendStock(threadID, api) {
 
   const gearText = formatSectionText(data.gearStock);
   const eggText = formatSectionText(data.eggStock);
-  const cosmeticsText = formatSectionText(data.cosmeticsStock);
   const seedText = formatSectionText(data.seedsStock);
 
-  // Styled message template
   const stockMsg = `
 ╭─────────────────╮
 🌱 𝗔𝘂𝘁𝗼-𝗦𝘁𝗼𝗰𝗸 𝗨𝗽𝗱𝗮𝘁𝗲 🌱
@@ -161,25 +125,20 @@ ${gearText}
 ${eggText}
 ╰─────────────────╯
 
-╭─💄 Cosmetics───────╮
-${cosmeticsText}
-╰──────────────────╯
-
 ╭─🌱 Seeds─────────╮
 ${seedText}
 ╰─────────────────╯`;
 
   api.sendMessage(stockMsg, threadID);
 
-  // Special items alert
-  const allItems = [...(data.gearStock || []), ...(data.eggStock || []), ...(data.cosmeticsStock || []), ...(data.seedsStock || [])];
+  const allItems = [...(data.gearStock || []), ...(data.eggStock || []), ...(data.seedsStock || [])];
   const foundSpecial = allItems.filter(i => SPECIAL_ITEMS.some(si => i.name.toLowerCase().includes(si.toLowerCase())));
   if (foundSpecial.length > 0) {
     const specialMsg = `
 🚨 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗦𝘁𝗼𝗰𝗸 🚨
 ──────────────────────
-🕒 Current PH Time: ${now.toLocaleTimeString("en-PH", { hour12: false })}
-🔄 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: false })}
+🕒 ${now.toLocaleTimeString("en-PH", { hour12: false })}
+🔄 ${next.toLocaleTimeString("en-PH", { hour12: false })}
 ──────────────────────
 ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity ?? i.value ?? "N/A"})`).join("\n")}
 ──────────────────────`;
@@ -187,7 +146,6 @@ ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity ?? i.value ?? "N/A"})`).joi
   }
 }
 
-// Start auto-stock timer
 async function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
@@ -198,14 +156,15 @@ async function startAutoStock(threadID, api) {
     sendStock(threadID, api);
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
-} 
+}
+
 module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID } = event;
+  const { threadID, messageID, senderID } = event;
   const option = args[0]?.toLowerCase();
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
-  if (gcData.enabled && option && option !== "off" && option !== "check") {
-    return api.sendMessage("⚠️ Auto-stock is already active.", threadID, messageID);
+  if (!ADMINS.includes(senderID)) {
+    return api.sendMessage("❌ Only Jaylord and admins can use this command.", threadID, messageID);
   }
 
   if (option === "on") {
@@ -234,7 +193,6 @@ module.exports.run = async function({ api, event, args }) {
   api.sendMessage("⚠️ Usage: /stock on|off|check", threadID, messageID);
 };
 
-// Auto-resume all enabled GCs on bot restart
 module.exports.onLoad = async function({ api }) {
   const allGCs = (await getData("stock")) || {};
   for (const tid in allGCs) {
