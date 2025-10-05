@@ -1,7 +1,7 @@
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.4.0",
+  version: "1.5.0",
   credits: "Kim Joseph DG Bien + ChatGPT",
   description: "Join Notification with image then video after 3s",
   dependencies: {
@@ -20,7 +20,6 @@ module.exports.run = async function ({ api, event }) {
   const { threadID, logMessageData } = event;
   const addedParticipants = logMessageData.addedParticipants;
 
-  // ✅ If bot was added
   if (addedParticipants.some(i => i.userFbId == api.getCurrentUserID())) {
     api.changeNickname(
       `𝗕𝗢𝗧 ${global.config.BOTNAME} 【 ${global.config.PREFIX} 】`,
@@ -42,7 +41,6 @@ module.exports.run = async function ({ api, event }) {
       const userID = newParticipant.userFbId;
       if (userID === api.getCurrentUserID()) continue;
 
-      // ✅ Get username
       let userName = "Friend";
       try {
         const info = await api.getUserInfo(userID);
@@ -80,16 +78,34 @@ module.exports.run = async function ({ api, event }) {
         setTimeout(async () => {
           try {
             const res = await axios.get(videoApi);
-            const videoUrl = res.data.videoUrl;
-            const vid = await axios.get(videoUrl, { responseType: "arraybuffer" });
-            fs.writeFileSync(videoPath, vid.data);
+            const videoUrl = res.data.data?.url || res.data.videoUrl || res.data.url;
 
-            api.sendMessage({
-              body: "🎥 Here's a welcome video for you!",
-              attachment: fs.createReadStream(videoPath)
-            }, threadID, () => {
-              if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+            if (!videoUrl || !videoUrl.endsWith(".mp4")) {
+              return api.sendMessage("⚠️ Failed to fetch video, try again later.", threadID);
+            }
+
+            const vidStream = await axios({
+              url: videoUrl,
+              method: "GET",
+              responseType: "stream"
             });
+
+            const writer = fs.createWriteStream(videoPath);
+            vidStream.data.pipe(writer);
+
+            writer.on("finish", () => {
+              api.sendMessage({
+                body: "🎥 Here's a welcome video for you!",
+                attachment: fs.createReadStream(videoPath)
+              }, threadID, () => {
+                if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+              });
+            });
+
+            writer.on("error", err => {
+              console.error("Video write error:", err);
+            });
+
           } catch (err) {
             console.error("⚠️ Error sending welcome video:", err.message);
           }
