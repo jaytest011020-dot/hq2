@@ -2,12 +2,12 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "ban",
-  version: "5.0.0",
+  version: "6.0.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Ban a user or list banned users",
+  description: "Ban, list, and unban users in the group",
   commandCategory: "moderation",
-  usages: "/ban add <reason> (reply to message) | /ban list"
+  usages: "/ban add <reason> | /ban list | /ban remove (reply)"
 };
 
 module.exports.run = async function ({ api, event, args }) {
@@ -25,7 +25,7 @@ module.exports.run = async function ({ api, event, args }) {
 
   const subCmd = args[0]?.toLowerCase();
 
-  // 🧩 Ban Add Command
+  // 🧩 /ban add
   if (subCmd === "add") {
     if (!messageReply)
       return api.sendMessage("⚠️ You must reply to the user's message you want to ban.", threadID);
@@ -56,7 +56,7 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage(`✅ Successfully banned ${userName}!\n📄 Reason: ${reason}`, threadID);
   }
 
-  // 📋 Ban List Command
+  // 📋 /ban list
   if (subCmd === "list") {
     const bans = (await getData(`bans/${threadID}`)) || {};
 
@@ -76,6 +76,33 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage(msg, threadID);
   }
 
+  // 🔓 /ban remove
+  if (subCmd === "remove") {
+    if (!messageReply)
+      return api.sendMessage("⚠️ You must reply to the user's message you want to unban.", threadID);
+
+    const uid = messageReply.senderID;
+    const bans = (await getData(`bans/${threadID}`)) || {};
+
+    if (!bans[uid]) {
+      return api.sendMessage("❌ That user is not banned.", threadID);
+    }
+
+    delete bans[uid];
+    await setData(`bans/${threadID}`, bans);
+
+    const info = await api.getUserInfo(uid);
+    const userName = info?.[uid]?.name || "User";
+
+    return api.sendMessage(`✅ Successfully unbanned ${userName}.`, threadID);
+  }
+
   // ❓ Help message
-  return api.sendMessage("❗ Usage:\n/ban add <reason> (reply)\n/ban list - show banned users", threadID);
+  return api.sendMessage(
+    "❗ Usage:\n" +
+    "/ban add <reason> (reply)\n" +
+    "/ban remove (reply)\n" +
+    "/ban list - show banned users",
+    threadID
+  );
 };
