@@ -1,117 +1,56 @@
-const { setData, getData } = require("../../database.js");
+const { db } = require("../../database.js");
 
 module.exports.config = {
   name: "ban",
-  version: "4.0.0",
-  hasPermssion: 1,
+  version: "2.1.0",
+  hasPermission: 0,
   credits: "ChatGPT",
-  description: "Ban/unban users (persistent per group with Firebase)",
-  commandCategory: "group",
-  usages: "ban [@tag|reply] reason | listban | unban <uid> | reset",
-  cooldowns: 5
+  description: "Ban a user by profile link and reason (only GC admin or authorized user)",
+  commandCategory: "moderation",
+  usages: "/ban <profile link> <reason>"
 };
 
-// === Auto enforce bans ===
-module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID } = event;
-  if (!threadID) return;
+module.exports.run = async function({ api, event, args }) {
+  const { threadID, senderID } = event;
 
-  const groupData = (await getData(`bans/${threadID}`)) || { banned: {} };
+  // ✅ Allow only this UID or GC admin
+  const allowedUID = "61559999326713";
 
-  if (event.logMessageType === "log:subscribe") {
-    const addedIDs = event.logMessageData.addedParticipants.map(p => p.userFbId);
-    for (const uid of addedIDs) {
-      if (groupData.banned[uid]) {
-        try {
-          const name = (await api.getUserInfo(uid))[uid]?.name || uid;
-          api.sendMessage(`⛔ ${name} is banned and cannot rejoin this group.\n📌 Reason: ${groupData.banned[uid].reason}`, threadID);
-          await api.removeUserFromGroup(uid, threadID);
-        } catch (e) {
-          console.error("Ban enforce error:", e);
-        }
-      }
-    }
-  }
-};
-
-// === Run command ===
-module.exports.run = async function ({ api, event, args }) {
-  const { threadID, senderID, messageID, mentions, type, messageReply } = event;
-
-  let groupData = (await getData(`bans/${threadID}`)) || { banned: {} };
-
-  // ✅ Check permissions
-  const isBotAdmin = global.config.ADMINBOT.includes(senderID);
   const threadInfo = await api.getThreadInfo(threadID);
-  const isGroupAdmin = threadInfo.adminIDs.some(item => item.id == senderID);
+  const adminIDs = threadInfo.adminIDs.map(e => e.id);
+  const isAdmin = adminIDs.includes(senderID);
 
-  if (!isBotAdmin && !isGroupAdmin) {
-    return api.sendMessage("❌ Only group admins or bot admins can use the ban command.", threadID, messageID);
+  if (senderID !== allowedUID && !isAdmin) {
+    return api.sendMessage("⛔ Only GC admins or authorized user can use this command.", threadID);
   }
 
-  // listban
-  if (args[0] === "listban") {
-    const banned = groupData.banned;
-    const uids = Object.keys(banned);
+  if (args.length < 2)
+    return api.sendMessage("❗ Usage: /ban <profile link> <reason>", threadID);
 
-    if (!uids.length) {
-      return api.sendMessage("✅ No banned users in this group.", threadID, messageID);
-    }
+  const profileLink = args[0];
+  const reason = args.slice(1).join(" ");
+  const uidMatch = profileLink.match(/\d{5,}/);
 
-    let msg = "⛔ Banned users:\n";
-    for (const uid of uids) {
-      const name = (await api.getUserInfo(uid))[uid]?.name || uid;
-      msg += `• ${name} (${uid})\n  Reason: ${banned[uid].reason}\n`;
-    }
-    return api.sendMessage(msg, threadID, messageID);
+  if (!uidMatch)
+    return api.sendMessage("⚠️ Invalid profile link. Please use a valid Facebook profile link.", threadID);
+
+  const uid = uidMatch[0];
+  const ref = db.ref(`bans/${threadID}/${uid}`);
+
+  const snapshot = await ref.get();
+  if (snapshot.exists()) {
+    return api.sendMessage("🚫 That user is already banned in this GC.", threadID);
   }
 
-  // unban
-  if (args[0] === "unban") {
-    const uid = args[1];
-    if (!uid) return api.sendMessage("❌ Usage: ban unban <uid>", threadID, messageID);
+  await ref.set({
+    uid,
+    reason,
+    bannedBy: senderID,
+    time: new Date().toISOString()
+  });
 
-    if (!groupData.banned[uid]) {
-      return api.sendMessage("⚠️ User not banned.", threadID, messageID);
-    }
-
-    delete groupData.banned[uid];
-    await setData(`bans/${threadID}`, groupData);
-
-    const name = (await api.getUserInfo(uid))[uid]?.name || uid;
-    return api.sendMessage(`✅ ${name} has been unbanned.`, threadID, messageID);
-  }
-
-  // reset
-  if (args[0] === "reset") {
-    groupData = { banned: {} };
-    await setData(`bans/${threadID}`, groupData);
-    return api.sendMessage("🔄 All bans reset for this group.", threadID, messageID);
-  }
-
-  // ban command
-  let targetIDs = [];
-  if (type === "message_reply" && messageReply) {
-    targetIDs.push(messageReply.senderID);
-  } else if (Object.keys(mentions).length > 0) {
-    targetIDs = Object.keys(mentions);
-  } else {
-    return api.sendMessage("❌ Usage: ban [@tag|reply] reason", threadID, messageID);
-  }
-
-  const reason = args.slice(1).join(" ") || "No reason provided";
-
-  for (const uid of targetIDs) {
-    groupData.banned[uid] = { reason, date: Date.now() };
-
-    try {
-      const name = (await api.getUserInfo(uid))[uid]?.name || uid;
-      await api.sendMessage(`⛔ ${name} has been banned.\n📌 Reason: ${reason}`, threadID);
-      await api.removeUserFromGroup(uid, threadID);
-    } catch (e) {
-      console.error("Remove error:", e);
-    }
-  }
-
-  await setData(`bans/${threadID}`, groupData);
+  return api.sendMessage(
+    `✅ Successfully banned user ${uid} from this GC.\n📄 Reason: ${reason}`,
+    threadID
+  );
 };
