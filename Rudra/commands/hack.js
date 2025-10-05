@@ -4,10 +4,10 @@ const path = require("path");
 
 module.exports.config = {
   name: "hack",
-  version: "1.5.0",
+  version: "1.5.1",
   hasPermssion: 0,
   credits: "You + ChatGPT",
-  description: "Fun /hack @mention — sends attachment to group + PM to command user saying it's a prank",
+  description: "Fun /hack @mention — sends attachment to group + PM to issuer saying it's a prank (no @ in text)",
   usages: "/hack @mention",
   cooldowns: 5,
   commandCategory: "fun"
@@ -90,9 +90,8 @@ module.exports.run = async function({ api, event, args }) {
 
       // If no media fields found, fallback: treat as no-attachment case
       if (attachments.length === 0) {
-        // Public message: mention the target (exact text required)
-        const mentionTag = `@${targetName}`;
-        const publicBody = `Tignan mo ang pm sinend ko ang password ni ${mentionTag}`;
+        // Public message: mention the target (without literal @)
+        const publicBody = `Tignan mo ang pm sinend ko ang password ni ${targetName}`;
         await api.sendMessage({ body: publicBody, mentions: [{ tag: targetName, id: targetUid }] }, threadID, messageID);
 
         // PM the command issuer that it's a prank
@@ -117,9 +116,8 @@ module.exports.run = async function({ api, event, args }) {
       attachments.push(fs.createReadStream(fpath));
     }
 
-    // Build public message body with mention tag (exact required text)
-    const mentionTag = `@${targetName}`;
-    const publicBody = `Check pm, sinend ko ang password ni ${mentionTag}`;
+    // Build public message body with plain name (no '@' char)
+    const publicBody = `Tignan mo ang pm sinend ko ang password ni ${targetName}`;
     const mentionsArray = [{ tag: targetName, id: targetUid }];
 
     // Try to send one message with attachments + exact public text
@@ -151,9 +149,7 @@ module.exports.run = async function({ api, event, args }) {
 
     // cleanup cached files
     attachments.forEach(a => {
-      try {
-        if (a && a.path && fs.existsSync(a.path)) fs.unlinkSync(a.path);
-      } catch (e) { /* ignore */ }
+      try { if (a && a.path && fs.existsSync(a.path)) fs.unlinkSync(a.path); } catch(e) {}
     });
 
   } catch (err) {
