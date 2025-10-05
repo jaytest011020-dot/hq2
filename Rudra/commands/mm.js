@@ -1,21 +1,24 @@
-const { setData, getData } = require("../../database.js");
+const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "mm",
   version: "1.2.0",
   hasPermission: 0,
-  credits: "Jaylord La Peña + ChatGPT",
-  description: "Auto mention midman when someone asks for MM",
-  commandCategory: "utility",
-  usages: "/mm on | /mm off",
-  cooldowns: 5
+  credits: "ChatGPT + Jaylord La Peña",
+  description: "Auto mention Midman when someone asks for one",
+  commandCategory: "moderation",
+  usages: "/mm on | off",
+  cooldowns: 3
 };
 
-// 🔹 UIDs
-const OWNER_UID = "61559999326713"; // ikaw lang pwede mag on/off
-const MIDMAN_UID = "61563731477181"; // Klenth Jarred Dalupan
+// 🔧 Configuration
+const OWNER_UID = "61559999326713";
+const MIDMANS = [
+  { id: "61563731477181", name: "Klenth Jarred Dalupan" },
+  { id: "61565984310103", name: "Kio |~Midman🌟" }
+];
 
-// 🔹 List of trigger keywords
+// 🔍 Keywords to detect
 const KEYWORDS = [
   "sino avail mm",
   "pa mm",
@@ -28,58 +31,55 @@ const KEYWORDS = [
   "sino avail midman",
   "cno avail midman",
   "sino avail na midman",
-  "cno avail na midman"
+  "cno avail na midman",
+  "may available mm ba dito",
+  "may avail mm ba dito"
 ];
 
-// 🧩 Command: /mm on | off
-module.exports.run = async function ({ api, event, args }) {
-  const { threadID, senderID, messageID } = event;
+module.exports.run = async function({ api, event, args }) {
+  const { threadID, senderID } = event;
 
-  // 🔐 Only owner can toggle
+  // Only owner can toggle
   if (senderID !== OWNER_UID)
-    return api.sendMessage("⛔ Only the owner (Jaylord La Peña) can use this command.", threadID, messageID);
+    return api.sendMessage("⛔ Only the bot owner can use this command.", threadID);
 
-  if (!args[0])
-    return api.sendMessage("❗ Usage: /mm on or /mm off", threadID, messageID);
+  if (!args[0]) 
+    return api.sendMessage("📘 Usage: /mm on | off", threadID);
 
   const option = args[0].toLowerCase();
-  if (option !== "on" && option !== "off")
-    return api.sendMessage("❗ Please use: /mm on or /mm off", threadID, messageID);
-
-  const enabled = option === "on";
-  await setData(`mm/${threadID}`, { enabled });
-
-  return api.sendMessage(
-    enabled ? "✅ Auto MM mention is now ON." : "❌ Auto MM mention is now OFF.",
-    threadID,
-    messageID
-  );
+  if (option === "on") {
+    await setData(`mm/${threadID}`, { enabled: true });
+    return api.sendMessage("✅ Midman auto-mention is now ON.", threadID);
+  } else if (option === "off") {
+    await setData(`mm/${threadID}`, { enabled: false });
+    return api.sendMessage("❌ Midman auto-mention is now OFF.", threadID);
+  } else {
+    return api.sendMessage("📘 Usage: /mm on | off", threadID);
+  }
 };
 
-// 🧠 Auto-detect MM messages
-module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, body, messageID } = event;
+// 🧠 Event listener (detect keywords)
+module.exports.handleEvent = async function({ api, event }) {
+  const { threadID, messageID, body } = event;
   if (!body) return;
 
   const config = await getData(`mm/${threadID}`);
   if (!config || !config.enabled) return;
 
-  const msg = body.toLowerCase().trim();
-  if (KEYWORDS.some(k => msg.includes(k))) {
-    try {
-      const info = await api.getUserInfo(MIDMAN_UID);
-      const name = info?.[MIDMAN_UID]?.name || "Midman";
+  const lowerMsg = body.toLowerCase();
 
-      api.sendMessage(
-        {
-          body: `🔔 Need MM? Here's our available midman:\n@${name}`,
-          mentions: [{ tag: name, id: MIDMAN_UID }]
-        },
-        threadID,
-        messageID // ✅ reply mismo sa triggering message
-      );
-    } catch (e) {
-      console.error("MM mention error:", e);
-    }
-  }
+  // Check if message includes any keyword
+  const found = KEYWORDS.some(keyword => lowerMsg.includes(keyword));
+  if (!found) return;
+
+  // 📣 Mention both midmans
+  const mentions = MIDMANS.map(m => ({ tag: m.name, id: m.id }));
+  const names = MIDMANS.map(m => `• ${m.name}`).join("\n");
+
+  const replyMsg = {
+    body: `📣 Available Midman:\n${names}`,
+    mentions
+  };
+
+  return api.sendMessage(replyMsg, threadID, messageID);
 };
