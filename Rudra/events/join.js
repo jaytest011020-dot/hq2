@@ -1,9 +1,9 @@
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.7.0",
+  version: "1.8.0",
   credits: "Kim Joseph DG Bien + ChatGPT",
-  description: "Join Notification with welcome image then video (with greeting message)",
+  description: "Join Notification with welcome image then video after 3 seconds",
   dependencies: {
     "fs-extra": "",
     "request": "",
@@ -20,7 +20,7 @@ module.exports.run = async function ({ api, event }) {
   const { threadID, logMessageData } = event;
   const addedParticipants = logMessageData.addedParticipants;
 
-  // 🧠 If bot is added to group
+  // 🧠 If bot is added to a new group
   if (addedParticipants.some(i => i.userFbId == api.getCurrentUserID())) {
     api.changeNickname(
       `𝗕𝗢𝗧 ${global.config.BOTNAME} 【 ${global.config.PREFIX} 】`,
@@ -28,7 +28,7 @@ module.exports.run = async function ({ api, event }) {
       api.getCurrentUserID()
     );
     return api.sendMessage(
-      `BOT CONNECTED!!\n\nThank you for using my BOT.\nUse ${global.config.PREFIX}help to see all commands.\n\nIf you notice an error in the bot, report it using ${global.config.PREFIX}callad or request a command.`,
+      `✅ BOT CONNECTED!\n\nThanks for adding me!\nUse ${global.config.PREFIX}help to see commands.\nIf there's an issue, report it using ${global.config.PREFIX}callad.`,
       threadID
     );
   }
@@ -42,19 +42,19 @@ module.exports.run = async function ({ api, event }) {
       const userID = newParticipant.userFbId;
       if (userID === api.getCurrentUserID()) continue;
 
-      // 🔹 Get user name safely
+      // 🔹 Get user name
       let userName = "Friend";
       try {
         const info = await api.getUserInfo(userID);
         if (info?.[userID]?.name) userName = info[userID].name;
       } catch {}
 
-      // 🔹 Message for image part
-      const msg = `Hello ${userName}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group. Enjoy your stay!`;
+      // 🔹 Welcome message
+      const msg = `Hello ${userName}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group. Enjoy your stay! 🎉`;
 
       // APIs
       const imgApi = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
-      const videoApi = `https://kaiz-apis.gleeze.com/api/shoti?apikey=dbc05250-b730-467b-abc4-f569cec7f1cf`;
+      const videoApi = `https://betadash-shoti-yazky.vercel.app/shotizxx?apikey=shipazu`;
 
       // Cache directory
       const cacheDir = path.join(__dirname, "..", "commands", "cache");
@@ -63,19 +63,15 @@ module.exports.run = async function ({ api, event }) {
       const imgPath = path.join(cacheDir, `welcome_${userID}.png`);
       const videoPath = path.join(cacheDir, `welcome_${userID}.mp4`);
 
-      // 🔹 Download welcome image
-      try {
-        await new Promise((resolve, reject) => {
-          request(imgApi)
-            .pipe(fs.createWriteStream(imgPath))
-            .on("close", resolve)
-            .on("error", reject);
-        });
-      } catch (err) {
-        console.error("⚠️ Error downloading image:", err.message);
-      }
+      // 🖼 Download welcome image
+      await new Promise((resolve, reject) => {
+        request(imgApi)
+          .pipe(fs.createWriteStream(imgPath))
+          .on("close", resolve)
+          .on("error", reject);
+      });
 
-      // 🔹 Send image + message first
+      // 📨 Send welcome message + image first
       await new Promise((resolve) => {
         api.sendMessage({
           body: msg,
@@ -87,20 +83,21 @@ module.exports.run = async function ({ api, event }) {
         });
       });
 
-      // ⏳ Wait 3 seconds
+      // Wait 3 seconds ⏳
       await new Promise(r => setTimeout(r, 3000));
 
-      // 🔹 Fetch video from API
+      // 🎬 Fetch video
       try {
         const res = await axios.get(videoApi, { timeout: 15000 });
-        const videoUrl = res?.data?.shoti?.videoUrl || res?.data?.videoUrl;
+        const videoUrl = res?.data?.shotiurl;
+
         if (!videoUrl) {
-          console.warn("⚠️ No video URL in response:", res.data);
+          console.warn("⚠️ No video URL found in API response:", res.data);
           continue;
         }
 
-        // 🔹 Download video (stream)
-        const vidRes = await axios({
+        // 📥 Download video
+        const videoStream = await axios({
           url: videoUrl,
           method: "GET",
           responseType: "stream",
@@ -110,12 +107,12 @@ module.exports.run = async function ({ api, event }) {
 
         await new Promise((resolve, reject) => {
           const writer = fs.createWriteStream(videoPath);
-          vidRes.data.pipe(writer);
+          videoStream.data.pipe(writer);
           writer.on("finish", resolve);
           writer.on("error", reject);
         });
 
-        // 🔹 Send video with greeting message
+        // 🎥 Send video with message
         const caption = `Hello ${userName}, this is a welcome video for you! 🎥`;
 
         await new Promise((resolve) => {
@@ -129,7 +126,7 @@ module.exports.run = async function ({ api, event }) {
         });
 
       } catch (err) {
-        console.error("⚠️ Failed to send welcome video:", err.message);
+        console.error("⚠️ Error fetching/sending video:", err.message);
       }
     }
 
