@@ -1,18 +1,20 @@
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.2.3",
-  credits: "Kim Joseph DG Bien (updated by ChatGPT)",
-  description: "Join Notification with API-generated welcome photo",
+  version: "1.4.0",
+  credits: "Kim Joseph DG Bien + ChatGPT",
+  description: "Join Notification with image then video after 3s",
   dependencies: {
     "fs-extra": "",
-    "request": ""
+    "request": "",
+    "axios": ""
   }
 };
 
 module.exports.run = async function ({ api, event }) {
   const request = require("request");
   const fs = global.nodemodule["fs-extra"];
+  const axios = require("axios");
   const path = require("path");
 
   const { threadID, logMessageData } = event;
@@ -32,66 +34,67 @@ module.exports.run = async function ({ api, event }) {
   }
 
   try {
-    // ✅ Get thread info safely
     const threadInfo = await api.getThreadInfo(threadID);
     const threadName = threadInfo.threadName || "this group";
     const totalMembers = threadInfo.participantIDs?.length || 0;
 
     for (let newParticipant of addedParticipants) {
       const userID = newParticipant.userFbId;
-
-      // ✅ Skip kung bot mismo
       if (userID === api.getCurrentUserID()) continue;
 
-      // ✅ Get user info safely
+      // ✅ Get username
       let userName = "Friend";
       try {
-        const userInfo = await api.getUserInfo(userID);
-        if (userInfo?.[userID]?.name) {
-          userName = userInfo[userID].name;
-        }
-      } catch (e) {
-        console.warn("⚠️ Failed to get user info:", e.message);
-      }
+        const info = await api.getUserInfo(userID);
+        if (info?.[userID]?.name) userName = info[userID].name;
+      } catch {}
 
-      // ✅ Build welcome message
       const msg = `Hello ${userName}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group, please enjoy!`;
 
-      // ✅ API URL for welcome image
-      const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
+      const imgApi = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
+      const videoApi = `https://kaiz-apis.gleeze.com/api/shoti?apikey=dbc05250-b730-467b-abc4-f569cec7f1cf`;
 
-      // ✅ Path for cache image
-      const filePath = path.join(__dirname, "..", "commands", "cache", `welcome_${userID}.png`);
+      const cacheDir = path.join(__dirname, "..", "commands", "cache");
+      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
-      // auto-create cache folder if not exists
-      if (!fs.existsSync(path.dirname(filePath))) {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      }
+      const imgPath = path.join(cacheDir, `welcome_${userID}.png`);
+      const videoPath = path.join(cacheDir, `welcome_${userID}.mp4`);
 
-      // ✅ Callback after download
-      const callback = () => {
-        if (fs.existsSync(filePath)) {
-          api.sendMessage({
-            body: msg,
-            attachment: fs.createReadStream(filePath),
-            mentions: [{ tag: userName, id: userID }]
-          }, threadID, () => fs.unlinkSync(filePath));
-        } else {
-          // Fallback: send text only
-          api.sendMessage(msg, threadID);
-        }
-      };
+      // ✅ Download welcome image
+      await new Promise((resolve, reject) => {
+        request(imgApi)
+          .pipe(fs.createWriteStream(imgPath))
+          .on("close", resolve)
+          .on("error", reject);
+      });
 
-      console.log(`📥 Generating welcome for ${userName} (${userID})`);
+      // ✅ Send welcome image + message first
+      api.sendMessage({
+        body: msg,
+        attachment: fs.existsSync(imgPath) ? fs.createReadStream(imgPath) : null,
+        mentions: [{ tag: userName, id: userID }]
+      }, threadID, async () => {
+        if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
 
-      // ✅ Request image with error handling
-      request(apiUrl)
-        .pipe(fs.createWriteStream(filePath))
-        .on("close", callback)
-        .on("error", (err) => {
-          console.error("❌ Error downloading welcome image:", err.message);
-          api.sendMessage(msg, threadID);
-        });
+        // ⏳ Wait 3 seconds then send video
+        setTimeout(async () => {
+          try {
+            const res = await axios.get(videoApi);
+            const videoUrl = res.data.videoUrl;
+            const vid = await axios.get(videoUrl, { responseType: "arraybuffer" });
+            fs.writeFileSync(videoPath, vid.data);
+
+            api.sendMessage({
+              body: "🎥 Here's a welcome video for you!",
+              attachment: fs.createReadStream(videoPath)
+            }, threadID, () => {
+              if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+            });
+          } catch (err) {
+            console.error("⚠️ Error sending welcome video:", err.message);
+          }
+        }, 3000);
+      });
     }
   } catch (err) {
     console.error("❌ ERROR in joinNoti module:", err);
