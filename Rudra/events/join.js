@@ -1,9 +1,9 @@
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.5.0",
+  version: "1.6.0",
   credits: "Kim Joseph DG Bien + ChatGPT",
-  description: "Join Notification with image then video after 3s",
+  description: "Join Notification with image then video after 3s (downloads MP4 via stream)",
   dependencies: {
     "fs-extra": "",
     "request": "",
@@ -20,6 +20,7 @@ module.exports.run = async function ({ api, event }) {
   const { threadID, logMessageData } = event;
   const addedParticipants = logMessageData.addedParticipants;
 
+  // If bot was added -> set nickname and announce
   if (addedParticipants.some(i => i.userFbId == api.getCurrentUserID())) {
     api.changeNickname(
       `𝗕𝗢𝗧 ${global.config.BOTNAME} 【 ${global.config.PREFIX} 】`,
@@ -37,81 +38,116 @@ module.exports.run = async function ({ api, event }) {
     const threadName = threadInfo.threadName || "this group";
     const totalMembers = threadInfo.participantIDs?.length || 0;
 
-    for (let newParticipant of addedParticipants) {
+    for (const newParticipant of addedParticipants) {
       const userID = newParticipant.userFbId;
       if (userID === api.getCurrentUserID()) continue;
 
+      // get username safely
       let userName = "Friend";
       try {
         const info = await api.getUserInfo(userID);
         if (info?.[userID]?.name) userName = info[userID].name;
-      } catch {}
+      } catch (e) {
+        console.warn("joinNoti: failed to get user info:", e?.message || e);
+      }
 
+      // welcome text
       const msg = `Hello ${userName}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group, please enjoy!`;
 
+      // APIs
       const imgApi = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
       const videoApi = `https://kaiz-apis.gleeze.com/api/shoti?apikey=dbc05250-b730-467b-abc4-f569cec7f1cf`;
 
+      // cache paths
       const cacheDir = path.join(__dirname, "..", "commands", "cache");
       if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
       const imgPath = path.join(cacheDir, `welcome_${userID}.png`);
       const videoPath = path.join(cacheDir, `welcome_${userID}.mp4`);
 
-      // ✅ Download welcome image
-      await new Promise((resolve, reject) => {
-        request(imgApi)
-          .pipe(fs.createWriteStream(imgPath))
-          .on("close", resolve)
-          .on("error", reject);
-      });
+      // download image (request stream)
+      try {
+        await new Promise((resolve, reject) => {
+          request(imgApi)
+            .pipe(fs.createWriteStream(imgPath))
+            .on("close", resolve)
+            .on("error", reject);
+        });
+      } catch (err) {
+        console.error("joinNoti: failed to download image:", err?.message || err);
+      }
 
-      // ✅ Send welcome image + message first
-      api.sendMessage({
-        body: msg,
-        attachment: fs.existsSync(imgPath) ? fs.createReadStream(imgPath) : null,
-        mentions: [{ tag: userName, id: userID }]
-      }, threadID, async () => {
-        if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+      // send image + message first
+      try {
+        await new Promise((resolve) => {
+          api.sendMessage({
+            body: msg,
+            attachment: fs.existsSync(imgPath) ? fs.createReadStream(imgPath) : null,
+            mentions: [{ tag: userName, id: userID }]
+          }, threadID, () => {
+            // delete image after sending
+            try { if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath); } catch (e) {}
+            resolve();
+          });
+        });
+      } catch (err) {
+        console.error("joinNoti: failed to send image message:", err?.message || err);
+      }
 
-        // ⏳ Wait 3 seconds then send video
-        setTimeout(async () => {
-          try {
-            const res = await axios.get(videoApi);
-            const videoUrl = res.data.data?.url || res.data.videoUrl || res.data.url;
+      // wait 3 seconds then fetch and send video
+      await new Promise(r => setTimeout(r, 3000));
 
-            if (!videoUrl || !videoUrl.endsWith(".mp4")) {
-              return api.sendMessage("⚠️ Failed to fetch video, try again later.", threadID);
-            }
+      try {
+        // call the shoti API (expecting JSON)
+        const shotiRes = await axios.get(videoApi, { timeout: 15000, maxRedirects: 5 });
+        // support multiple possible shapes; you provided:
+        // { status: "success", shoti: { videoUrl: "https://...mp4", ... } }
+        const videoUrl = shotiRes?.data?.shoti?.videoUrl || shotiRes?.data?.videoUrl || shotiRes?.data?.url || null;
 
-            const vidStream = await axios({
-              url: videoUrl,
-              method: "GET",
-              responseType: "stream"
-            });
+        if (!videoUrl) {
+          console.warn("joinNoti: video URL not found in shoti response:", JSON.stringify(shotiRes.data).slice(0, 200));
+          // optional: send fallback message or skip silently
+          // api.sendMessage("⚠️ Welcome video currently unavailable.", threadID);
+          continue;
+        }
 
-            const writer = fs.createWriteStream(videoPath);
-            vidStream.data.pipe(writer);
+        // ensure it's probably an mp4 or direct media
+        // If it doesn't end with .mp4 we still try (some servers don't use extension)
+        // Download as stream and wait until finished writing
+        const vidResp = await axios({
+          url: videoUrl,
+          method: "GET",
+          responseType: "stream",
+          maxRedirects: 5,
+          timeout: 30000
+        });
 
-            writer.on("finish", () => {
-              api.sendMessage({
-                body: "🎥 Here's a welcome video for you!",
-                attachment: fs.createReadStream(videoPath)
-              }, threadID, () => {
-                if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
-              });
-            });
+        // pipe to file and await finish
+        await new Promise((resolve, reject) => {
+          const writer = fs.createWriteStream(videoPath);
+          vidResp.data.pipe(writer);
+          writer.on("finish", resolve);
+          writer.on("error", reject);
+        });
 
-            writer.on("error", err => {
-              console.error("Video write error:", err);
-            });
+        // send video (playable)
+        await new Promise((resolve) => {
+          api.sendMessage({
+            body: "", // optional short caption; keep empty if you want only the video
+            attachment: fs.createReadStream(videoPath)
+          }, threadID, () => {
+            // cleanup video file
+            try { if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath); } catch (e) {}
+            resolve();
+          });
+        });
 
-          } catch (err) {
-            console.error("⚠️ Error sending welcome video:", err.message);
-          }
-        }, 3000);
-      });
-    }
+      } catch (err) {
+        console.error("joinNoti: failed to fetch/send video:", err?.message || err);
+        // optional: notify thread about failure
+        // await api.sendMessage("⚠️ Failed to send welcome video.", threadID);
+      }
+    } // end loop addedParticipants
   } catch (err) {
     console.error("❌ ERROR in joinNoti module:", err);
   }
