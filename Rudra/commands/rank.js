@@ -3,10 +3,10 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "rank",
-  version: "3.5.0",
+  version: "3.6.0",
   hasPermission: 0,
-  credits: "ChatGPT + NN",
-  description: "Rank with card image + leaderboard",
+  credits: "ChatGPT + Jaylord La Peña",
+  description: "Rank with card image + leaderboard (respects maintenance mode)",
   commandCategory: "fun",
   usages: "/rank | /rank @mention | /rank list",
   cooldowns: 5
@@ -27,7 +27,7 @@ const rankNames = [
 ];
 
 function getRequiredXP(level) {
-  return level * 200;  // linear scaling example
+  return level * 200; // linear scaling
 }
 
 module.exports.handleEvent = async function({ api, event, Users }) {
@@ -37,11 +37,11 @@ module.exports.handleEvent = async function({ api, event, Users }) {
   const path = `rank/${threadID}/${senderID}`;
   let userData = await getData(path) || { level: 1, xp: 0, name: "" };
 
-  // get user name
+  // Get user name
   userData.name = await Users.getNameUser(senderID);
 
-  // +5 to 20 XP per message
-  const xpGain = Math.floor(Math.random() * 16) + 5; // 5–20
+  // Add random XP 5–20
+  const xpGain = Math.floor(Math.random() * 16) + 5;
   userData.xp += xpGain;
 
   let requiredXP = getRequiredXP(userData.level);
@@ -55,9 +55,9 @@ module.exports.handleEvent = async function({ api, event, Users }) {
 
   await setData(path, userData);
 
+  // Level up announcement (still works even if maintenance is ON)
   if (leveledUp) {
     const rankName = rankNames[userData.level - 1] || "Ascended";
-
     const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/rankcard?name=${encodeURIComponent(userData.name)}&userid=${senderID}&currentLvl=${userData.level}&currentRank=${encodeURIComponent(rankName)}&currentXP=${userData.xp}&requiredXP=${requiredXP}`;
 
     try {
@@ -69,9 +69,9 @@ module.exports.handleEvent = async function({ api, event, Users }) {
         },
         threadID
       );
-    } catch (err) {
+    } catch {
       await api.sendMessage(
-        `🎉 Congrats ${userData.name}! Level up → Level ${userData.level}\nRank: ${rankName}\n⚠️ (Could not load rank card image)`,
+        `🎉 Congrats ${userData.name}! Level up → Level ${userData.level}\nRank: ${rankName}\n⚠️ (Rank card image failed to load)`,
         threadID
       );
     }
@@ -80,6 +80,16 @@ module.exports.handleEvent = async function({ api, event, Users }) {
 
 module.exports.run = async function({ api, event, args, Users }) {
   const { threadID, messageID, senderID, mentions } = event;
+
+  // 🧰 Check maintenance
+  const maintenance = await getData("/maintenance");
+  if (maintenance?.enabled) {
+    return api.sendMessage(
+      "🚧 Rank system is under maintenance.\nPlease try again later.",
+      threadID,
+      messageID
+    );
+  }
 
   // /rank list
   if (args[0] && args[0].toLowerCase() === "list") {
@@ -91,11 +101,7 @@ module.exports.run = async function({ api, event, args, Users }) {
       return api.sendMessage("⚠️ Walang rank data sa GC na ito.", threadID, messageID);
     }
 
-    // sort by level then xp
-    results.sort((a, b) => {
-      if (b.level === a.level) return b.xp - a.xp;
-      return b.level - a.level;
-    });
+    results.sort((a, b) => (b.level === a.level ? b.xp - a.xp : b.level - a.level));
 
     let msg = `📊 Top ${Math.min(10, results.length)} Leaderboard\n`;
     for (let i = 0; i < Math.min(10, results.length); i++) {
@@ -130,7 +136,7 @@ module.exports.run = async function({ api, event, args, Users }) {
       threadID,
       messageID
     );
-  } catch (err) {
+  } catch {
     await api.sendMessage(
       `📊 Rank Info for ${userData.name}\nLevel: ${userData.level}\nXP: ${userData.xp}/${requiredXP}\nRank: ${rankName}\n⚠️ (Rank card image failed to load)`,
       threadID,
