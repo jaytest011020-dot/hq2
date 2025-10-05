@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "mm",
-  version: "1.2.0",
+  version: "1.3.0",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
   description: "Auto mention Midman when someone asks for one",
@@ -11,14 +11,16 @@ module.exports.config = {
   cooldowns: 3
 };
 
-// 🔧 Configuration
+// 🔧 Only you can toggle
 const OWNER_UID = "61559999326713";
+
+// 🔹 Midman IDs
 const MIDMANS = [
-  { id: "61563731477181", name: "Klenth Jarred Dalupan" },
-  { id: "61565984310103", name: "Kio |~Midman🌟" }
+  { id: "61563731477181", tag: "Klenth Jarred Dalupan" },
+  { id: "61565984310103", tag: "Kio |~Midman🌟" }
 ];
 
-// 🔍 Keywords to detect
+// 🔍 Keywords to detect (case-insensitive)
 const KEYWORDS = [
   "sino avail mm",
   "pa mm",
@@ -39,11 +41,11 @@ const KEYWORDS = [
 module.exports.run = async function({ api, event, args }) {
   const { threadID, senderID } = event;
 
-  // Only owner can toggle
+  // ✅ Owner only
   if (senderID !== OWNER_UID)
     return api.sendMessage("⛔ Only the bot owner can use this command.", threadID);
 
-  if (!args[0]) 
+  if (!args[0])
     return api.sendMessage("📘 Usage: /mm on | off", threadID);
 
   const option = args[0].toLowerCase();
@@ -58,7 +60,7 @@ module.exports.run = async function({ api, event, args }) {
   }
 };
 
-// 🧠 Event listener (detect keywords)
+// 🧠 Detect midman keywords
 module.exports.handleEvent = async function({ api, event }) {
   const { threadID, messageID, body } = event;
   if (!body) return;
@@ -67,19 +69,20 @@ module.exports.handleEvent = async function({ api, event }) {
   if (!config || !config.enabled) return;
 
   const lowerMsg = body.toLowerCase();
+  if (!KEYWORDS.some(keyword => lowerMsg.includes(keyword))) return;
 
-  // Check if message includes any keyword
-  const found = KEYWORDS.some(keyword => lowerMsg.includes(keyword));
-  if (!found) return;
+  // 🎯 Build mentions array and message body
+  const mentions = MIDMANS.map(m => ({
+    id: m.id,
+    tag: m.tag
+  }));
 
-  // 📣 Mention both midmans
-  const mentions = MIDMANS.map(m => ({ tag: m.name, id: m.id }));
-  const names = MIDMANS.map(m => `• ${m.name}`).join("\n");
-
+  const namesList = MIDMANS.map(m => `• ${m.tag}`).join("\n");
   const replyMsg = {
-    body: `📣 Available Midman:\n${names}`,
+    body: `📣 Available Midman:\n${namesList}`,
     mentions
   };
 
+  // 💬 Reply to same message
   return api.sendMessage(replyMsg, threadID, messageID);
 };
