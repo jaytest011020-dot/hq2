@@ -1,74 +1,39 @@
-const axios = require("axios");
 const { db } = require("../../database.js");
 
 module.exports.config = {
-  name: "ban",
-  version: "3.1.0",
-  hasPermission: 0,
+  name: "autoKickBan",
+  eventType: ["log:subscribe"],
+  version: "1.0.0",
   credits: "ChatGPT",
-  description: "Ban a user by Facebook link (auto converts to UID, no API key required)",
-  commandCategory: "moderation",
-  usages: "/ban <profile link> <reason>"
+  description: "Auto-kick banned users if they join the group"
 };
 
-module.exports.run = async function ({ api, event, args }) {
-  const { threadID, senderID } = event;
-  const allowedUID = "61559999326713";
-
-  // ✅ Check GC admin or allowed user
-  const threadInfo = await api.getThreadInfo(threadID);
-  const adminIDs = threadInfo.adminIDs.map(e => e.id);
-  const isAdmin = adminIDs.includes(senderID);
-
-  if (senderID !== allowedUID && !isAdmin)
-    return api.sendMessage("⛔ Only GC admins or authorized user can use this command.", threadID);
-
-  if (args.length < 2)
-    return api.sendMessage("❗ Usage: /ban <profile link> <reason>", threadID);
-
-  const profileLink = args[0];
-  const reason = args.slice(1).join(" ");
-  let uid = null;
+module.exports.run = async function ({ api, event }) {
+  const { threadID, logMessageData } = event;
+  const addedParticipants = logMessageData.addedParticipants;
 
   try {
-    // 1️⃣ Check if link already contains numeric ID
-    const idMatch = profileLink.match(/(?:id=|\/)(\d{6,})/);
-    if (idMatch) {
-      uid = idMatch[1];
-    } else {
-      // 2️⃣ Try fetch UID via public Graph (no key)
-      const res = await axios.get(`https://graph.facebook.com/?id=${encodeURIComponent(profileLink)}`);
-      if (res.data?.id) uid = res.data.id;
-      else {
-        // 3️⃣ Last fallback: scrape (for /share/p/ links)
-        const scrap = await axios.get(profileLink);
-        const match = scrap.data.match(/entity_id":"(\d{6,})"/);
-        if (match) uid = match[1];
+    for (const user of addedParticipants) {
+      const userID = user.userFbId;
+      const ref = db.ref(`bans/${threadID}/${userID}`);
+      const snapshot = await ref.get();
+
+      // 🚫 Check if banned
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const reason = data.reason || "No reason specified";
+
+        // 🦶 Kick user
+        await api.removeUserFromGroup(userID, threadID);
+
+        // 🗣️ Send notification
+        api.sendMessage(
+          `⚠️ User ${userID} tried to join but is banned!\n📄 Reason: ${reason}`,
+          threadID
+        );
       }
     }
   } catch (err) {
-    console.error("⚠️ UID Fetch Error:", err.message);
+    console.error("❌ AutoKickBan Error:", err);
   }
-
-  if (!uid) return api.sendMessage("⚠️ Unable to fetch UID. Please check the link.", threadID);
-
-  // ✅ Save to Firebase per GC
-  const ref = db.ref(`bans/${threadID}/${uid}`);
-  const snapshot = await ref.get();
-
-  if (snapshot.exists())
-    return api.sendMessage("🚫 That user is already banned in this GC.", threadID);
-
-  await ref.set({
-    uid,
-    profileLink,
-    reason,
-    bannedBy: senderID,
-    time: new Date().toISOString()
-  });
-
-  return api.sendMessage(
-    `✅ Successfully banned!\n👤 UID: ${uid}\n🔗 Link: ${profileLink}\n📄 Reason: ${reason}`,
-    threadID
-  );
 };
