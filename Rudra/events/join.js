@@ -1,20 +1,20 @@
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.2.3",
-  credits: "Kim Joseph DG Bien (updated by ChatGPT)",
-  description: "Join Notification with API-generated welcome photo",
+  version: "3.0.0",
+  credits: "ChatGPT + Kim Joseph DG Bien + Kaizenji API",
+  description: "Join notification with both video and image attachment",
   dependencies: {
-    "fs-extra": "",
-    "request": ""
+    "axios": "",
+    "fs-extra": ""
   }
 };
 
 module.exports.run = async function ({ api, event }) {
-  const request = require("request");
-  const fs = global.nodemodule["fs-extra"];
-  const path = require("path");
-
   const { threadID, logMessageData } = event;
   const addedParticipants = logMessageData.addedParticipants;
 
@@ -32,66 +32,83 @@ module.exports.run = async function ({ api, event }) {
   }
 
   try {
-    // ✅ Get thread info safely
+    // ✅ Get thread info
     const threadInfo = await api.getThreadInfo(threadID);
     const threadName = threadInfo.threadName || "this group";
     const totalMembers = threadInfo.participantIDs?.length || 0;
 
     for (let newParticipant of addedParticipants) {
       const userID = newParticipant.userFbId;
-
-      // ✅ Skip kung bot mismo
       if (userID === api.getCurrentUserID()) continue;
 
-      // ✅ Get user info safely
       let userName = "Friend";
       try {
         const userInfo = await api.getUserInfo(userID);
         if (userInfo?.[userID]?.name) {
           userName = userInfo[userID].name;
         }
-      } catch (e) {
-        console.warn("⚠️ Failed to get user info:", e.message);
+      } catch {
+        console.warn("⚠️ Failed to get user info.");
       }
 
-      // ✅ Build welcome message
-      const msg = `Hello ${userName}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group, please enjoy!`;
+      // ✅ Welcome message
+      const msg = `👋 Welcome ${userName}!\n\nPlease enjoy your stay in ${threadName}.\nYou're the ${totalMembers}th member of the group!`;
 
-      // ✅ API URL for welcome image
-      const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
+      // ✅ API URLs
+      const imageApi = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
+      const videoApi = `https://kaiz-apis.gleeze.com/api/pogisigena?apikey=dbc05250-b730-467b-abc4-f569cec7f1cf`;
 
-      // ✅ Path for cache image
-      const filePath = path.join(__dirname, "..", "commands", "cache", `welcome_${userID}.png`);
+      // ✅ Paths
+      const cacheDir = path.join(__dirname, "..", "commands", "cache");
+      await fs.ensureDir(cacheDir);
+      const imagePath = path.join(cacheDir, `welcome_${userID}.png`);
+      const videoPath = path.join(cacheDir, `welcome_${userID}.mp4`);
 
-      // auto-create cache folder if not exists
-      if (!fs.existsSync(path.dirname(filePath))) {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      let videoUrl = "";
+      try {
+        const res = await axios.get(videoApi);
+        videoUrl = res.data.videoUrl;
+      } catch (err) {
+        console.error("❌ Failed to fetch video URL:", err.message);
       }
 
-      // ✅ Callback after download
-      const callback = () => {
-        if (fs.existsSync(filePath)) {
-          api.sendMessage({
-            body: msg,
-            attachment: fs.createReadStream(filePath),
-            mentions: [{ tag: userName, id: userID }]
-          }, threadID, () => fs.unlinkSync(filePath));
-        } else {
-          // Fallback: send text only
-          api.sendMessage(msg, threadID);
+      // ✅ Download image
+      try {
+        const response = await axios.get(imageApi, { responseType: "arraybuffer" });
+        fs.writeFileSync(imagePath, Buffer.from(response.data, "binary"));
+      } catch (err) {
+        console.error("❌ Failed to download image:", err.message);
+      }
+
+      // ✅ Download video (if available)
+      if (videoUrl) {
+        try {
+          const response = await axios.get(videoUrl, { responseType: "arraybuffer" });
+          fs.writeFileSync(videoPath, Buffer.from(response.data, "binary"));
+        } catch (err) {
+          console.error("❌ Failed to download video:", err.message);
         }
-      };
+      }
 
-      console.log(`📥 Generating welcome for ${userName} (${userID})`);
+      // ✅ Prepare attachments
+      const attachments = [];
+      if (fs.existsSync(imagePath)) attachments.push(fs.createReadStream(imagePath));
+      if (fs.existsSync(videoPath)) attachments.push(fs.createReadStream(videoPath));
 
-      // ✅ Request image with error handling
-      request(apiUrl)
-        .pipe(fs.createWriteStream(filePath))
-        .on("close", callback)
-        .on("error", (err) => {
-          console.error("❌ Error downloading welcome image:", err.message);
-          api.sendMessage(msg, threadID);
+      // ✅ Send message with both attachments
+      if (attachments.length > 0) {
+        api.sendMessage({
+          body: msg,
+          attachment: attachments,
+          mentions: [{ tag: userName, id: userID }]
+        }, threadID, () => {
+          // Clean up cache
+          if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+          if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
         });
+      } else {
+        api.sendMessage(msg, threadID);
+      }
     }
   } catch (err) {
     console.error("❌ ERROR in joinNoti module:", err);
