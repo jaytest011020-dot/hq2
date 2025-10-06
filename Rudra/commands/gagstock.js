@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "gagstock",
-  version: "6.8.0",
+  version: "6.9.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "GrowAGarden auto-stock (seeds, eggs, gear only) restricted to GC admins & Jaylord",
@@ -14,8 +14,9 @@ module.exports.config = {
 };
 
 const autoStockTimers = {};
+const autoStockTimeouts = {};
 
-const OWNER_ID = "100094012127960"; // Replace this with your actual Facebook UID
+const OWNER_ID = "100094012127960"; // your UID
 
 const SPECIAL_ITEMS = [
   "Grandmaster Sprinkler",
@@ -26,7 +27,6 @@ const SPECIAL_ITEMS = [
 ];
 
 const ITEM_EMOJI = {
-  // Seeds
   "Carrot": "🥕", "Strawberry": "🍓", "Blueberry": "🫐", "Orange Tulip": "🌷",
   "Tomato": "🍅", "Corn": "🌽", "Daffodil": "🌼", "Watermelon": "🍉",
   "Pumpkin": "🎃", "Apple": "🍎", "Bamboo": "🎍", "Coconut": "🥥",
@@ -36,11 +36,9 @@ const ITEM_EMOJI = {
   "Elder Strawberry": "🍓✨", "Romanesco": "🥦", "Potato": "🥔",
   "Brussels Sprouts": "🥬", "Cocomango": "🥭🥥", "Broccoli": "🥦",
 
-  // Eggs
   "Common Egg": "🥚", "Uncommon Egg": "🥚✨", "Rare Egg": "🥚💎",
   "Legendary Egg": "🥚🌟", "Mythical Egg": "🥚🔥", "Bug Egg": "🐛🥚",
 
-  // Gear
   "Watering Can": "💧", "Trowel": "🔨", "Trading Ticket": "🎟️",
   "Recall Wrench": "🔧", "Basic Sprinkler": "🌊", "Advanced Sprinkler": "💦",
   "Medium Treat": "🍪", "Medium Toy": "🧸", "Night Staff": "🌙",
@@ -104,6 +102,9 @@ function formatSectionText(items) {
 }
 
 async function sendStock(threadID, api) {
+  const gcData = await getData(`stock/${threadID}`);
+  if (!gcData?.enabled) return; // 🚫 skip if disabled
+
   const data = await fetchStocks();
   if (!data) return;
 
@@ -151,15 +152,30 @@ ${foundSpecial.map(i => `✨ ${i.name} (${i.quantity ?? i.value ?? "N/A"})`).joi
 }
 
 async function startAutoStock(threadID, api) {
-  if (autoStockTimers[threadID]) return;
+  const gcData = await getData(`stock/${threadID}`);
+  if (!gcData?.enabled) return; // ❌ skip if off
+
+  if (autoStockTimers[threadID]) return; // already running
+
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNext5Min(now);
   const delay = next.getTime() - now.getTime();
 
-  setTimeout(() => {
+  autoStockTimeouts[threadID] = setTimeout(() => {
     sendStock(threadID, api);
     autoStockTimers[threadID] = setInterval(() => sendStock(threadID, api), 5 * 60 * 1000);
   }, delay);
+}
+
+function stopAutoStock(threadID) {
+  if (autoStockTimers[threadID]) {
+    clearInterval(autoStockTimers[threadID]);
+    delete autoStockTimers[threadID];
+  }
+  if (autoStockTimeouts[threadID]) {
+    clearTimeout(autoStockTimeouts[threadID]);
+    delete autoStockTimeouts[threadID];
+  }
 }
 
 module.exports.run = async function({ api, event, args }) {
@@ -167,7 +183,6 @@ module.exports.run = async function({ api, event, args }) {
   const option = args[0]?.toLowerCase();
   let gcData = (await getData(`stock/${threadID}`)) || { enabled: false };
 
-  // ✅ Allow only Jaylord or GC admins
   const info = await api.getThreadInfo(threadID);
   const adminIDs = info.adminIDs.map(a => a.id);
   if (!adminIDs.includes(senderID) && senderID !== OWNER_ID) {
@@ -185,10 +200,7 @@ module.exports.run = async function({ api, event, args }) {
   if (option === "off") {
     gcData.enabled = false;
     await setData(`stock/${threadID}`, gcData);
-    if (autoStockTimers[threadID]) {
-      clearInterval(autoStockTimers[threadID]);
-      delete autoStockTimers[threadID];
-    }
+    stopAutoStock(threadID);
     return api.sendMessage("❌ Auto-stock disabled.", threadID, messageID);
   }
 
@@ -206,6 +218,8 @@ module.exports.onLoad = async function({ api }) {
     if (allGCs[tid].enabled) {
       startAutoStock(tid, api);
       api.sendMessage("♻️ Bot restarted — Auto-stock resumed.", tid);
+    } else {
+      stopAutoStock(tid);
     }
   }
 };
