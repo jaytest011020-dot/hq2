@@ -6,7 +6,7 @@ module.exports.config = {
   version: "3.2.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds only (no gear), with godly/secret seed alert",
+  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert + global prediction display",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -38,7 +38,15 @@ const ITEM_EMOJI = {
   "MrCarrot": "🥕🎩",
   "Mr-Carrot": "🥕🎩",
   "Tomatrio": "🍅👨‍👦‍👦",
-  "Shroombino": "🍄🎭"
+  "Shroombino": "🍄🎭",
+  "Bat": "⚾",
+  "Water Bucket": "🪣💧",
+  "Frost Grenade": "🧊💣",
+  "Banana Gun": "🍌🔫",
+  "Frost Blower": "❄️🌬️",
+  "Lucky Potion": "🍀🧪",
+  "Speed Potion": "⚡🧪",
+  "Carrot Launcher": "🥕🚀",
 };
 
 // Category emoji
@@ -50,7 +58,7 @@ const CATEGORY_EMOJI = {
   "mythic": "✨",
   "godly": "🟡",
   "secret": "🎩",
-  "unknown": "❔"
+  "unknown": "❔",
 };
 
 // Manual rarity mapping
@@ -68,7 +76,15 @@ const MANUAL_RARITY = {
   "Mango": "secret",
   "Mr Carrot": "secret",
   "Tomatrio": "secret",
-  "Shroombino": "secret"
+  "Shroombino": "secret",
+  "Bat": "common",
+  "Water Bucket": "epic",
+  "Frost Grenade": "epic",
+  "Banana Gun": "epic",
+  "Frost Blower": "legendary",
+  "Lucky Potion": "legendary",
+  "Speed Potion": "legendary",
+  "Carrot Launcher": "godly",
 };
 
 // Helpers
@@ -138,15 +154,24 @@ function getNextRestock(date = null) {
   return next;
 }
 
-// Send stock message (Seeds only)
+// Send stock message
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0)
     return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
 
   const seeds = stock.filter(i => i.name.toLowerCase().endsWith("seed"));
+  const gear = stock.filter(i => !i.name.toLowerCase().endsWith("seed"));
+
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const nextRestock = getNextRestock(now);
+
+  // 🔮 Get global prediction
+  const predictionData = await getData(`pvbprediction/global`);
+  let predictionText = "";
+  if (predictionData?.text) {
+    predictionText = `\n\n🔮 𝗣𝗿𝗲𝗱𝗶𝗰𝘁𝗶𝗼𝗻: ${predictionData.text}`;
+  }
 
   const msg = `
 ╭───────────────╮
@@ -157,11 +182,15 @@ async function sendStock(threadID, api) {
 
 ╭─🌿 Seeds───────╮
 ${formatItems(seeds)}
-╰───────────────╯`;
+╰───────────────╯
+
+╭─🛠️ Gear────────╮
+${formatItems(gear)}
+╰───────────────╯${predictionText}`;
 
   await api.sendMessage(msg, threadID);
 
-  // Rare seed alert
+  // 🚨 Alert for godly/secret
   const rareSeeds = seeds.filter(s => {
     const rarity = getRarity(s.name);
     return rarity === "godly" || rarity === "secret";
@@ -171,7 +200,6 @@ ${formatItems(seeds)}
     const rareList = rareSeeds
       .map(s => `${getEmoji(s.name)} ${s.name.replace(/ Seed$/i, "")} (${s.currentStock})`)
       .join("\n");
-
     const alertMsg = `🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast! Please choose a server that is NOT FULL:\n\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n\nhttps://www.roblox.com/share?code=d1afbbba2d5ed946b83caeb423a09e37&type=Server\n\nhttps://www.roblox.com/share?code=a7e01c0a62c66e4c8a572cd79e77070e&type=Server\n\nhttps://www.roblox.com/share?code=f9b0d9025486cb4494514ad5ee9cce54&type=Server`;
     await api.sendMessage(alertMsg, threadID);
   }
@@ -203,13 +231,9 @@ function stopAutoStock(threadID) {
 
 // Command handler
 module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID, senderID } = event;
+  const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
-  const ownerUID = "61559999326713"; // ikaw lang pwede mag on/off
   let gcData = (await getData(`pvbstock/${threadID}`)) || { enabled: false };
-
-  if (senderID !== ownerUID)
-    return api.sendMessage("⛔ Only the bot owner can toggle auto-stock.", threadID, messageID);
 
   if (gcData.enabled && option && option !== "off" && option !== "check") {
     return api.sendMessage("⚠️ Auto-stock is already active.", threadID, messageID);
@@ -234,7 +258,7 @@ module.exports.run = async function({ api, event, args }) {
     return api.sendMessage(`📊 PVBR Auto-stock status: ${status}`, threadID, messageID);
   }
 
-  api.sendMessage("⚠️ Usage: /pvbstock on|off|check", threadID, messageID);
+  api.sendMessage("⚙️ Usage: /pvbstock on|off|check", threadID, messageID);
 };
 
 // Resume on restart
