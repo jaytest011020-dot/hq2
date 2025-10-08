@@ -5,7 +5,7 @@ const https = require("https");
 module.exports.config = {
   name: "music",
   version: "1.0.2",
-  hasPermssion: 0,
+  hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Play music using AryanAPI (5-minute cooldown per user)",
   commandCategory: "music",
@@ -73,7 +73,7 @@ ${music.title}
     api.sendMessage(
       {
         body: infoMsg,
-        attachment: await global.utils.getStreamFromURL(music.thumbnail)
+        attachment: await getStreamFromURL(music.thumbnail) // Use the fixed function
       },
       threadID,
       async () => {
@@ -100,3 +100,14 @@ ${music.title}
     return api.sendMessage("⚠️ Error fetching music from the API. Try again later.", threadID, messageID);
   }
 };
+
+// New function to get the stream from a URL for the thumbnail
+async function getStreamFromURL(url) {
+  try {
+    const response = await axios.get(url, { responseType: 'stream' });
+    return response.data;
+  } catch (err) {
+    console.error("Error fetching thumbnail stream:", err);
+    throw new Error("Failed to fetch thumbnail stream");
+  }
+}
