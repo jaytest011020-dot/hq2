@@ -1,144 +1,81 @@
 const axios = require("axios");
-const fs = require("fs-extra");
-const path = require("path");
-const { setData, getData } = require("../../database.js");
-
-const OWNER_UID = "61559999326713"; // Owner UID
-const cooldowns = new Map(); // per user+thread cooldown
 
 module.exports.config = {
   name: "music",
-  version: "2.7.0",
+  version: "1.0.1",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Search and play full music with VIP/GC admin only toggle",
+  description: "Play music from an API with 5-minute cooldown per user",
   commandCategory: "music",
-  usages: "/music <song name> | /music on | /music off",
-  cooldowns: 5,
+  usages: `
+🎵 /music <title>
+   - Plays a music track using API
+
+📌 Example:
+   /music Gloc 9 Upuan
+`,
+  cooldowns: 5
 };
 
-module.exports.run = async ({ api, event, args }) => {
-  const { threadID, messageID, senderID } = event;
-  const command = args[0] ? args[0].toLowerCase() : "";
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per user
+let userCooldowns = {}; // { senderID: timestamp }
 
-  // --- Maintenance check ---
-  const status = await getData("/maintenance");
-  if (status?.enabled) {
-    const imgPath = path.join(__dirname, "cache", "maintenance.jpeg");
-    return api.sendMessage(
-      {
-        body: "🚧 Bot is under MAINTENANCE. Music is temporarily disabled.",
-        attachment: fs.existsSync(imgPath) ? fs.createReadStream(imgPath) : null,
-      },
-      threadID,
-      messageID
-    );
-  }
-
-  // --- VIP / GC Admin Access Check ---
-  const vips = (await getData("/vip")) || [];
-  const isVIP = vips.find((v) => v.uid === senderID);
-  const threadInfo = await api.getThreadInfo(threadID);
-  const isAdmin = threadInfo.adminIDs.some((a) => a.id == senderID);
-  const isOwner = senderID === OWNER_UID;
-
-  if (!isVIP && !isAdmin && !isOwner) {
-    return api.sendMessage(
-      "❌ Only VIPs, GC admins, or bot owner can use this command.",
-      threadID,
-      messageID
-    );
-  }
-
-  // --- Handle /music on/off toggle ---
-  if (command === "on" || command === "off") {
-    if (!isAdmin && !isOwner) {
-      return api.sendMessage(
-        "❌ Only GC admins or owner can toggle the music command.",
-        threadID,
-        messageID
-      );
-    }
-    const enabled = command === "on";
-    await setData(`music/status/${threadID}`, { enabled });
-    return api.sendMessage(
-      `🎶 Music system is now ${enabled ? "✅ ENABLED" : "❌ DISABLED"} in this group.`,
-      threadID,
-      messageID
-    );
-  }
-
-  // --- Check if music system is enabled ---
-  const musicStatus = (await getData(`music/status/${threadID}`)) || {
-    enabled: true,
-  };
-  if (!musicStatus.enabled) {
-    return api.sendMessage(
-      "❌ Music command is currently disabled by GC admin.",
-      threadID,
-      messageID
-    );
-  }
-
-  // --- Cooldown (per user + per thread) ---
-  const key = `${threadID}_${senderID}`;
-  const now = Date.now();
-  const userCooldown = cooldowns.get(key) || 0;
-  const remaining = Math.ceil((userCooldown - now) / 1000);
-  if (remaining > 0) {
-    return api.sendMessage(
-      `❗ Please wait ${remaining}s before using /music again.`,
-      threadID,
-      messageID
-    );
-  }
-  cooldowns.set(key, now + 10 * 1000); // 10s cooldown per user per GC
-
-  // --- Music search ---
+module.exports.run = async function({ api, event, args }) {
+  const { threadID, senderID, messageID } = event;
   const query = args.join(" ");
-  if (!query)
-    return api.sendMessage(
-      "❗ Please provide a song name.",
-      threadID,
-      messageID
-    );
 
-  api.sendMessage("⏳ Searching & loading your music...", threadID, messageID);
+  // ⏳ Cooldown Check
+  const now = Date.now();
+  if (userCooldowns[senderID] && now - userCooldowns[senderID] < COOLDOWN_MS) {
+    const remaining = Math.ceil((COOLDOWN_MS - (now - userCooldowns[senderID])) / 60000);
+    return api.sendMessage(`⏳ Please wait ${remaining} minute(s) before using /music again.`, threadID, messageID);
+  }
 
-  const apiURL = `https://betadash-api-swordslush-production.up.railway.app/sc?search=${encodeURIComponent(
-    query
-  )}`;
-  const tmpPath = path.join(__dirname, "cache", `music_${Date.now()}.mp3`);
+  if (!query) {
+    return api.sendMessage("❌ Please provide a song title.\n\nExample: /music Upuan by Gloc 9", threadID, messageID);
+  }
 
   try {
-    const response = await axios.get(apiURL, {
-      responseType: "arraybuffer",
-      timeout: 20000,
-    });
+    // 🌐 Call your API (replace this URL with your actual API endpoint)
+    const response = await axios.get(`https://example.com/api/music?query=${encodeURIComponent(query)}`);
 
-    const contentType = response.headers["content-type"] || "";
-    if (!contentType.includes("audio")) {
-      throw new Error("Music API did not return audio.");
+    if (!response.data || !response.data.status || !response.data.data) {
+      return api.sendMessage("⚠️ No results found for that song.", threadID, messageID);
     }
 
-    fs.writeFileSync(tmpPath, Buffer.from(response.data, "binary"));
+    const music = response.data.data;
 
+    const infoMsg = 
+`🎧 Now Playing:
+${music.title}
+👤 Artist: ${music.video.author}
+⏱ Duration: ${music.video.timestamp}
+👀 Views: ${music.video.views.toLocaleString()}
+📺 YouTube: ${music.video.url}
+
+🎵 Downloading audio, please wait...`;
+
+    // Send song info and thumbnail
     api.sendMessage(
       {
-        body: `🎶 𝗠𝘂𝘀𝗶𝗰 𝗣𝗹𝗮𝘆𝗲𝗿\n\n🎵 Title: ${query}\n👤 Artist: Unknown\n⏱ Duration: Unknown`,
-        attachment: fs.createReadStream(tmpPath),
+        body: infoMsg,
+        attachment: await global.utils.getStreamFromURL(music.thumbnail)
       },
       threadID,
-      () => fs.unlinkSync(tmpPath),
-      messageID
+      async () => {
+        try {
+          // Send the actual MP3 file
+          const stream = await global.utils.getStreamFromURL(music.audio);
+          api.sendMessage({ body: `🎶 ${music.title}`, attachment: stream }, threadID);
+          userCooldowns[senderID] = now; // Save cooldown
+        } catch (err) {
+          api.sendMessage("❌ Failed to send audio file.", threadID);
+        }
+      }
     );
+
   } catch (err) {
-    console.error("❌ Music Command Error:", err.message || err);
-    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-    api.sendMessage(
-      `⚠️ ${err.message || "Error fetching music. Try another title."}`,
-      threadID,
-      messageID
-    );
+    console.error(err);
+    return api.sendMessage("⚠️ Error fetching music from API. Try again later.", threadID, messageID);
   }
 };
