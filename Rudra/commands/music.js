@@ -1,4 +1,6 @@
 const axios = require("axios");
+const fs = require("fs");
+const https = require("https");
 
 module.exports.config = {
   name: "music",
@@ -43,11 +45,17 @@ module.exports.run = async function({ api, event, args }) {
     // 🎧 Fetch from AryanAPI
     const response = await axios.get(`https://aryanapi.up.railway.app/api/youtubeplay?query=${encodeURIComponent(query)}`);
 
+    console.log("API Response:", response.data);  // Log the response data for debugging
+
     if (!response.data || !response.data.status || !response.data.data) {
       return api.sendMessage("⚠️ No results found for that song.", threadID, messageID);
     }
 
     const music = response.data.data;
+
+    if (!music.audio) {
+      return api.sendMessage("⚠️ The audio for this song could not be fetched. Please try another song.", threadID, messageID);
+    }
 
     // 🪄 Create info message
     const infoMsg = 
@@ -70,19 +78,25 @@ ${music.title}
       threadID,
       async () => {
         try {
-          // Send the audio
-          const stream = await global.utils.getStreamFromURL(music.audio);
-          api.sendMessage({ body: `🎶 ${music.title}`, attachment: stream }, threadID);
-          userCooldowns[senderID] = now; // Start cooldown timer
+          // Fetch the audio using axios (to handle redirects properly)
+          const audioStream = await axios.get(music.audio, {
+            responseType: 'stream', // Stream the MP3 file
+          });
+
+          // Send the audio as an attachment
+          api.sendMessage({ body: `🎶 ${music.title}`, attachment: audioStream.data }, threadID);
+
+          // Start cooldown timer
+          userCooldowns[senderID] = now; 
         } catch (err) {
-          api.sendMessage("❌ Failed to send the audio file.", threadID);
-          console.error(err);
+          console.error("Error fetching audio stream:", err);
+          api.sendMessage("❌ Failed to stream the audio file. The link might be broken.", threadID);
         }
       }
     );
 
   } catch (err) {
-    console.error(err);
+    console.error("API Request Error:", err);  // Log the full error to the console
     return api.sendMessage("⚠️ Error fetching music from the API. Try again later.", threadID, messageID);
   }
 };
