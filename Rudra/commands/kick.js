@@ -1,8 +1,8 @@
 module.exports.config = {
     name: "kick",
-    version: "1.2.0",
+    version: "1.3.0",
     hasPermssion: 0, // lahat papasok, tayo na magche-check
-    credits: "Jaylord La Peña, ChatGPT",
+    credits: "Jaylord La Peña + ChatGPT",
     description: "Kick mentioned user(s) from the group",
     usePrefix: true,
     commandCategory: "group",
@@ -10,7 +10,11 @@ module.exports.config = {
     cooldowns: 5
 };
 
-const PROTECTED_UID = "61559999326713"; // UID ni Jaylord La Peña
+// 🛡 Protected UIDs — di pwedeng i-kick kahit sino
+const PROTECTED_UIDS = [
+    "61559999326713", // Jaylord La Peña
+    "61554885397487", // Jandel Bot
+];
 
 module.exports.run = async function ({ api, event }) {
     const { threadID, messageID, senderID, mentions } = event;
@@ -41,14 +45,12 @@ module.exports.run = async function ({ api, event }) {
     const userIDs = Object.keys(mentions);
     let kicked = [];
     let failed = [];
+    let protectedUsers = [];
 
     for (const id of userIDs) {
-        // 🛡 Proteksyon kay Jaylord
-        if (id === PROTECTED_UID) {
-            api.sendMessage(
-                "🚫 Protected user: Jaylord La Peña cannot be kicked from this group.",
-                threadID
-            );
+        // 🛡 Proteksyon sa mga protected UIDs
+        if (PROTECTED_UIDS.includes(id)) {
+            protectedUsers.push(mentions[id].replace("@", ""));
             continue;
         }
 
@@ -62,9 +64,10 @@ module.exports.run = async function ({ api, event }) {
 
     let msg = "";
     if (kicked.length > 0) msg += `✅ Kicked: ${kicked.join(", ")}\n`;
-    if (failed.length > 0) {
+    if (protectedUsers.length > 0)
+        msg += `🚫 Protected: ${protectedUsers.join(", ")} — cannot be kicked.\n`;
+    if (failed.length > 0)
         msg += `❌ Failed: ${failed.join(", ")}\n👉 Make sure the bot is an admin in this group.`;
-    }
 
     if (msg.trim().length > 0) {
         return api.sendMessage(msg.trim(), threadID, messageID);
