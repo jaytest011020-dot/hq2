@@ -127,11 +127,18 @@ module.exports.run = async function({ api, event, args }) {
     return api.sendMessage("🛑 AutoClean canceled.", threadID, messageID);
   }
 
-  // Manual kick trigger
+  // Manual kick trigger and stop autoclean
   if (sub === "startkick") {
     if (!pollData) return api.sendMessage("⚠️ No active autoclean to kick.", threadID, messageID);
+    
+    // Kick inactive users immediately
     await kickInactiveMembers(api, threadID);
-    return;
+
+    // Stop the ongoing autoclean process by clearing the data
+    await setData(`/autoclean/${threadID}`, null);  // Remove all active autoclean data
+    
+    // Notify that the autoclean process has been stopped
+    return api.sendMessage("✅ AutoClean has been stopped and inactive users have been kicked.", threadID, messageID);
   }
 
   // Resend ongoing status
@@ -222,6 +229,7 @@ ${inactiveList}
 module.exports.handleEvent = async function({ api, event }) {
   const { threadID, senderID, type } = event;
 
+  // We only care about message_seen and message types for activity tracking
   if (type !== "message_seen" && type !== "message") return;
 
   let pollData = await getData(`/autoclean/${threadID}`);
