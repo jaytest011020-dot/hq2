@@ -1,6 +1,6 @@
 module.exports.config = {
     name: "kick",
-    version: "1.3.0",
+    version: "1.4.0",
     hasPermssion: 0, // lahat papasok, tayo na magche-check
     credits: "Jaylord La Peña + ChatGPT",
     description: "Kick mentioned user(s) from the group",
@@ -18,6 +18,7 @@ const PROTECTED_UIDS = [
 
 module.exports.run = async function ({ api, event }) {
     const { threadID, messageID, senderID, mentions } = event;
+    const botID = api.getCurrentUserID(); // current bot's UID
 
     // ✅ check kung bot owner
     const botAdmins = global.config.ADMINBOT || []; // usually nasa config.json
@@ -48,9 +49,13 @@ module.exports.run = async function ({ api, event }) {
     let protectedUsers = [];
 
     for (const id of userIDs) {
-        // 🛡 Proteksyon sa mga protected UIDs
-        if (PROTECTED_UIDS.includes(id)) {
-            protectedUsers.push(mentions[id].replace("@", ""));
+        // 🛡 Proteksyon sa mga protected UIDs + sarili ng bot
+        if (PROTECTED_UIDS.includes(id) || id === botID) {
+            protectedUsers.push(
+                id === botID
+                    ? "This bot"
+                    : mentions[id].replace("@", "")
+            );
             continue;
         }
 
