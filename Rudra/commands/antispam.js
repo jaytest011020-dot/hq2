@@ -2,10 +2,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "spamkick",
-  version: "1.1.0",
+  version: "1.2.0",
   hasPermssion: 1,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Auto kick users who spam messages",
+  description: "Auto kick users who spam messages (Only Jaylord can control)",
   commandCategory: "moderation",
   usages: `
 📌 /spamkick on <limit>
@@ -22,30 +22,17 @@ module.exports.config = {
 
 let spamCache = {}; // memory cache per thread
 
-// 🔒 Function to check if user is allowed
-async function isAllowedUser(api, event) {
-  const { threadID, senderID } = event;
-  const adminUID = "61559999326713"; // Only you
-
-  if (senderID === adminUID) return true;
-
-  try {
-    const threadInfo = await api.getThreadInfo(threadID);
-    const adminIDs = threadInfo.adminIDs.map(a => a.id);
-    return adminIDs.includes(senderID);
-  } catch {
-    return false;
-  }
-}
+// 🔒 Protected UIDs (cannot be kicked or flagged for spam)
+const PROTECTED_UIDS = ["61559999326713", "61554885397487"];
+const OWNER_UID = "61559999326713"; // Only Jaylord can control commands
 
 // 🧩 Main Command
 module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID } = event;
+  const { threadID, senderID, messageID } = event;
 
-  // Check permission
-  const allowed = await isAllowedUser(api, event);
-  if (!allowed) {
-    return api.sendMessage("❌ Only the GC admin or Jaylord La Peña can use this command.", threadID, messageID);
+  // ✅ Only Jaylord can control
+  if (senderID !== OWNER_UID) {
+    return api.sendMessage("❌ Only Jaylord La Peña can use this command.", threadID, messageID);
   }
 
   if (!args.length) {
@@ -82,10 +69,13 @@ module.exports.handleEvent = async function({ api, event }) {
   const { threadID, senderID } = event;
   if (!threadID || !senderID) return;
 
+  // ❌ Skip protected UIDs
+  if (PROTECTED_UIDS.includes(senderID)) return;
+
   const config = await getData(`spamkick/${threadID}`);
   if (!config || !config.enabled) return;
 
-  // initialize cache per thread
+  // Initialize cache per thread
   if (!spamCache[threadID]) spamCache[threadID] = {};
 
   if (!spamCache[threadID][senderID]) {
@@ -95,7 +85,7 @@ module.exports.handleEvent = async function({ api, event }) {
   const userData = spamCache[threadID][senderID];
   const now = Date.now();
 
-  // reset count kung lumipas na ng 5s
+  // Reset count kung lumipas na ng 5s
   if (now - userData.lastMsg > 5000) {
     userData.count = 0;
   }
