@@ -3,10 +3,10 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.2.0",
+  version: "3.3.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert + global prediction display",
+  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
@@ -166,13 +166,6 @@ async function sendStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const nextRestock = getNextRestock(now);
 
-  // 🔮 Get global prediction
-  const predictionData = await getData(`pvbprediction/global`);
-  let predictionText = "";
-  if (predictionData?.text) {
-    predictionText = `\n\n🔮 𝗣𝗿𝗲𝗱𝗶𝗰𝘁𝗶𝗼𝗻: ${predictionData.text}`;
-  }
-
   const msg = `
 ╭───────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
@@ -186,11 +179,11 @@ ${formatItems(seeds)}
 
 ╭─🛠️ Gear────────╮
 ${formatItems(gear)}
-╰───────────────╯${predictionText}`;
+╰───────────────╯`;
 
   await api.sendMessage(msg, threadID);
 
-  // 🚨 Alert for godly/secret
+  // 🚨 Alert for godly/secret seeds
   const rareSeeds = seeds.filter(s => {
     const rarity = getRarity(s.name);
     return rarity === "godly" || rarity === "secret";
@@ -261,7 +254,7 @@ module.exports.run = async function({ api, event, args }) {
   api.sendMessage("⚙️ Usage: /pvbstock on|off|check", threadID, messageID);
 };
 
-// Resume on restart
+// Resume auto-stock after bot restart
 module.exports.onLoad = async function({ api }) {
   const allGCs = (await getData("pvbstock")) || {};
   for (const tid in allGCs) {
