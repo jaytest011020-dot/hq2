@@ -1,49 +1,49 @@
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+
 module.exports.config = {
-	name: "say",
-	version: "2.0.0",
-	hasPermssion: 0,
-	credits: "Priyansh Rajput & Modified by Rudra",
-	description: "Bot speaks the text using Google TTS with auto language detection (Hindi, Hinglish, English)",
-	commandCategory: "media",
-	usages: "[hi/en/auto] [Text]",
-	cooldowns: 5,
-	dependencies: {
-		"path": "",
-		"fs-extra": ""
-	}
+  name: "say",
+  version: "1.0.1",
+  hasPermission: 0,
+  credits: "ChatGPT + Jaylord La Peña",
+  description: "Converts text to speech using Ana (Female) voice only",
+  usages: "/say <text>",
+  commandCategory: "fun",
+  cooldowns: 3,
 };
 
 module.exports.run = async function({ api, event, args }) {
-	const { createReadStream, unlinkSync } = global.nodemodule["fs-extra"];
-	const { resolve } = global.nodemodule["path"];
-	try {
-		if (!args[0]) return api.sendMessage("❌ Please provide text to speak.\nExample: +say auto mujhe pyaar ho gaya", event.threadID, event.messageID);
+  const { threadID, messageID } = event;
+  const text = args.join(" ");
 
-		const content = (event.type === "message_reply") ? event.messageReply.body : args.join(" ");
-		let lang = "auto", msg = content;
+  if (!text)
+    return api.sendMessage("⚠️ Please provide text to convert.\nExample: /say Hello everyone!", threadID, messageID);
 
-		// Check prefix lang
-		const firstWord = args[0].toLowerCase();
-		const supportedLangs = ["hi", "en", "ja", "ru", "tl"];
-		if (supportedLangs.includes(firstWord)) {
-			lang = firstWord;
-			msg = args.slice(1).join(" ");
-		}
+  try {
+    const url = `https://apis-keith.vercel.app/ai/tts?q=${encodeURIComponent(text)}`;
+    const res = await axios.get(url);
 
-		// Auto detect for Hinglish/Hindi
-		if (lang === "auto") {
-			const hindiPattern = /[क-हाि-ॣ़ा़ेैोौंःँ]/; // Hindi Unicode range
-			lang = hindiPattern.test(msg) ? "hi" : "hi"; // Force Hindi for Hinglish too
-		}
+    // Find Ana (Female)
+    const ana = res.data?.result?.voices?.find(v => v.voice_name.toLowerCase().includes("ana"));
+    if (!ana || !ana.audio_url)
+      return api.sendMessage("❌ Couldn't find Ana's voice in response.", threadID, messageID);
 
-		const filePath = resolve(__dirname, "cache", `${event.threadID}_${event.senderID}.mp3`);
-		const ttsURL = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(msg)}&tl=${lang}&client=tw-ob`;
+    // Download the audio file
+    const audioPath = path.join(__dirname, "ana_tts.wav");
+    const audioRes = await axios.get(ana.audio_url, { responseType: "arraybuffer" });
+    fs.writeFileSync(audioPath, audioRes.data);
 
-		await global.utils.downloadFile(ttsURL, filePath);
-		return api.sendMessage({ attachment: createReadStream(filePath) }, event.threadID, () => unlinkSync(filePath), event.messageID);
-		
-	} catch (err) {
-		console.error("[ SAY ERROR ]", err);
-		return api.sendMessage("🚫 Error generating speech. Try again later.", event.threadID, event.messageID);
-	}
+    // Send audio only
+    api.sendMessage(
+      { attachment: fs.createReadStream(audioPath) },
+      threadID,
+      () => fs.unlinkSync(audioPath), // delete after sending
+      messageID
+    );
+
+  } catch (err) {
+    console.error("❌ /say error:", err);
+    api.sendMessage("❌ Failed to fetch voice audio. Please try again later.", threadID, messageID);
+  }
 };
