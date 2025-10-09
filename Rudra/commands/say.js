@@ -2,20 +2,38 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 
+// 🕒 Cooldown map
+const cooldown = new Map();
+
 module.exports.config = {
   name: "say",
-  version: "1.0.1",
+  version: "1.0.2",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
-  description: "Converts text to speech using Ana (Female) voice only",
+  description: "Converts text to speech using Ana (Female) voice (with 5-minute cooldown per user)",
   usages: "/say <text>",
   commandCategory: "fun",
   cooldowns: 3,
 };
 
 module.exports.run = async function({ api, event, args }) {
-  const { threadID, messageID } = event;
+  const { senderID, threadID, messageID } = event;
   const text = args.join(" ");
+
+  // 5-minute cooldown
+  const cooldownTime = 5 * 60 * 1000; // 5 minutes in ms
+  const lastUsed = cooldown.get(senderID);
+
+  if (lastUsed && Date.now() - lastUsed < cooldownTime) {
+    const remaining = Math.ceil((cooldownTime - (Date.now() - lastUsed)) / 1000);
+    const minutes = Math.floor(remaining / 60);
+    const seconds = remaining % 60;
+    return api.sendMessage(
+      `⏳ Please wait ${minutes > 0 ? `${minutes}m ` : ""}${seconds}s before using /say again.`,
+      threadID,
+      messageID
+    );
+  }
 
   if (!text)
     return api.sendMessage("⚠️ Please provide text to convert.\nExample: /say Hello everyone!", threadID, messageID);
@@ -41,6 +59,9 @@ module.exports.run = async function({ api, event, args }) {
       () => fs.unlinkSync(audioPath), // delete after sending
       messageID
     );
+
+    // Set cooldown timestamp
+    cooldown.set(senderID, Date.now());
 
   } catch (err) {
     console.error("❌ /say error:", err);
