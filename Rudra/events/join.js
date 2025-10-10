@@ -1,9 +1,11 @@
+const { getData } = require("../../database.js");
+
 module.exports.config = {
   name: "joinNoti",
   eventType: ["log:subscribe"],
-  version: "1.8.0",
-  credits: "Kim Joseph DG Bien + ChatGPT",
-  description: "Join Notification with welcome image then video after 3 seconds",
+  version: "2.0.0",
+  credits: "Kim Joseph DG Bien + ChatGPT + Jaylord La Peña",
+  description: "Join Notification with welcome image and optional video",
   dependencies: {
     "fs-extra": "",
     "request": "",
@@ -38,32 +40,32 @@ module.exports.run = async function ({ api, event }) {
     const threadName = threadInfo.threadName || "this group";
     const totalMembers = threadInfo.participantIDs?.length || 0;
 
+    // 🧩 Check video toggle per GC
+    const videoConfig = await getData(`welcomeVideo/${threadID}`);
+    const videoEnabled = videoConfig?.enabled || false;
+
     for (const newParticipant of addedParticipants) {
       const userID = newParticipant.userFbId;
       if (userID === api.getCurrentUserID()) continue;
 
-      // 🔹 Get user name
       let userName = "Friend";
       try {
         const info = await api.getUserInfo(userID);
         if (info?.[userID]?.name) userName = info[userID].name;
       } catch {}
 
-      // 🔹 Welcome message
       const msg = `Hello ${userName}!\nWelcome to ${threadName}!\nYou're the ${totalMembers}th member in this group. Enjoy your stay! 🎉`;
 
-      // APIs
       const imgApi = `https://betadash-api-swordslush-production.up.railway.app/welcome?name=${encodeURIComponent(userName)}&userid=${userID}&threadname=${encodeURIComponent(threadName)}&members=${totalMembers}`;
       const videoApi = `https://betadash-shoti-yazky.vercel.app/shotizxx?apikey=shipazu`;
 
-      // Cache directory
       const cacheDir = path.join(__dirname, "..", "commands", "cache");
       if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
       const imgPath = path.join(cacheDir, `welcome_${userID}.png`);
       const videoPath = path.join(cacheDir, `welcome_${userID}.mp4`);
 
-      // 🖼 Download welcome image
+      // 🖼 Send welcome image
       await new Promise((resolve, reject) => {
         request(imgApi)
           .pipe(fs.createWriteStream(imgPath))
@@ -71,7 +73,6 @@ module.exports.run = async function ({ api, event }) {
           .on("error", reject);
       });
 
-      // 📨 Send welcome message + image first
       await new Promise((resolve) => {
         api.sendMessage({
           body: msg,
@@ -83,20 +84,15 @@ module.exports.run = async function ({ api, event }) {
         });
       });
 
-      // Wait 3 seconds ⏳
+      // Wait 3s ⏳ then send video only if ON
+      if (!videoEnabled) continue;
       await new Promise(r => setTimeout(r, 3000));
 
-      // 🎬 Fetch video
       try {
         const res = await axios.get(videoApi, { timeout: 15000 });
         const videoUrl = res?.data?.shotiurl;
+        if (!videoUrl) continue;
 
-        if (!videoUrl) {
-          console.warn("⚠️ No video URL found in API response:", res.data);
-          continue;
-        }
-
-        // 📥 Download video
         const videoStream = await axios({
           url: videoUrl,
           method: "GET",
@@ -112,24 +108,19 @@ module.exports.run = async function ({ api, event }) {
           writer.on("error", reject);
         });
 
-        // 🎥 Send video with message
-        const caption = `Hello ${userName}, this is a welcome video for you! 🎥`;
-
         await new Promise((resolve) => {
           api.sendMessage({
-            body: caption,
+            body: `🎥 Welcome video for you, ${userName}!`,
             attachment: fs.createReadStream(videoPath)
           }, threadID, () => {
             if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
             resolve();
           });
         });
-
       } catch (err) {
-        console.error("⚠️ Error fetching/sending video:", err.message);
+        console.error("⚠️ Error sending video:", err.message);
       }
     }
-
   } catch (err) {
     console.error("❌ ERROR in joinNoti module:", err);
   }
