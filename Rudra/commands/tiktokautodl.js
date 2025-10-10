@@ -1,12 +1,9 @@
 const https = require("https");
 const { getData, setData } = require("../../database.js");
 
-// Cooldown system
-const cooldown = new Map();
-
 module.exports.config = {
   name: "tiktok",
-  version: "3.0.0",
+  version: "3.1.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Auto-download TikTok videos or toggle the feature per GC",
@@ -41,9 +38,9 @@ module.exports.run = async function ({ api, event, args }) {
   return handleTikTok(api, event, link);
 };
 
-// 📡 Message listener — stays in this same module
+// 📡 Message listener — stays inside the same module (not in events)
 module.exports.handleEvent = async function ({ api, event }) {
-  const { body, threadID, senderID, messageID } = event;
+  const { body, threadID, messageID } = event;
   if (!body) return;
 
   const config = await getData(`tiktok/${threadID}`);
@@ -53,15 +50,11 @@ module.exports.handleEvent = async function ({ api, event }) {
   const match = body.match(/https?:\/\/(?:www\.)?tiktok\.com\/[^\s]+/);
   if (!match) return;
 
-  // Prevent spam (5 mins per user)
-  const now = Date.now();
-  if (cooldown.has(senderID) && now - cooldown.get(senderID) < 5 * 60 * 1000) return;
-  cooldown.set(senderID, now);
-
-  await handleTikTok(api, event, match[0]);
+  const link = match[0];
+  await handleTikTok(api, event, link);
 };
 
-// 🎥 Download handler
+// 🎥 Download + send TikTok video
 async function handleTikTok(api, event, url) {
   const apiUrl = `https://apis-keith.vercel.app/download/tiktokdl3?url=${encodeURIComponent(url)}`;
 
@@ -74,9 +67,11 @@ async function handleTikTok(api, event, url) {
         const videoUrl = json?.result?.downloadUrls?.mp4HD?.[0];
         const title = json?.result?.title || "TikTok Video";
 
-        if (!videoUrl) return api.sendMessage("⚠️ Failed to get HD video link.", event.threadID);
+        if (!videoUrl) {
+          return api.sendMessage("⚠️ Failed to get HD video link.", event.threadID);
+        }
 
-        // Download the actual video
+        // Download actual video
         https.get(videoUrl, (videoRes) => {
           const chunks = [];
           videoRes.on("data", chunk => chunks.push(chunk));
