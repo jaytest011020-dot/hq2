@@ -1,12 +1,13 @@
 const https = require("https");
 const { getData, setData } = require("../../database.js");
+const axios = require("axios");
 
 module.exports.config = {
   name: "tiktok",
-  version: "3.1.0",
+  version: "3.2.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Auto-download TikTok videos or toggle the feature per GC",
+  description: "Auto-download TikTok videos (supports short vt.tiktok.com links)",
   commandCategory: "media",
   usages: "/tiktok auto on | off | /tiktok [link]",
   cooldowns: 3
@@ -16,7 +17,7 @@ module.exports.config = {
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  // Toggle auto-download
+  // 🔘 Toggle per-GC
   if (args[0] === "auto") {
     const option = args[1]?.toLowerCase();
     if (option === "on") {
@@ -30,7 +31,7 @@ module.exports.run = async function ({ api, event, args }) {
     }
   }
 
-  // Manual download using command
+  // 🔗 Manual download
   const link = args[0];
   if (!link || !link.includes("tiktok.com"))
     return api.sendMessage("📘 Usage:\n/tiktok [tiktok link]\n/tiktok auto on | off", threadID, messageID);
@@ -38,59 +39,55 @@ module.exports.run = async function ({ api, event, args }) {
   return handleTikTok(api, event, link);
 };
 
-// 📡 Message listener — stays inside the same module (not in events)
+// 🧩 Detect TikTok link automatically (if auto mode ON)
 module.exports.handleEvent = async function ({ api, event }) {
   const { body, threadID, messageID } = event;
   if (!body) return;
 
   const config = await getData(`tiktok/${threadID}`);
-  if (!config?.enabled) return; // Only active if auto mode is ON
+  if (!config?.enabled) return;
 
-  // Detect TikTok link
-  const match = body.match(/https?:\/\/(?:www\.)?tiktok\.com\/[^\s]+/);
+  const match = body.match(/https?:\/\/(?:vt|www)\.tiktok\.com\/[^\s]+/);
   if (!match) return;
 
   const link = match[0];
   await handleTikTok(api, event, link);
 };
 
-// 🎥 Download + send TikTok video
+// 🎥 Function to fetch & send TikTok video
 async function handleTikTok(api, event, url) {
-  const apiUrl = `https://apis-keith.vercel.app/download/tiktokdl3?url=${encodeURIComponent(url)}`;
+  const { threadID, messageID } = event;
 
-  https.get(apiUrl, (res) => {
-    let data = "";
-    res.on("data", chunk => data += chunk);
-    res.on("end", () => {
-      try {
-        const json = JSON.parse(data);
-        const videoUrl = json?.result?.downloadUrls?.mp4HD?.[0];
-        const title = json?.result?.title || "TikTok Video";
+  try {
+    // Resolve short vt.tiktok.com links
+    if (url.includes("vt.tiktok.com")) {
+      const resolved = await axios.head(url, { maxRedirects: 5 });
+      url = resolved?.request?.res?.responseUrl || url;
+    }
 
-        if (!videoUrl) {
-          return api.sendMessage("⚠️ Failed to get HD video link.", event.threadID);
-        }
+    const apiUrl = `https://apis-keith.vercel.app/download/tiktokdl3?url=${encodeURIComponent(url)}`;
+    const { data } = await axios.get(apiUrl, { timeout: 20000 });
 
-        // Download actual video
-        https.get(videoUrl, (videoRes) => {
-          const chunks = [];
-          videoRes.on("data", chunk => chunks.push(chunk));
-          videoRes.on("end", () => {
-            const buffer = Buffer.concat(chunks);
-            api.sendMessage({
-              body: `🎬 ${title}`,
-              attachment: buffer
-            }, event.threadID, event.messageID);
-          });
-        }).on("error", () => {
-          api.sendMessage("⚠️ Error downloading video.", event.threadID);
-        });
-      } catch (err) {
-        console.error(err);
-        api.sendMessage("⚠️ Error parsing TikTok API response.", event.threadID);
-      }
-    });
-  }).on("error", () => {
-    api.sendMessage("⚠️ Unable to connect to TikTok API.", event.threadID);
-  });
+    const videoUrl = data?.result?.downloadUrls?.mp4HD?.[0];
+    const title = data?.result?.title || "TikTok Video";
+
+    if (!videoUrl) {
+      return api.sendMessage("⚠️ Couldn’t find HD video link from TikTok.", threadID, messageID);
+    }
+
+    // Download video as buffer
+    const videoBuffer = (await axios.get(videoUrl, { responseType: "arraybuffer" })).data;
+
+    api.sendMessage(
+      {
+        body: `🎬 ${title}`,
+        attachment: Buffer.from(videoBuffer)
+      },
+      threadID,
+      messageID
+    );
+  } catch (err) {
+    console.error("❌ TikTok download error:", err.message);
+    api.sendMessage("⚠️ Failed to fetch or download TikTok video.", threadID, messageID);
+  }
 }
