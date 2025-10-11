@@ -12,7 +12,7 @@ const PROTECTED_UIDS = [
   "61563731477181"  // Klenth
 ];
 
-// Bad words & racist words (keep as in your previous list)
+// Bad words & racist words
 const badwords = [
   "tanga","bobo","gago","puta","pakyu","inutil","ulol",
   "fuck","shit","asshole","bitch","dumb","stupid","motherfucker",
@@ -25,7 +25,6 @@ const racistWords = [
   "chink","indio","bakla","niga","bungal","beki","negra"
 ];
 
-// Allowed links
 const allowedLinks = [
   "facebook.com","fb.com","facebook.com/groups","fb.com/groups",
   "m.me/j","tiktok.com","youtube.com","youtu.be","roblox.com"
@@ -61,7 +60,6 @@ async function getUserName(uid, api) {
   try {
     const info = await api.getUserInfo(uid);
     if (info && info[uid] && info[uid].name) return info[uid].name;
-    // sometimes getUserInfo returns array keyed differently; try fallback
     const firstKey = Object.keys(info || {})[0];
     if (firstKey && info[firstKey] && info[firstKey].name) return info[firstKey].name;
     return `FB-User(${uid})`;
@@ -89,26 +87,19 @@ async function isAdmin(api, threadID, uid) {
   }
 }
 
-// Add warning (shared by auto and manual)
 async function addWarning(api, threadID, targetID, type, note, actorID, replyMessageID) {
-  // protect checks
   const botID = api.getCurrentUserID();
   if (PROTECTED_UIDS.includes(targetID) || targetID === botID) {
     return api.sendMessage("🚫 You can't warn this protected member.", threadID, replyMessageID);
   }
 
-  // fetch existing
   const dataPath = `warnings/${threadID}/${targetID}`;
   let warnings = (await getData(dataPath)) || { count: 0, reasons: [] };
 
-  // reset daily? (old code had daily reset by lastUpdated) - keeping simple: no auto daily reset
   warnings.count = (warnings.count || 0) + 1;
-  warnings.reasons = warnings.reasons || [];
   warnings.reasons.push({ type, note, by: actorID || "auto", time: Date.now() });
-
   await setData(dataPath, warnings);
 
-  // maintain _all list
   const allPath = `warnings/${threadID}/_all`;
   let all = (await getData(allPath)) || [];
   if (!all.includes(targetID)) {
@@ -116,41 +107,32 @@ async function addWarning(api, threadID, targetID, type, note, actorID, replyMes
     await setData(allPath, all);
   }
 
-  // prepare UI
   const name = await getUserName(targetID, api);
-
-  // get admins for notification
   let threadInfo;
   try { threadInfo = await api.getThreadInfo(threadID); } catch { threadInfo = null; }
+
   const admins = (threadInfo && threadInfo.adminIDs) ? threadInfo.adminIDs.map(a => a.id).filter(id => id !== targetID) : [];
   const displayAdmins = admins.slice(0, MAX_DISPLAY_ADMINS);
 
-  // build mentions array (target + displayed admins)
   const mentions = [{ tag: name, id: targetID }];
   for (const aid of displayAdmins) {
     const aname = await getUserName(aid, api);
     mentions.push({ tag: aname, id: aid });
   }
 
-  // compose admin line (Taglish style)
   const adminNames = [];
   for (const aid of displayAdmins) adminNames.push(await getUserName(aid, api));
   const extra = admins.length - displayAdmins.length;
   const adminLine = adminNames.length ? adminNames.join(" | ") + (extra > 0 ? ` ... (+${extra} more)` : "") : "Walang admin para i-notify";
 
-  // response message (boxed UI)
   let warningMsg = formatWarning(name, type, note, warnings.count);
   warningMsg += `\n\n📢 Notifying admins: ${adminLine}`;
 
-  // send
   await api.sendMessage({ body: warningMsg, mentions }, threadID, null, replyMessageID);
 
-  // Auto kick if reached limit
   if (warnings.count >= WARN_LIMIT) {
     try {
       await api.removeUserFromGroup(targetID, threadID);
-
-      // Kick announcement UI
       const kickedMsg = `╭━[🚫 USER KICKED]━╮
 ┃ 👤 ${name}
 ┃ 🧾 Reason(s): ${warnings.reasons.map(r => r.type).join(", ")}
@@ -158,11 +140,8 @@ async function addWarning(api, threadID, targetID, type, note, actorID, replyMes
 ╰━━━━━━━━━━━━━━━━━━╯`;
 
       await api.sendMessage({ body: kickedMsg, mentions: [{ tag: name, id: targetID }] }, threadID);
-
-      // reset that user's warnings
       await setData(dataPath, { count: 0, reasons: [] });
 
-      // remove from _all
       const _all = (await getData(allPath)) || [];
       const idx = _all.indexOf(targetID);
       if (idx !== -1) {
@@ -176,19 +155,18 @@ async function addWarning(api, threadID, targetID, type, note, actorID, replyMes
   }
 }
 
-// EXPORT CONFIG
 module.exports.config = {
   name: "warning",
-  version: "6.0.0",
+  version: "6.5.0",
   hasPermission: 1,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Auto + manual warning system (reply or command) with UI, list, reset (per GC)",
+  description: "Auto + manual warning system with UI, list, reset (per GC)",
   commandCategory: "system",
-  usages: "/warning list | /warning reset all | /warning @mention reason (admin only). Or reply with 'warning reason'.",
+  usages: "/warning list | /warning reset all | /warning reset @mention | /warning @mention reason",
   cooldowns: 3
 };
 
-// HANDLE EVENTS (auto detect + manual via reply)
+// 🧠 AUTO-DETECTION + MANUAL VIA REPLY
 module.exports.handleEvent = async function({ api, event }) {
   try {
     const { threadID, messageID, senderID, body, messageReply } = event;
@@ -198,23 +176,18 @@ module.exports.handleEvent = async function({ api, event }) {
     const lower = text.toLowerCase();
     const words = lower.replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
 
-    // ---------- MANUAL: reply + "warning" or "warn"
+    // ✅ MANUAL (reply-based)
     if (messageReply && /^warn(ing)?\b/i.test(text)) {
-      // only admins or owner
       const threadInfo = await api.getThreadInfo(threadID);
       const isGCAdmin = threadInfo.adminIDs.some(a => a.id === senderID);
       if (!isGCAdmin && senderID !== OWNER_UID) return;
 
       const targetID = messageReply.senderID;
       if (!targetID) return api.sendMessage("⚠️ Hindi ma-detect yung user na ni-replyan mo.", threadID, messageID);
-
-      // protect
-      const botID = api.getCurrentUserID();
-      if (PROTECTED_UIDS.includes(targetID) || targetID === botID) {
+      if (PROTECTED_UIDS.includes(targetID) || targetID === api.getCurrentUserID()) {
         return api.sendMessage("🚫 Hindi pwedeng i-warn ang protected member.", threadID, messageID);
       }
 
-      // parse reason (allow spaces)
       const parts = text.split(/\s+/);
       const reason = parts.slice(1).join(" ").trim();
       if (!reason) return api.sendMessage("⚠️ Please include a reason. Halimbawa: `warning spamming`", threadID, messageID);
@@ -222,8 +195,7 @@ module.exports.handleEvent = async function({ api, event }) {
       return await addWarning(api, threadID, targetID, "Manual Warning", reason, senderID, messageID);
     }
 
-    // ---------- AUTO detection (badwords / racist / unauthorized links)
-    // skip if sender is protected or bot itself
+    // ✅ AUTO DETECTION
     const botID = api.getCurrentUserID();
     if (PROTECTED_UIDS.includes(senderID) || senderID === botID) return;
 
@@ -239,11 +211,7 @@ module.exports.handleEvent = async function({ api, event }) {
       if (!allowed) violations.push({ type: "Unauthorized Link", note: pickRandom(messages.link) });
     }
 
-    if (violations.length === 0) return;
-
-    // for each violation, add warning
     for (const v of violations) {
-      // actorID null for auto
       await addWarning(api, threadID, senderID, v.type, v.note, null, messageID);
     }
   } catch (err) {
@@ -251,20 +219,20 @@ module.exports.handleEvent = async function({ api, event }) {
   }
 };
 
-// RUN (commands: list, reset all, manual via /warning @mention reason)
+// 💬 COMMANDS
 module.exports.run = async function({ api, event, args }) {
   try {
     const { threadID, messageID, senderID, mentions } = event;
     const sub = args[0]?.toLowerCase();
 
-    // /warning list
+    // 📋 /warning list
     if (sub === "list") {
       const all = (await getData(`warnings/${threadID}/_all`)) || [];
       if (!all.length) return api.sendMessage("✅ Walang warnings sa GC na ito.", threadID, messageID);
 
       let msg = "📋 Mga may warnings sa GC:\n\n";
       for (const uid of all) {
-        const data = (await getData(`warnings/${threadID}/${uid}`)) || { count: 0, reasons: [] };
+        const data = (await getData(`warnings/${threadID}/${uid}`)) || { count: 0 };
         if (data.count > 0) {
           const name = await getUserName(uid, api);
           msg += `• ${name}: ${data.count} warning${data.count > 1 ? "s" : ""}\n`;
@@ -273,67 +241,63 @@ module.exports.run = async function({ api, event, args }) {
       return api.sendMessage(msg, threadID, messageID);
     }
 
-    // /warning reset all
+    // 🔄 /warning reset all
     if (sub === "reset" && args[1] === "all") {
-      // only admins or owner
       const threadInfo = await api.getThreadInfo(threadID);
       const isGCAdmin = threadInfo.adminIDs.some(a => a.id === senderID);
-      if (!isGCAdmin && senderID !== OWNER_UID) return api.sendMessage("🚫 Only admins or owner can reset warnings.", threadID, messageID);
+      if (!isGCAdmin && senderID !== OWNER_UID)
+        return api.sendMessage("🚫 Only admins or owner can reset warnings.", threadID, messageID);
 
-      // reset all in this thread
       const all = (await getData(`warnings/${threadID}/_all`)) || [];
-      for (const uid of all) {
-        await setData(`warnings/${threadID}/${uid}`, { count: 0, reasons: [] });
-      }
-      // clear _all
+      for (const uid of all) await setData(`warnings/${threadID}/${uid}`, { count: 0, reasons: [] });
       await setData(`warnings/${threadID}/_all`, []);
       return api.sendMessage("✅ Na-reset na lahat ng warnings sa GC na ito.", threadID, messageID);
     }
 
-    // /warning @mention reason  (manual via command)
-    // If mentions exist, use first mention
-    if (mentions && Object.keys(mentions).length > 0) {
-      // only admins or owner
+    // 🔄 /warning reset @mention
+    if (sub === "reset" && mentions && Object.keys(mentions).length > 0) {
+      const targetID = Object.keys(mentions)[0];
+      const targetName = mentions[targetID];
+
       const threadInfo = await api.getThreadInfo(threadID);
       const isGCAdmin = threadInfo.adminIDs.some(a => a.id === senderID);
-      if (!isGCAdmin && senderID !== OWNER_UID) return api.sendMessage("🚫 Only admins or owner can warn via command.", threadID, messageID);
+      if (!isGCAdmin && senderID !== OWNER_UID)
+        return api.sendMessage("🚫 Only admins or owner can reset warnings.", threadID, messageID);
 
-      const mentionKeys = Object.keys(mentions);
-      const targetID = mentionKeys[0];
-      if (PROTECTED_UIDS.includes(targetID) || targetID === api.getCurrentUserID()) {
-        return api.sendMessage("🚫 Hindi pwedeng i-warn ang protected member.", threadID, messageID);
+      await setData(`warnings/${threadID}/${targetID}`, { count: 0, reasons: [] });
+
+      const all = (await getData(`warnings/${threadID}/_all`)) || [];
+      const idx = all.indexOf(targetID);
+      if (idx !== -1) {
+        all.splice(idx, 1);
+        await setData(`warnings/${threadID}/_all`, all);
       }
 
+      return api.sendMessage(`✅ Warning count reset for ${targetName}.`, threadID, messageID);
+    }
+
+    // ⚠️ /warning @mention reason
+    if (mentions && Object.keys(mentions).length > 0) {
+      const threadInfo = await api.getThreadInfo(threadID);
+      const isGCAdmin = threadInfo.adminIDs.some(a => a.id === senderID);
+      if (!isGCAdmin && senderID !== OWNER_UID)
+        return api.sendMessage("🚫 Only admins or owner can warn manually.", threadID, messageID);
+
+      const targetID = Object.keys(mentions)[0];
       const reason = args.slice(1).join(" ").trim();
-      if (!reason) return api.sendMessage("⚠️ Please include a reason. Example: /warning @user spamming", threadID, messageID);
+      if (!reason)
+        return api.sendMessage("⚠️ Please include a reason. Example: /warning @user spamming", threadID, messageID);
 
       return await addWarning(api, threadID, targetID, "Manual Warning", reason, senderID, messageID);
     }
 
-    // If args[0] is UID and rest is reason: /warning 123456 reason...
-    if (args[0] && /^\d+$/.test(args[0])) {
-      const uid = args[0];
-      const reason = args.slice(1).join(" ").trim();
-      if (!reason) return api.sendMessage("⚠️ Please include a reason. Example: /warning 1000 spamming", threadID, messageID);
-
-      // only admins or owner
-      const threadInfo = await api.getThreadInfo(threadID);
-      const isGCAdmin = threadInfo.adminIDs.some(a => a.id === senderID);
-      if (!isGCAdmin && senderID !== OWNER_UID) return api.sendMessage("🚫 Only admins or owner can warn via command.", threadID, messageID);
-
-      if (PROTECTED_UIDS.includes(uid) || uid === api.getCurrentUserID()) {
-        return api.sendMessage("🚫 Hindi pwedeng i-warn ang protected member.", threadID, messageID);
-      }
-      return await addWarning(api, threadID, uid, "Manual Warning", reason, senderID, messageID);
-    }
-
-    // otherwise, show usage/help
+    // Help
     const help = `📘 Usage:
-• Reply to a message with \`warning <reason>\` → admin only
-• /warning @mention <reason> → admin only
-• /warning <uid> <reason> → admin only
+• Reply to a message with: warning <reason>
+• /warning @mention <reason>
 • /warning list
-• /warning reset all (resets warnings only in THIS GC)`;
+• /warning reset all
+• /warning reset @mention`;
     return api.sendMessage(help, threadID, messageID);
   } catch (err) {
     console.error("Warning run error:", err);
