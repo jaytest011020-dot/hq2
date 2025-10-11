@@ -3,17 +3,17 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.5.0",
+  version: "3.6.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned every 5 mins + 20s with rare seed alert",
+  description: "PVBR auto-stock aligned exactly every 5 mins + 20s, no spam, with rare seed alerts",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
   cooldowns: 10,
 };
 
-// Track scheduled timers per GC
+// Track active GC timers
 const autoStockTimers = {};
 
 // Emoji mapping
@@ -27,7 +27,7 @@ const ITEM_EMOJI = {
   "Carrot Launcher": "🥕🚀"
 };
 
-// Rarity categories
+// Rarity map
 const CATEGORY_EMOJI = {
   "common": "🟢", "rare": "🌿", "epic": "🔵", "legendary": "🟣",
   "mythic": "✨", "godly": "🟡", "secret": "🎩", "unknown": "❔"
@@ -48,35 +48,29 @@ function getEmoji(name) {
   const clean = name.replace(/ Seed$/i, "");
   return ITEM_EMOJI[clean] || "❔";
 }
-
 function getRarity(name) {
   const clean = name.replace(/ Seed$/i, "");
   return MANUAL_RARITY[clean] || "unknown";
 }
-
 function capitalizeFirst(str) {
-  if (!str) return "Unknown";
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  return str ? str.charAt(0).toUpperCase() + str.slice(1) : "Unknown";
 }
 
 function formatItems(items) {
-  if (!items || items.length === 0) return "❌ Empty";
+  if (!items?.length) return "❌ Empty";
 
   const grouped = {};
-  items.forEach(i => {
+  for (const i of items) {
     const type = getRarity(i.name);
     if (!grouped[type]) grouped[type] = [];
-    grouped[type].push(`• ${getEmoji(i.name)} ${i.name.replace(/ Seed$/i, "")} (${i.currentStock ?? "N/A"})`);
-  });
+    grouped[type].push(`• ${getEmoji(i.name)} ${i.name.replace(/ Seed$/i, "")} (${i.currentStock ?? "?"})`);
+  }
 
   const order = ["common", "rare", "epic", "legendary", "mythic", "godly", "secret", "unknown"];
-  let output = "";
-  order.forEach(cat => {
-    if (grouped[cat]) {
-      output += `[${CATEGORY_EMOJI[cat] || "❔"} ${capitalizeFirst(cat)}]\n${grouped[cat].join("\n")}\n\n`;
-    }
-  });
-  return output.trim();
+  return order
+    .filter(cat => grouped[cat])
+    .map(cat => `[${CATEGORY_EMOJI[cat]} ${capitalizeFirst(cat)}]\n${grouped[cat].join("\n")}`)
+    .join("\n\n");
 }
 
 async function fetchPVBRStock() {
@@ -89,58 +83,38 @@ async function fetchPVBRStock() {
   }
 }
 
-// 🕒 Fixed aligned restock time every 5 mins + 20s
-function getNextRestock(date = null) {
-  const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const currentMinute = now.getMinutes();
-
-  const ALLOWED_MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-
-  let nextMinute = ALLOWED_MINUTES.find(m => m > currentMinute);
+// 🕒 Every 5 mins + 20s exact (00:20, 05:20, 10:20, etc.)
+function getNextRestock() {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const m = now.getMinutes();
   const next = new Date(now);
 
-  if (nextMinute === undefined) {
-    next.setHours(now.getHours() + 1);
-    nextMinute = 0;
-  }
+  const nextM = Math.ceil((m + 0.1) / 5) * 5; // round up to next 5
+  if (nextM >= 60) next.setHours(next.getHours() + 1);
 
-  next.setMinutes(nextMinute);
+  next.setMinutes(nextM % 60);
   next.setSeconds(20);
   next.setMilliseconds(0);
-
-  // margin detection: if within 1 min after valid restock
-  for (const m of ALLOWED_MINUTES) {
-    const restockTime = new Date(now);
-    restockTime.setMinutes(m);
-    restockTime.setSeconds(20);
-    restockTime.setMilliseconds(0);
-    const diff = now - restockTime;
-    if (diff >= 0 && diff <= 60 * 1000) {
-      console.log("⚡ Detected ongoing restock window — triggering immediately.");
-      return new Date(Date.now() + 2000);
-    }
-  }
 
   return next;
 }
 
-// 🪴 Send stock updates
+// 🪴 Send stock message
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
-  if (!stock || stock.length === 0)
-    return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
+  if (!stock?.length) return api.sendMessage("⚠️ Failed to fetch PVBR stock.", threadID);
 
-  const seeds = stock.filter(i => i.name.toLowerCase().endsWith("seed"));
-  const gear = stock.filter(i => !i.name.toLowerCase().endsWith("seed"));
+  const seeds = stock.filter(i => i.name.toLowerCase().includes("seed"));
+  const gear = stock.filter(i => !i.name.toLowerCase().includes("seed"));
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const nextRestock = getNextRestock(now);
+  const next = getNextRestock();
 
   const msg = `
 ╭───────────────╮
 🌱 𝗣𝗹𝗮𝗻𝘁𝘀 𝘃𝘀 𝗕𝗿𝗮𝗶𝗻𝗿𝗼𝘁𝘀 𝗦𝘁𝗼𝗰𝗸 🌱
 🕒 Current Time: ${now.toLocaleTimeString("en-PH", { hour12: true })}
-🕒 Next Restock: ${nextRestock.toLocaleTimeString("en-PH", { hour12: true })}
+🕒 Next Restock: ${next.toLocaleTimeString("en-PH", { hour12: true })}
 ╰───────────────╯
 
 ╭─🌿 Seeds───────╮
@@ -153,57 +127,43 @@ ${formatItems(gear)}
 
   await api.sendMessage(msg, threadID);
 
-  // 🚨 Alert for godly/secret seeds
-  const rareSeeds = seeds.filter(s => {
-    const rarity = getRarity(s.name);
-    return rarity === "godly" || rarity === "secret";
-  });
-
-  if (rareSeeds.length > 0) {
-    const rareList = rareSeeds
+  // 🚨 Alert for rare seeds
+  const rare = seeds.filter(s => ["godly", "secret"].includes(getRarity(s.name)));
+  if (rare.length) {
+    const alert = `🚨 RARE SEED DETECTED 🚨\n\n${rare
       .map(s => `${getEmoji(s.name)} ${s.name.replace(/ Seed$/i, "")} (${s.currentStock})`)
-      .join("\n");
-
-    const alertMsg = `🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast! Choose a non-full server:\n\n` +
+      .join("\n")}\n\n⚡ Join fast! Choose a non-full server:\n\n` +
       `https://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n` +
       `https://www.roblox.com/share?code=d1afbbba2d5ed946b83caeb423a09e37&type=Server\n` +
       `https://www.roblox.com/share?code=a7e01c0a62c66e4c8a572cd79e77070e&type=Server\n` +
       `https://www.roblox.com/share?code=f9b0d9025486cb4494514ad5ee9cce54&type=Server`;
-    await api.sendMessage(alertMsg, threadID);
+
+    await api.sendMessage(alert, threadID);
   }
 }
 
-// 🔁 Fixed continuous scheduler (no auto-off bug)
-function scheduleNextStock(threadID, api) {
+// 🔁 No spam: triggers only when exact restock hits
+function scheduleNext(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const next = getNextRestock(now);
+  const next = getNextRestock();
   let delay = next.getTime() - now.getTime();
 
-  if (isNaN(delay) || delay < 5000) delay = 5 * 60 * 1000 + 20000;
+  if (delay < 0) delay += 5 * 60 * 1000;
 
   if (autoStockTimers[threadID]) clearTimeout(autoStockTimers[threadID]);
 
   autoStockTimers[threadID] = setTimeout(async () => {
-    try {
-      const gcData = await getData(`pvbstock/${threadID}`);
-      if (!gcData || !gcData.enabled) {
-        console.log(`🧩 Auto-stock disabled for ${threadID}, stopping loop.`);
-        stopAutoStock(threadID);
-        return;
-      }
+    const gcData = await getData(`pvbstock/${threadID}`);
+    if (!gcData?.enabled) return stopAutoStock(threadID);
 
-      await sendStock(threadID, api);
-      scheduleNextStock(threadID, api);
-    } catch (err) {
-      console.error("❌ Auto-stock loop error:", err);
-      setTimeout(() => scheduleNextStock(threadID, api), 60 * 1000);
-    }
+    await sendStock(threadID, api);
+    scheduleNext(threadID, api);
   }, delay);
 }
 
 function startAutoStock(threadID, api) {
   if (autoStockTimers[threadID]) return;
-  scheduleNextStock(threadID, api);
+  scheduleNext(threadID, api);
 }
 
 function stopAutoStock(threadID) {
@@ -213,21 +173,18 @@ function stopAutoStock(threadID) {
   }
 }
 
-// 🧠 Command handler
+// ⚙️ Command handler
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
-  let gcData = (await getData(`pvbstock/${threadID}`)) || { enabled: false };
-
-  if (gcData.enabled && option && option !== "off" && option !== "check") {
-    return api.sendMessage("⚠️ Auto-stock is already active.", threadID, messageID);
-  }
+  const gcData = (await getData(`pvbstock/${threadID}`)) || { enabled: false };
 
   if (option === "on") {
+    if (gcData.enabled) return api.sendMessage("⚠️ Auto-stock is already active.", threadID, messageID);
     gcData.enabled = true;
     await setData(`pvbstock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates every 5 mins + 20s.", threadID, messageID);
+    return api.sendMessage("✅ PVBR Auto-stock enabled. Exact restock timing set every 5 mins + 20s.", threadID, messageID);
   }
 
   if (option === "off") {
@@ -238,11 +195,10 @@ module.exports.run = async function({ api, event, args }) {
   }
 
   if (option === "check") {
-    const status = gcData.enabled ? "ON ✅" : "OFF ❌";
-    return api.sendMessage(`📊 PVBR Auto-stock status: ${status}`, threadID, messageID);
+    return api.sendMessage(`📊 PVBR Auto-stock: ${gcData.enabled ? "ON ✅" : "OFF ❌"}`, threadID, messageID);
   }
 
-  api.sendMessage("⚙️ Usage: /pvbstock on|off|check", threadID, messageID);
+  return api.sendMessage("⚙️ Usage: /pvbstock on|off|check", threadID, messageID);
 };
 
 // 🔄 Resume after restart
