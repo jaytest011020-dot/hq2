@@ -3,99 +3,55 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.3.0",
+  version: "3.4.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "PVBR auto-stock per GC, aligned minutes, auto-detect seeds & gear, with godly/secret seed alert",
+  description: "PVBR auto-stock per GC, aligned every 5 mins + 20s with rare seed alert",
   usePrefix: true,
   commandCategory: "pvb tools",
   usages: "/pvbstock on|off|check",
   cooldowns: 10,
 };
 
-// Allowed restock minutes
-const ALLOWED_MINUTES = [1, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56];
-
 // Track scheduled timers per GC
 const autoStockTimers = {};
 
 // Emoji mapping
 const ITEM_EMOJI = {
-  "Cactus": "🌵",
-  "Strawberry": "🍓",
-  "Pumpkin": "🎃",
-  "Sunflower": "🌻",
-  "Dragon Fruit": "🐉🍉",
-  "Eggplant": "🍆",
-  "Watermelon": "🍉✨",
-  "Grape": "🍇✨",
-  "Cocotank": "🥥🛡️",
-  "Carnivorous Plant": "🪴🦷",
-  "CarnivorousPlant": "🪴🦷",
-  "Carnivorous-Plant": "🪴🦷",
-  "Mango": "🥭",
-  "Mr Carrot": "🥕🎩",
-  "MrCarrot": "🥕🎩",
-  "Mr-Carrot": "🥕🎩",
-  "Tomatrio": "🍅👨‍👦‍👦",
-  "Shroombino": "🍄🎭",
-  "Bat": "⚾",
-  "Water Bucket": "🪣💧",
-  "Frost Grenade": "🧊💣",
-  "Banana Gun": "🍌🔫",
-  "Frost Blower": "❄️🌬️",
-  "Lucky Potion": "🍀🧪",
-  "Speed Potion": "⚡🧪",
-  "Carrot Launcher": "🥕🚀",
+  "Cactus": "🌵", "Strawberry": "🍓", "Pumpkin": "🎃", "Sunflower": "🌻",
+  "Dragon Fruit": "🐉🍉", "Eggplant": "🍆", "Watermelon": "🍉✨", "Grape": "🍇✨",
+  "Cocotank": "🥥🛡️", "Carnivorous Plant": "🪴🦷", "Mango": "🥭", "Mr Carrot": "🥕🎩",
+  "Tomatrio": "🍅👨‍👦‍👦", "Shroombino": "🍄🎭", "Bat": "⚾",
+  "Water Bucket": "🪣💧", "Frost Grenade": "🧊💣", "Banana Gun": "🍌🔫",
+  "Frost Blower": "❄️🌬️", "Lucky Potion": "🍀🧪", "Speed Potion": "⚡🧪",
+  "Carrot Launcher": "🥕🚀"
 };
 
-// Category emoji
+// Rarity categories
 const CATEGORY_EMOJI = {
-  "common": "🟢",
-  "rare": "🌿",
-  "epic": "🔵",
-  "legendary": "🟣",
-  "mythic": "✨",
-  "godly": "🟡",
-  "secret": "🎩",
-  "unknown": "❔",
+  "common": "🟢", "rare": "🌿", "epic": "🔵", "legendary": "🟣",
+  "mythic": "✨", "godly": "🟡", "secret": "🎩", "unknown": "❔"
 };
 
-// Manual rarity mapping
 const MANUAL_RARITY = {
-  "Cactus": "rare",
-  "Strawberry": "rare",
-  "Pumpkin": "epic",
-  "Sunflower": "epic",
-  "Dragon Fruit": "legendary",
-  "Eggplant": "legendary",
-  "Watermelon": "mythic",
-  "Grape": "mythic",
-  "Cocotank": "godly",
-  "Carnivorous Plant": "godly",
-  "Mango": "secret",
-  "Mr Carrot": "secret",
-  "Tomatrio": "secret",
-  "Shroombino": "secret",
-  "Bat": "common",
-  "Water Bucket": "epic",
-  "Frost Grenade": "epic",
-  "Banana Gun": "epic",
-  "Frost Blower": "legendary",
-  "Lucky Potion": "legendary",
-  "Speed Potion": "legendary",
-  "Carrot Launcher": "godly",
+  "Cactus": "rare", "Strawberry": "rare", "Pumpkin": "epic", "Sunflower": "epic",
+  "Dragon Fruit": "legendary", "Eggplant": "legendary", "Watermelon": "mythic", "Grape": "mythic",
+  "Cocotank": "godly", "Carnivorous Plant": "godly", "Mango": "secret",
+  "Mr Carrot": "secret", "Tomatrio": "secret", "Shroombino": "secret",
+  "Bat": "common", "Water Bucket": "epic", "Frost Grenade": "epic", "Banana Gun": "epic",
+  "Frost Blower": "legendary", "Lucky Potion": "legendary", "Speed Potion": "legendary",
+  "Carrot Launcher": "godly"
 };
 
 // Helpers
 function getEmoji(name) {
-  const cleanName = name.replace(/ Seed$/i, "");
-  return ITEM_EMOJI[cleanName] || "❔";
+  const clean = name.replace(/ Seed$/i, "");
+  return ITEM_EMOJI[clean] || "❔";
 }
 
 function getRarity(name) {
-  const cleanName = name.replace(/ Seed$/i, "");
-  return MANUAL_RARITY[cleanName] || "unknown";
+  const clean = name.replace(/ Seed$/i, "");
+  return MANUAL_RARITY[clean] || "unknown";
 }
 
 function capitalizeFirst(str) {
@@ -103,7 +59,6 @@ function capitalizeFirst(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Format items by category
 function formatItems(items) {
   if (!items || items.length === 0) return "❌ Empty";
 
@@ -114,18 +69,16 @@ function formatItems(items) {
     grouped[type].push(`• ${getEmoji(i.name)} ${i.name.replace(/ Seed$/i, "")} (${i.currentStock ?? "N/A"})`);
   });
 
-  const CATEGORY_ORDER = ["common", "rare", "epic", "legendary", "mythic", "godly", "secret", "unknown"];
+  const order = ["common", "rare", "epic", "legendary", "mythic", "godly", "secret", "unknown"];
   let output = "";
-  CATEGORY_ORDER.forEach(cat => {
+  order.forEach(cat => {
     if (grouped[cat]) {
       output += `[${CATEGORY_EMOJI[cat] || "❔"} ${capitalizeFirst(cat)}]\n${grouped[cat].join("\n")}\n\n`;
     }
   });
-
   return output.trim();
 }
 
-// Fetch stock from PVBR API
 async function fetchPVBRStock() {
   try {
     const res = await axios.get("https://plantsvsbrainrotsstocktracker.com/api/stock?since=0");
@@ -136,25 +89,43 @@ async function fetchPVBRStock() {
   }
 }
 
-// Calculate next aligned restock time
+// 🕒 Fixed aligned restock time every 5 mins + 20s (with 1-minute margin)
 function getNextRestock(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const currentMinute = now.getMinutes();
+
+  const ALLOWED_MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
   let nextMinute = ALLOWED_MINUTES.find(m => m > currentMinute);
   const next = new Date(now);
 
   if (nextMinute === undefined) {
     next.setHours(now.getHours() + 1);
-    nextMinute = ALLOWED_MINUTES[0];
+    nextMinute = 0;
   }
 
   next.setMinutes(nextMinute);
   next.setSeconds(20);
   next.setMilliseconds(0);
+
+  // margin detection: if within 1 min after valid restock
+  for (const m of ALLOWED_MINUTES) {
+    const restockTime = new Date(now);
+    restockTime.setMinutes(m);
+    restockTime.setSeconds(20);
+    restockTime.setMilliseconds(0);
+
+    const diff = now - restockTime;
+    if (diff >= 0 && diff <= 60 * 1000) {
+      console.log("⚡ Detected ongoing restock window — triggering immediately.");
+      return new Date(Date.now() + 2000);
+    }
+  }
+
   return next;
 }
 
-// Send stock message
+// 🪴 Send stock updates
 async function sendStock(threadID, api) {
   const stock = await fetchPVBRStock();
   if (!stock || stock.length === 0)
@@ -193,12 +164,17 @@ ${formatItems(gear)}
     const rareList = rareSeeds
       .map(s => `${getEmoji(s.name)} ${s.name.replace(/ Seed$/i, "")} (${s.currentStock})`)
       .join("\n");
-    const alertMsg = `🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast! Please choose a server that is NOT FULL:\n\nhttps://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n\nhttps://www.roblox.com/share?code=d1afbbba2d5ed946b83caeb423a09e37&type=Server\n\nhttps://www.roblox.com/share?code=a7e01c0a62c66e4c8a572cd79e77070e&type=Server\n\nhttps://www.roblox.com/share?code=f9b0d9025486cb4494514ad5ee9cce54&type=Server`;
+
+    const alertMsg = `🚨 RARE SEED DETECTED 🚨\n\n${rareList}\n\n⚡ Join fast! Choose a non-full server:\n\n` +
+      `https://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n` +
+      `https://www.roblox.com/share?code=d1afbbba2d5ed946b83caeb423a09e37&type=Server\n` +
+      `https://www.roblox.com/share?code=a7e01c0a62c66e4c8a572cd79e77070e&type=Server\n` +
+      `https://www.roblox.com/share?code=f9b0d9025486cb4494514ad5ee9cce54&type=Server`;
     await api.sendMessage(alertMsg, threadID);
   }
 }
 
-// Recursive scheduling
+// 🔁 Recursive schedule
 function scheduleNextStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNextRestock(now);
@@ -222,7 +198,7 @@ function stopAutoStock(threadID) {
   }
 }
 
-// Command handler
+// 🧠 Command handler
 module.exports.run = async function({ api, event, args }) {
   const { threadID, messageID } = event;
   const option = args[0]?.toLowerCase();
@@ -236,7 +212,7 @@ module.exports.run = async function({ api, event, args }) {
     gcData.enabled = true;
     await setData(`pvbstock/${threadID}`, gcData);
     startAutoStock(threadID, api);
-    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates at aligned minutes + 20 seconds.", threadID, messageID);
+    return api.sendMessage("✅ PVBR Auto-stock enabled. Updates every 5 mins + 20s.", threadID, messageID);
   }
 
   if (option === "off") {
@@ -254,7 +230,7 @@ module.exports.run = async function({ api, event, args }) {
   api.sendMessage("⚙️ Usage: /pvbstock on|off|check", threadID, messageID);
 };
 
-// Resume auto-stock after bot restart
+// 🔄 Resume after restart
 module.exports.onLoad = async function({ api }) {
   const allGCs = (await getData("pvbstock")) || {};
   for (const tid in allGCs) {
