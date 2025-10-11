@@ -1,12 +1,14 @@
 const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
 const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
-  name: "tiktok",
-  version: "4.2.0",
+  name: "tiktokautodl",
+  version: "5.0.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
-  description: "Download TikTok videos (mp4HD) or enable auto-detect",
+  description: "Download TikTok videos (mp4HD) using stream & temp file for stability",
   commandCategory: "media",
   usages: "/tiktok [link] | /tiktok auto on | off",
   cooldowns: 0,
@@ -81,27 +83,45 @@ async function downloadTikTok(api, event, url) {
 
     const title = data.result.title || "TikTok Video";
 
-    // 🧩 FIX: add headers para hindi ma-block ng CDN (dl.snapcdn.app)
-    const videoBuffer = (
-      await axios.get(videoUrl, {
-        responseType: "arraybuffer",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-          Referer: "https://www.tiktok.com/",
-          Accept: "*/*",
-        },
-      })
-    ).data;
+    // Create temp directory
+    const tempDir = path.join(__dirname, "..", "cache");
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-    api.sendMessage(
-      {
-        body: `🎬 ${title}`,
-        attachment: Buffer.from(videoBuffer),
+    const tempPath = path.join(tempDir, `tiktok_${Date.now()}.mp4`);
+
+    // Download video as stream
+    const videoStream = await axios({
+      url: videoUrl,
+      method: "GET",
+      responseType: "stream",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        Referer: "https://www.tiktok.com/",
+        Accept: "*/*",
       },
-      threadID,
-      messageID
-    );
+      maxRedirects: 5,
+      timeout: 30000,
+    });
+
+    await new Promise((resolve, reject) => {
+      const writer = fs.createWriteStream(tempPath);
+      videoStream.data.pipe(writer);
+      writer.on("finish", resolve);
+      writer.on("error", reject);
+    });
+
+    // Send video
+    await new Promise((resolve) => {
+      api.sendMessage(
+        { body: `🎬 ${title}`, attachment: fs.createReadStream(tempPath) },
+        threadID,
+        () => {
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          resolve();
+        }
+      );
+    });
   } catch (err) {
     console.error("❌ TikTok download error:", err);
     api.sendMessage("⚠️ Failed to download TikTok video.", threadID, messageID);
