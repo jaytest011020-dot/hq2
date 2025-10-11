@@ -20,7 +20,7 @@ const autoStockTimers = {};
 const ITEM_EMOJI = {
   "Cactus": "🌵", "Strawberry": "🍓", "Pumpkin": "🎃", "Sunflower": "🌻",
   "Dragon Fruit": "🐉🍉", "Eggplant": "🍆", "Watermelon": "🍉✨", "Grape": "🍇✨",
-  "Cocotank": "🥥🛡️", "Carnivorous Plant": "🪴🦷", "Mango": "🥭", "Mr Carrot": "🥕🎩",
+  "Cocotank": "🥥🛡️", "Carnivorous Plant": "🪴🦷", "King Limone": "🍋", "Mango": "🥭", "Mr Carrot": "🥕🎩",
   "Tomatrio": "🍅👨‍👦‍👦", "Shroombino": "🍄🎭", "Bat": "⚾",
   "Water Bucket": "🪣💧", "Frost Grenade": "🧊💣", "Banana Gun": "🍌🔫",
   "Frost Blower": "❄️🌬️", "Lucky Potion": "🍀🧪", "Speed Potion": "⚡🧪",
@@ -36,7 +36,7 @@ const CATEGORY_EMOJI = {
 const MANUAL_RARITY = {
   "Cactus": "rare", "Strawberry": "rare", "Pumpkin": "epic", "Sunflower": "epic",
   "Dragon Fruit": "legendary", "Eggplant": "legendary", "Watermelon": "mythic", "Grape": "mythic",
-  "Cocotank": "godly", "Carnivorous Plant": "godly", "Mango": "secret",
+  "Cocotank": "godly", "Carnivorous Plant": "godly", "King Limone": "secret", "Mango": "secret",
   "Mr Carrot": "secret", "Tomatrio": "secret", "Shroombino": "secret",
   "Bat": "common", "Water Bucket": "epic", "Frost Grenade": "epic", "Banana Gun": "epic",
   "Frost Blower": "legendary", "Lucky Potion": "legendary", "Speed Potion": "legendary",
