@@ -3,7 +3,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "tiktokautodl",
-  version: "4.0.0",
+  version: "4.1.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Download TikTok videos (mp4HD) or enable auto-detect",
@@ -15,7 +15,7 @@ module.exports.config = {
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  // Toggle on/off for GC
+  // Toggle auto-download
   if (args[0] === "auto") {
     const option = args[1]?.toLowerCase();
     if (option === "on") {
@@ -32,7 +32,7 @@ module.exports.run = async function ({ api, event, args }) {
   // Manual download
   const link = args[0];
   if (!link || !link.includes("tiktok.com"))
-    return api.sendMessage("📘 Usage:\n/tiktok [tiktok link]\n/tiktok auto on | off", threadID, messageID);
+    return api.sendMessage("📘 Usage:\n/tiktok [TikTok link]\n/tiktok auto on | off", threadID, messageID);
 
   api.sendMessage("⏳ Downloading TikTok video… please wait.", threadID, messageID);
   return downloadTikTok(api, event, link);
@@ -72,12 +72,17 @@ async function downloadTikTok(api, event, url) {
     const apiUrl = `https://apis-keith.vercel.app/download/tiktokdl3?url=${encodeURIComponent(resolved)}`;
     const { data } = await axios.get(apiUrl, { timeout: 20000 });
 
-    if (!data.status || !data.result?.downloadUrls?.mp4HD?.[0])
-      return api.sendMessage("⚠️ Could not find HD video link.", threadID, messageID);
+    if (!data.status) 
+      return api.sendMessage("⚠️ Failed to fetch TikTok video.", threadID, messageID);
 
-    const videoUrl = data.result.downloadUrls.mp4HD[0];
+    // HD video URL, fallback to normal mp4 if HD not available
+    const videoUrl = data.result?.downloadUrls?.mp4HD?.[0] || data.result?.downloadUrls?.mp4?.[0];
+    if (!videoUrl)
+      return api.sendMessage("⚠️ Could not find video link.", threadID, messageID);
+
     const title = data.result.title || "TikTok Video";
 
+    // Download video as buffer
     const videoBuffer = (await axios.get(videoUrl, { responseType: "arraybuffer" })).data;
 
     api.sendMessage(
@@ -90,6 +95,6 @@ async function downloadTikTok(api, event, url) {
     );
   } catch (err) {
     console.error("❌ TikTok download error:", err);
-    api.sendMessage("⚠️ Failed to fetch or download TikTok video.", threadID, messageID);
+    api.sendMessage("⚠️ Failed to download TikTok video.", threadID, messageID);
   }
 }
