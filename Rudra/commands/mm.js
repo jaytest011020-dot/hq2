@@ -2,7 +2,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "mm",
-  version: "1.4.0",
+  version: "1.4.2",
   hasPermission: 0,
   credits: "ChatGPT + Jaylord La Peña",
   description: "Auto mention Midman when someone asks for one",
@@ -19,7 +19,9 @@ const MIDMANS = [
   { id: "61563731477181", tag: "Klenth Jarred Dalupan" },
   { id: "61565984310103", tag: "Kio |~Midman🌟" },
   { id: "100010941167906", tag: "Geloo (MOD/MM)🐣" },
-  { id: "100092250956643", tag: "Nics (MOD/MM)🐻" }
+  { id: "100092250956643", tag: "Nics (MOD/MM)🐻" },
+  { id: "61579318270802", tag: "Shekina (C.O/MW)🌸" },
+  { id: "100081554201737", tag: "Micko (Admin/mm)🐼" } // ✅ Added new Midman
 ];
 
 // 🔍 Keywords to detect (case-insensitive)
