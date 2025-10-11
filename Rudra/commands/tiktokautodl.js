@@ -2,8 +2,8 @@ const axios = require("axios");
 const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
-  name: "tiktokautodl",
-  version: "4.1.0",
+  name: "tiktok",
+  version: "4.2.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "Download TikTok videos (mp4HD) or enable auto-detect",
@@ -15,7 +15,6 @@ module.exports.config = {
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
 
-  // Toggle auto-download
   if (args[0] === "auto") {
     const option = args[1]?.toLowerCase();
     if (option === "on") {
@@ -29,7 +28,6 @@ module.exports.run = async function ({ api, event, args }) {
     }
   }
 
-  // Manual download
   const link = args[0];
   if (!link || !link.includes("tiktok.com"))
     return api.sendMessage("📘 Usage:\n/tiktok [TikTok link]\n/tiktok auto on | off", threadID, messageID);
@@ -67,23 +65,34 @@ async function downloadTikTok(api, event, url) {
 
   try {
     const resolved = await resolveTikTokLink(url);
-
-    // Keith API
     const apiUrl = `https://apis-keith.vercel.app/download/tiktokdl3?url=${encodeURIComponent(resolved)}`;
     const { data } = await axios.get(apiUrl, { timeout: 20000 });
 
-    if (!data.status) 
+    if (!data?.status || !data.result?.downloadUrls)
       return api.sendMessage("⚠️ Failed to fetch TikTok video.", threadID, messageID);
 
-    // HD video URL, fallback to normal mp4 if HD not available
-    const videoUrl = data.result?.downloadUrls?.mp4HD?.[0] || data.result?.downloadUrls?.mp4?.[0];
+    const videoUrl =
+      data.result.downloadUrls.mp4HD?.[0] ||
+      data.result.downloadUrls.mp4?.[0] ||
+      data.result.downloadUrls.watermark?.[0];
+
     if (!videoUrl)
-      return api.sendMessage("⚠️ Could not find video link.", threadID, messageID);
+      return api.sendMessage("⚠️ No downloadable link found.", threadID, messageID);
 
     const title = data.result.title || "TikTok Video";
 
-    // Download video as buffer
-    const videoBuffer = (await axios.get(videoUrl, { responseType: "arraybuffer" })).data;
+    // 🧩 FIX: add headers para hindi ma-block ng CDN (dl.snapcdn.app)
+    const videoBuffer = (
+      await axios.get(videoUrl, {
+        responseType: "arraybuffer",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+          Referer: "https://www.tiktok.com/",
+          Accept: "*/*",
+        },
+      })
+    ).data;
 
     api.sendMessage(
       {
