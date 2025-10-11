@@ -133,9 +133,9 @@ ${formatItems(gear)}
     const alert = `🚨 RARE SEED DETECTED 🚨\n\n${rare
       .map(s => `${getEmoji(s.name)} ${s.name.replace(/ Seed$/i, "")} (${s.currentStock})`)
       .join("\n")}\n\n⚡ Join fast! Choose a non-full server:\n\n` +
-      `https://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n` +
-      `https://www.roblox.com/share?code=d1afbbba2d5ed946b83caeb423a09e37&type=Server\n` +
-      `https://www.roblox.com/share?code=a7e01c0a62c66e4c8a572cd79e77070e&type=Server\n` +
+      `https://www.roblox.com/share?code=5a9bf02c4952464eaf9c0ae66eb456bf&type=Server\n\n` +
+      `https://www.roblox.com/share?code=d1afbbba2d5ed946b83caeb423a09e37&type=Server\n\n` +
+      `https://www.roblox.com/share?code=a7e01c0a62c66e4c8a572cd79e77070e&type=Server\n\n` +
       `https://www.roblox.com/share?code=f9b0d9025486cb4494514ad5ee9cce54&type=Server`;
 
     await api.sendMessage(alert, threadID);
