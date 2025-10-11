@@ -5,7 +5,7 @@ const { getData, setData } = require("../../database.js");
 
 module.exports.config = {
   name: "fbautodl",
-  version: "3.0.0",
+  version: "3.1.0",
   hasPermission: 0,
   credits: "Jaylord La Peña + ChatGPT + Keithkeizzah",
   description: "Download Facebook videos (auto or manual)",
@@ -13,6 +13,13 @@ module.exports.config = {
   usages: "/fbdown [link] | /fbdown auto on | off",
   cooldowns: 0,
 };
+
+// ✅ Facebook video URL patterns
+const VIDEO_PATTERNS = [
+  /facebook\.com\/share\/v\//i,
+  /facebook\.com\/watch\/?\?v=/i,
+  /facebook\.com\/.*\/videos\//i
+];
 
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
@@ -35,6 +42,10 @@ module.exports.run = async function ({ api, event, args }) {
   if (!link || !link.includes("facebook.com"))
     return api.sendMessage("📘 Usage:\n/fbdown [Facebook video link]\n/fbdown auto on | off", threadID, messageID);
 
+  // 🚫 Check if link is not a video
+  if (!VIDEO_PATTERNS.some((pattern) => pattern.test(link)))
+    return api.sendMessage("⚠️ That doesn't look like a Facebook video link.", threadID, messageID);
+
   api.sendMessage("⏳ Downloading Facebook video… please wait.", threadID, messageID);
   return downloadFacebook(api, event, link);
 };
@@ -47,10 +58,15 @@ module.exports.handleEvent = async function ({ api, event }) {
   const config = await getData(`fbdown/${threadID}`);
   if (!config?.enabled) return;
 
+  // 🔍 Match first FB link
   const match = body.match(/https?:\/\/(?:www\.)?facebook\.com\/[^\s]+/);
   if (!match) return;
 
   const link = match[0];
+
+  // ⚠️ Ignore non-video links
+  if (!VIDEO_PATTERNS.some((pattern) => pattern.test(link))) return;
+
   api.sendMessage("⏳ Downloading Facebook video… please wait.", threadID, messageID);
   return downloadFacebook(api, event, link);
 };
@@ -69,7 +85,6 @@ async function downloadFacebook(api, event, url) {
     const videoUrl = data.result.media.hd;
     const title = data.result.title?.replace(/&#x[\da-f]+;/gi, "") || "Facebook Video";
 
-    // 🧩 Temporary path
     const tempDir = path.join(__dirname, "..", "cache");
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
