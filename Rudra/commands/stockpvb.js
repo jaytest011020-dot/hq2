@@ -3,7 +3,7 @@ const { setData, getData } = require("../../database.js");
 
 module.exports.config = {
   name: "pvbstock",
-  version: "3.4.0",
+  version: "3.5.0",
   hasPermssion: 0,
   credits: "Jaylord La Peña + ChatGPT",
   description: "PVBR auto-stock per GC, aligned every 5 mins + 20s with rare seed alert",
@@ -89,7 +89,7 @@ async function fetchPVBRStock() {
   }
 }
 
-// 🕒 Fixed aligned restock time every 5 mins + 20s (with 1-minute margin)
+// 🕒 Fixed aligned restock time every 5 mins + 20s
 function getNextRestock(date = null) {
   const now = date || new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const currentMinute = now.getMinutes();
@@ -114,7 +114,6 @@ function getNextRestock(date = null) {
     restockTime.setMinutes(m);
     restockTime.setSeconds(20);
     restockTime.setMilliseconds(0);
-
     const diff = now - restockTime;
     if (diff >= 0 && diff <= 60 * 1000) {
       console.log("⚡ Detected ongoing restock window — triggering immediately.");
@@ -174,15 +173,31 @@ ${formatItems(gear)}
   }
 }
 
-// 🔁 Recursive schedule
+// 🔁 Fixed continuous scheduler (no auto-off bug)
 function scheduleNextStock(threadID, api) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const next = getNextRestock(now);
-  const delay = next.getTime() - now.getTime();
+  let delay = next.getTime() - now.getTime();
+
+  if (isNaN(delay) || delay < 5000) delay = 5 * 60 * 1000 + 20000;
+
+  if (autoStockTimers[threadID]) clearTimeout(autoStockTimers[threadID]);
 
   autoStockTimers[threadID] = setTimeout(async () => {
-    await sendStock(threadID, api);
-    scheduleNextStock(threadID, api);
+    try {
+      const gcData = await getData(`pvbstock/${threadID}`);
+      if (!gcData || !gcData.enabled) {
+        console.log(`🧩 Auto-stock disabled for ${threadID}, stopping loop.`);
+        stopAutoStock(threadID);
+        return;
+      }
+
+      await sendStock(threadID, api);
+      scheduleNextStock(threadID, api);
+    } catch (err) {
+      console.error("❌ Auto-stock loop error:", err);
+      setTimeout(() => scheduleNextStock(threadID, api), 60 * 1000);
+    }
   }, delay);
 }
 
